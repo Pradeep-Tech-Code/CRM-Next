@@ -3,10 +3,8 @@
 import { Home, Settings, HelpCircle, BookCopy, ClipboardMinus, FileChartColumnIncreasing, X, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import Link from "next/link"
 import { cn } from "@/lib/utils"
 import Image from 'next/image'
-import { useState } from "react"
 
 const menuItems = [
     { label: "Dashboard", icon: Home, href: "dashboard", active: true },
@@ -18,17 +16,16 @@ const menuItems = [
 ]
 
 export default function Sidebar({activeTab, setActiveTab, isCollapsed, setIsCollapsed}) {
-    const [isHovered, setIsHovered] = useState(false)
-
     return (
         <aside className={cn(
             "fixed md:relative inset-y-0 left-0 z-50 transition-all duration-300 bg-sidebar border-r border-sidebar-border",
             isCollapsed ? "-translate-x-full md:translate-x-0 md:w-16" : "translate-x-0 w-64 md:w-64"
         )}>
             <Card className="m-3 h-[calc(100vh-1.5rem)] p-3 flex flex-col gap-6 bg-sidebar border-0 shadow-none">
-                <div className="flex items-center justify-between">
-                    <div className={cn("flex items-center gap-3 px-2", isCollapsed && "md:justify-center md:px-0")}>
-                        <div className="size-10 rounded-md flex items-center justify-center overflow-hidden">
+                {/* Header with logo, title, and collapse button in one row */}
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 flex-1">
+                        <div className="size-10 rounded-md flex items-center justify-center overflow-hidden flex-shrink-0">
                             <Image
                                 src="/SlashLogo.png"
                                 alt="SlashRtc Logo"
@@ -39,31 +36,35 @@ export default function Sidebar({activeTab, setActiveTab, isCollapsed, setIsColl
                                 className="object-cover"
                             />
                         </div>
-                        {!isCollapsed && <span className="text-xl font-semibold text-sidebar-foreground">Slash CRM</span>}
+                        {!isCollapsed && (
+                            <div className="flex items-center justify-between flex-1">
+                                <span className="text-xl font-semibold text-sidebar-foreground">Slash CRM</span>
+                            </div>
+                        )}
                     </div>
-                    <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => setIsCollapsed(!isCollapsed)}
-                        className="md:hidden h-8 w-8"
-                    >
-                        <X className="size-4" />
-                    </Button>
-                </div>
-
-                {/* Collapse Toggle Button for Desktop */}
-                <div className="hidden md:flex justify-center">
+                    
+                    {/* Collapse/Expand Button - Plain arrow without background */}
                     <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => setIsCollapsed(!isCollapsed)}
-                        className="h-8 w-8 rounded-full bg-sidebar-accent hover:bg-sidebar-accent/80"
+                        className="hidden md:flex h-8 w-8 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/20"
                     >
                         {isCollapsed ? (
-                            <ChevronRight className="size-4 text-sidebar-accent-foreground" />
+                            <ChevronRight className="size-4" />
                         ) : (
-                            <ChevronLeft className="size-4 text-sidebar-accent-foreground" />
+                            <ChevronLeft className="size-4" />
                         )}
+                    </Button>
+
+                    {/* Mobile Close Button */}
+                    <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => setIsCollapsed(!isCollapsed)}
+                        className="md:hidden h-8 w-8 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/20"
+                    >
+                        <X className="size-4" />
                     </Button>
                 </div>
 
@@ -84,8 +85,6 @@ export default function Sidebar({activeTab, setActiveTab, isCollapsed, setIsColl
                                         activeTab === item.href && "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/80"
                                     )}
                                     onClick={() => setActiveTab(item.href)}
-                                    onMouseEnter={() => setIsHovered(true)}
-                                    onMouseLeave={() => setIsHovered(false)}
                                 >
                                     <item.icon className="size-5 shrink-0" />
                                     {!isCollapsed && <span className="truncate">{item.label}</span>}

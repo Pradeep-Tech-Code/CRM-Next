@@ -38,9 +38,9 @@ export function FieldPalette({ onAddField, collapsed = false, onToggleCollapse }
   }
 
   return (
-    <div className={`h-full bg-sidebar border-r border-sidebar-border ${collapsed ? "w-16" : "w-64"} transition-all duration-300`}>
-      <Card className={`border-0 shadow-none bg-transparent m-0 ${collapsed ? "p-2" : "p-4"}`}>
-        <CardHeader className={`p-0 ${collapsed ? "mb-2" : "mb-4"}`}>
+    <div className={`h-full bg-sidebar border-r border-sidebar-border ${collapsed ? "w-16" : "w-64"} transition-all duration-300 flex flex-col`}>
+      <Card className={`border-0 shadow-none bg-transparent m-0 h-full flex flex-col ${collapsed ? "p-2" : "p-4"}`}>
+        <CardHeader className={`p-0 ${collapsed ? "mb-2" : "mb-4"} flex-shrink-0`}>
           <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between"} gap-2`}>
             {!collapsed && (
               <CardTitle className="text-sm font-semibold text-sidebar-foreground uppercase tracking-wide flex items-center gap-2">
@@ -51,7 +51,7 @@ export function FieldPalette({ onAddField, collapsed = false, onToggleCollapse }
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              className="h-7 w-7 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex-shrink-0"
               onClick={onToggleCollapse}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -60,37 +60,43 @@ export function FieldPalette({ onAddField, collapsed = false, onToggleCollapse }
             </Button>
           </div>
         </CardHeader>
-        <CardContent className={`p-0 ${collapsed ? "space-y-1" : "space-y-2"}`}>
-          {fieldTypes.map((field) => {
-            const Icon = field.icon
-            return (
-              <Button
-                key={field.type}
-                variant="ghost"
-                className={`w-full ${
-                  collapsed 
-                    ? "justify-center p-2 h-10 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" 
-                    : "justify-start h-auto p-3 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                } field-type-button cursor-grab active:cursor-grabbing rounded-md transition-colors`}
-                onClick={() => onAddField(field.type)}
-                draggable
-                onDragStart={(e) => handleDragStart(e, field.type)}
-                title={collapsed ? `${field.label} — ${field.description}` : undefined}
-              >
-                {collapsed ? (
-                  <Icon className="h-5 w-5" />
-                ) : (
-                  <div className="flex items-start gap-3 w-full">
-                    <Icon className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 text-left min-w-0">
-                      <div className="font-medium text-sm truncate">{field.label}</div>
-                      <div className="text-xs text-sidebar-foreground/70 truncate">{field.description}</div>
-                    </div>
-                  </div>
-                )}
-              </Button>
-            )
-          })}
+        
+        {/* Scrollable Content Area */}
+        <CardContent className="p-0 flex-1 overflow-hidden">
+          <div className="h-full overflow-y-auto pr-1">
+            <div className={collapsed ? "space-y-1" : "space-y-2"}>
+              {fieldTypes.map((field) => {
+                const Icon = field.icon
+                return (
+                  <Button
+                    key={field.type}
+                    variant="ghost"
+                    className={`w-full ${
+                      collapsed 
+                        ? "justify-center p-2 h-10 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" 
+                        : "justify-start h-auto p-3 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    } field-type-button cursor-grab active:cursor-grabbing rounded-md transition-colors`}
+                    onClick={() => onAddField(field.type)}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, field.type)}
+                    title={collapsed ? `${field.label} — ${field.description}` : undefined}
+                  >
+                    {collapsed ? (
+                      <Icon className="h-5 w-5" />
+                    ) : (
+                      <div className="flex items-start gap-3 w-full">
+                        <Icon className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 text-left min-w-0">
+                          <div className="font-medium text-sm truncate">{field.label}</div>
+                          <div className="text-xs text-sidebar-foreground/70 truncate">{field.description}</div>
+                        </div>
+                      </div>
+                    )}
+                  </Button>
+                )
+              })}
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

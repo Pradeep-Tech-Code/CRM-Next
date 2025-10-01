@@ -95,13 +95,14 @@ export default function CustomFormPage() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex border rounded-lg overflow-hidden bg-background">
+      <div className="flex-1 flex border rounded-lg overflow-hidden bg-background min-h-0">
         {/* Field Palette */}
         <FieldPalette 
           onAddField={addField}
           collapsed={fieldPaletteCollapsed}
           onToggleCollapse={toggleFieldPalette}
         />
+
 
         {/* Main Canvas/Preview */}
         <div className="flex-1 flex">
