@@ -5,17 +5,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Eye, Copy, BarChart3, Calendar, Users, ExternalLink, Loader2 } from "lucide-react"
+import { Eye, Copy, BarChart3, Calendar, Users, ExternalLink, Loader2, Edit, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
 // API configuration
 const API_BASE_URL = 'http://10.10.15.194:3000'
 const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
 const TABLE_ID = 'b9bc249f-9099-4436-bfc6-9dd74d1e8fdc'
+const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzU5MzE0ODY2LCJleHAiOjE3NTk0MDEyNjZ9.QjKz8fTFwia76o7LkkdmlGGhEKoguy8o6iFbCojMwkE'
 
 export default function MyFormsPage() {
   const [forms, setForms] = useState([])
   const [loading, setLoading] = useState(true)
+  const [editingForm, setEditingForm] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     fetchForms()
@@ -97,12 +102,38 @@ export default function MyFormsPage() {
     return fieldCount
   }
 
+  // Function to extract form fields for editing
+  const extractFormFields = (form) => {
+    if (!form.fields || !Array.isArray(form.fields)) return []
+    
+    return form.fields.map(field => {
+      const parsedField = parseFieldData(field)
+      
+      // Convert API field format to builder format
+      return {
+        id: parsedField.id || parsedField.name,
+        type: parsedField.type,
+        label: parsedField.label,
+        placeholder: parsedField.placeholder || '',
+        required: parsedField.required === true || parsedField.required === 'true',
+        options: Array.isArray(parsedField.options) ? parsedField.options : 
+                 parsedField.options ? [parsedField.options] : [],
+        validation: parsedField.validation || {}
+      }
+    }).filter(field => field.id && field.type) // Filter out invalid fields
+  }
+
   const fetchForms = async () => {
     try {
       setLoading(true)
       
       const response = await fetch(
-        `${API_BASE_URL}/api/forms/all/${ORGANIZATION_ID}/${TABLE_ID}`
+        `${API_BASE_URL}/api/forms/all/${ORGANIZATION_ID}/${TABLE_ID}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${AUTH_TOKEN}`,
+          }
+        }
       )
 
       if (!response.ok) {
@@ -121,7 +152,9 @@ export default function MyFormsPage() {
           // Format the created date
           created: form.created_at ? new Date(form.created_at).toLocaleDateString() : 'Unknown',
           // Ensure we have a form_id
-          form_id: form.form_id || form.id
+          form_id: form.form_id || form.id,
+          // Extract fields for editing
+          extractedFields: extractFormFields(form)
         }))
         
         setForms(processedForms)
@@ -152,6 +185,67 @@ export default function MyFormsPage() {
     toast.info("Opening form in new tab")
   }
 
+  const editForm = (form) => {
+    // Store the form data for editing
+    setEditingForm(form)
+    
+    // Navigate to form builder with the form data
+    const formData = {
+      formId: form.form_id,
+      formName: form.form_name,
+      description: form.description,
+      fields: form.extractedFields
+    }
+    
+    // Store in sessionStorage for the form builder to access
+    sessionStorage.setItem('editingForm', JSON.stringify(formData))
+    
+    // Navigate to form builder
+    router.push('/custom-form?edit=true')
+  }
+
+  const deleteForm = async (formId, formName) => {
+    if (!confirm(`Are you sure you want to delete "${formName}"? This action cannot be undone.`)) {
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/forms/delete`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${AUTH_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          form_id: formId,
+          table_id: TABLE_ID,
+          organization_id: ORGANIZATION_ID
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete form: ${response.status}`)
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        toast.success("Form deleted successfully!")
+        // Remove the form from the local state
+        setForms(forms.filter(form => form.form_id !== formId))
+      } else {
+        throw new Error('Failed to delete form')
+      }
+      
+    } catch (error) {
+      console.error('Error deleting form:', error)
+      toast.error("Failed to delete form")
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const refreshForms = () => {
     fetchForms()
   }
@@ -176,10 +270,16 @@ export default function MyFormsPage() {
             Manage and view all your created forms
           </p>
         </div>
-        <Button onClick={refreshForms} variant="outline" className="gap-2">
-          <Loader2 className="h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={refreshForms} variant="outline" className="gap-2">
+            <Loader2 className="h-4 w-4" />
+            Refresh
+          </Button>
+          <Button onClick={() => router.push('/custom-form')} className="gap-2">
+            <Edit className="h-4 w-4" />
+            Create New Form
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -196,8 +296,9 @@ export default function MyFormsPage() {
               <p className="text-muted-foreground mb-4">
                 You haven't created any forms yet, or there was an error loading them.
               </p>
-              <Button onClick={refreshForms} variant="outline">
-                Try Again
+              <Button onClick={() => router.push('/custom-form')} className="gap-2">
+                <Edit className="h-4 w-4" />
+                Create Your First Form
               </Button>
             </div>
           ) : (
@@ -248,6 +349,14 @@ export default function MyFormsPage() {
                         <Button 
                           size="sm" 
                           variant="outline" 
+                          onClick={() => editForm(form)}
+                          title="Edit form"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
                           onClick={() => copyFormLink(form.form_id)}
                           title="Copy form link"
                         >
@@ -264,10 +373,12 @@ export default function MyFormsPage() {
                         <Button 
                           size="sm" 
                           variant="outline"
-                          title="View analytics"
-                          disabled
+                          onClick={() => deleteForm(form.form_id, form.form_name)}
+                          disabled={isDeleting}
+                          title="Delete form"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
                         >
-                          <BarChart3 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -280,7 +391,7 @@ export default function MyFormsPage() {
       </Card>
 
       {/* Debug information - you can remove this in production */}
-      {/* {forms.length > 0 && (
+      {forms.length > 0 && process.env.NODE_ENV === 'development' && (
         <Card className="mt-6">
           <CardHeader>
             <CardTitle className="text-sm">Debug Information</CardTitle>
@@ -295,7 +406,7 @@ export default function MyFormsPage() {
                   name: forms[0]?.form_name,
                   id: forms[0]?.form_id,
                   fields: forms[0]?.fieldCount,
-                  raw_fields_sample: forms[0]?.fields?.[0]
+                  extracted_fields: forms[0]?.extractedFields?.slice(0, 2) // Show first 2 fields
                 },
                 null,
                 2
@@ -303,7 +414,7 @@ export default function MyFormsPage() {
             </pre>
           </CardContent>
         </Card>
-      )} */}
+      )}
     </div>
   )
 }

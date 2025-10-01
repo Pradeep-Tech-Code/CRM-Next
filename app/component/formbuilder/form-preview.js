@@ -5,19 +5,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { AlertCircle, CheckCircle2, Send, Copy, ExternalLink, Settings } from "lucide-react"
+import { AlertCircle, CheckCircle2, Send, Copy, ExternalLink, Settings, Save } from "lucide-react"
 import { FieldRenderer } from "./field-renderer"
 import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 
-export function FormPreview({ fields }) {
+export function FormPreview({ fields, formId: existingFormId, onFormUpdate }) {
   const [generatedLink, setGeneratedLink] = useState(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
   const [copied, setCopied] = useState(false)
   const [formName, setFormName] = useState("Generated Form")
   const [formDescription, setFormDescription] = useState("Form created with form builder")
+  const [currentFormId, setCurrentFormId] = useState(existingFormId)
+
+  // API configuration
+  const API_BASE_URL = 'http://10.10.15.194:3000'
+  const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
+  const TABLE_ID = 'b9bc249f-9099-4436-bfc6-9dd74d1e8fdc'
+  const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
+  const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzU5MzE0ODY2LCJleHAiOjE3NTk0MDEyNjZ9.QjKz8fTFwia76o7LkkdmlGGhEKoguy8o6iFbCojMwkE'
 
   // Ensure unique field IDs for form default values
   const getDefaultValues = () => {
@@ -46,6 +55,100 @@ export function FormPreview({ fields }) {
     },
   })
 
+  // Update existing form
+  const handleUpdateForm = async () => {
+    if (!currentFormId) {
+      toast.error("No form ID available. Please generate a form first.")
+      return
+    }
+
+    if (!formName.trim()) {
+      toast.error("Please enter a form name")
+      return
+    }
+
+    if (fields.length === 0) {
+      toast.error("Please add at least one field to the form")
+      return
+    }
+
+    setIsUpdating(true)
+    try {
+      // Prepare the update data according to the API format
+      const updateData = {
+        form_id: currentFormId,
+        table_id: TABLE_ID,
+        organization_id: ORGANIZATION_ID,
+        form_name: formName,
+        description: formDescription,
+        fields: fields.map(field => {
+          // Convert to the API field format
+          const apiField = {
+            name: field.id,
+            type: field.type,
+            required: field.required ? "true" : "false",
+            label: field.label,
+            placeholder: field.placeholder || "",
+          }
+
+          // Add options if available
+          if (field.options && field.options.length > 0) {
+            // For select fields with options, join them or handle as needed
+            if (field.type === "select" && field.validation?.multiple) {
+              apiField.options = field.options.join(",")
+            } else {
+              apiField.options = field.options[0] // Or handle multiple options as needed
+            }
+          }
+
+          return apiField
+        })
+      }
+
+      console.log('Updating form with data:', updateData)
+
+      const response = await fetch(`${API_BASE_URL}/api/forms/update`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${AUTH_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData)
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('API Update Error Response:', errorText)
+        throw new Error(`Failed to update form: ${response.status} - ${errorText}`)
+      }
+
+      const result = await response.json()
+      console.log('API Update Success Response:', result)
+      
+      if (result.success) {
+        toast.success("Form updated successfully!")
+        
+        // Notify parent component about the update
+        if (onFormUpdate) {
+          onFormUpdate({
+            formId: currentFormId,
+            formName,
+            description: formDescription,
+            fields
+          })
+        }
+      } else {
+        throw new Error('Invalid response from server: ' + JSON.stringify(result))
+      }
+      
+    } catch (error) {
+      console.error('Error updating form:', error)
+      toast.error(`Failed to update form: ${error.message}`)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleGenerateLink = async () => {
     if (!formName.trim()) {
       toast.error("Please enter a form name")
@@ -59,13 +162,6 @@ export function FormPreview({ fields }) {
   
     setIsGenerating(true)
     try {
-      // API configuration
-      const API_BASE_URL = 'http://10.10.15.194:3000'
-      const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
-      const TABLE_ID = 'b9bc249f-9099-4436-bfc6-9dd74d1e8fdc'
-      const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
-      const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzU5MjIzMzk4LCJleHAiOjE3NTkzMDk3OTh9.7fn3GDnJJGao23XGVvzXbNLEpVMFs6kKSHR4YmGiNWo'
-  
       // Prepare the form data for API - ensure proper JSON string format
       const formData = {
         organization_id: ORGANIZATION_ID,
@@ -112,10 +208,23 @@ export function FormPreview({ fields }) {
       console.log('API Success Response:', result)
       
       if (result.success && result.form) {
+        // Set the current form ID for future updates
+        setCurrentFormId(result.form.form_id)
+        
         // Generate the public URL using the form_id from API response
         const publicUrl = `${window.location.origin}/forms/${result.form.form_id}`
         setGeneratedLink(publicUrl)
         toast.success("Form link generated successfully!")
+        
+        // Notify parent component about the new form
+        if (onFormUpdate) {
+          onFormUpdate({
+            formId: result.form.form_id,
+            formName,
+            description: formDescription,
+            fields
+          })
+        }
       } else {
         throw new Error('Invalid response from server: ' + JSON.stringify(result))
       }
@@ -127,6 +236,7 @@ export function FormPreview({ fields }) {
       const mockFormId = `form-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
       const publicUrl = `${window.location.origin}/forms/${mockFormId}`
       setGeneratedLink(publicUrl)
+      setCurrentFormId(mockFormId)
       toast.success("Form link generated successfully! (Demo mode - using mock data)")
       
       // Uncomment to show actual error in production:
@@ -346,6 +456,56 @@ export function FormPreview({ fields }) {
                 className="bg-input"
               />
             </div>
+            
+            {/* Form Actions */}
+            <div className="flex gap-2 pt-2">
+              <Button 
+                type="button" 
+                variant="secondary" 
+                onClick={handleGenerateLink}
+                disabled={isGenerating || fields.length === 0}
+                className="gap-2 flex-1"
+              >
+                {isGenerating ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <ExternalLink className="h-4 w-4" />
+                    {currentFormId ? "Regenerate Link" : "Generate Link"}
+                  </>
+                )}
+              </Button>
+              
+              {currentFormId && (
+                <Button 
+                  type="button" 
+                  onClick={handleUpdateForm}
+                  disabled={isUpdating || fields.length === 0}
+                  className="gap-2 flex-1"
+                >
+                  {isUpdating ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Update Form
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+            
+            {currentFormId && (
+              <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                Form ID: <code className="bg-black/10 px-1 rounded">{currentFormId}</code>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -404,25 +564,6 @@ export function FormPreview({ fields }) {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button 
-                    type="button" 
-                    variant="secondary" 
-                    onClick={handleGenerateLink}
-                    disabled={isGenerating || fields.length === 0}
-                    className="gap-2"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <ExternalLink className="h-4 w-4" />
-                        Generate Link
-                      </>
-                    )}
-                  </Button>
                   <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
                     {([canSubmit, isSubmitting]) => (
                       <Button type="submit" disabled={!canSubmit} className="gap-2">
