@@ -45,7 +45,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen bg-background">
       {!isCollapsed && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 md:hidden"
@@ -53,30 +53,28 @@ export default function Home() {
         />
       )}
       
-      <div className="mx-auto max-w-[1400px]">
-        <div className="flex">
-          <Sidebar 
-            activeTab={activeTab} 
-            setActiveTab={setActiveTab}
-            isCollapsed={isCollapsed}
-            setIsCollapsed={setIsCollapsed}
-          />
-          <section className={cn(
-            "flex-1 p-3 md:p-4 transition-all duration-300 flex flex-col",
-            isCollapsed ? "md:ml-0" : "md:ml-0"
-          )}>
-            <div className="mb-4">
-              <Topbar 
-                darkMode={darkMode} 
-                toggleDarkMode={toggleDarkMode}
-                toggleSidebar={toggleSidebar}
-              />
-            </div>
-            <div className="flex-1">
-              {renderContent()}
-            </div>
-          </section>
-        </div>
+      <div className="flex min-h-screen">
+        <Sidebar 
+          activeTab={activeTab} 
+          setActiveTab={setActiveTab}
+          isCollapsed={isCollapsed}
+          setIsCollapsed={setIsCollapsed}
+        />
+        <section className={cn(
+          "flex-1 transition-all duration-300 flex flex-col min-h-screen",
+          isCollapsed ? "md:ml-0" : "md:ml-0"
+        )}>
+          <div className="p-4 border-b border-border bg-card/50">
+            <Topbar 
+              darkMode={darkMode} 
+              toggleDarkMode={toggleDarkMode}
+              toggleSidebar={toggleSidebar}
+            />
+          </div>
+          <div className="flex-1 p-4 md:p-6 bg-background">
+            {renderContent()}
+          </div>
+        </section>
       </div>  
     </main>
   );
