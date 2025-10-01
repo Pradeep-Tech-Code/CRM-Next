@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import Sidebar from "./component/sidebar";
 import Topbar from "./component/topbar";
 import CustomFormPage from "./custom-form/page";
+import MyFormsPage from "./my-forms/page"
+import FormAnalyticsPage from "./form-analytics/page"
 import { cn } from "@/lib/utils";
 
 export default function Home() {
@@ -31,6 +33,10 @@ export default function Home() {
     switch (activeTab) {
       case "custom-form":
         return <CustomFormPage />
+      case "my-forms":
+        return <MyFormsPage />
+      case "form-analytics":
+        return <FormAnalyticsPage />
       case "dashboard":
       default:
         return (

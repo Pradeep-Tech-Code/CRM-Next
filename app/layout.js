@@ -1,4 +1,5 @@
 import { Geist, Geist_Mono, Shantell_Sans } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,6 +30,7 @@ export default function RootLayout({ children }) {
         // className={shantellSans.className}
       >
         {children}
+        <Toaster position="top-right" />
       </body>
     </html>
   );
