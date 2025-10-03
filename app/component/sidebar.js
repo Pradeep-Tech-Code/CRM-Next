@@ -59,7 +59,7 @@ export default function Sidebar({activeTab, setActiveTab, isCollapsed, setIsColl
 
     return (
         <aside className={cn(
-            "fixed md:relative inset-y-0 left-0 z-50 transition-all duration-300 bg-sidebar border-r border-sidebar-border",
+            "fixed md:sticky top-0 h-screen inset-y-0 left-0 z-50 transition-all duration-300 bg-sidebar border-r border-sidebar-border",
             isCollapsed ? "-translate-x-full md:translate-x-0 md:w-16" : "translate-x-0 w-64 md:w-64"
         )}>
             <Card className={cn(

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 import { Loader2, Save, X, Edit } from "lucide-react"
 
 export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
@@ -17,20 +18,44 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
     fields: []
   })
   const [saving, setSaving] = useState(false)
+  const [optionsInputs, setOptionsInputs] = useState({}) // Store raw option inputs per field
 
   useEffect(() => {
     if (form) {
       // Parse field data and ensure boolean values for required
-      const parsedFields = (form.parsedFields || []).map(field => ({
-        ...field,
-        required: field.required === true || field.required === "true" || false
-      }))
+      const parsedFields = (form.parsedFields || []).map(field => {
+        // Handle options - convert string to array if needed
+        let options = []
+        if (Array.isArray(field.options)) {
+          options = field.options
+        } else if (typeof field.options === 'string') {
+          options = field.options.split(',').map(opt => opt.trim()).filter(opt => opt)
+        }
+        
+        return {
+          ...field,
+          required: field.required === true || field.required === "true" || false,
+          // Ensure validation object exists
+          validation: field.validation || {},
+          // Ensure options is always an array
+          options: options
+        }
+      })
       
       setFormData({
         form_name: form.form_name || "",
         description: form.description || "",
         fields: parsedFields
       })
+
+      // Initialize options inputs
+      const initialOptionsInputs = {}
+      parsedFields.forEach((field, index) => {
+        if (field.options && field.options.length > 0) {
+          initialOptionsInputs[index] = field.options.join(', ')
+        }
+      })
+      setOptionsInputs(initialOptionsInputs)
     }
   }, [form])
 
@@ -69,7 +94,8 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
           label: "New Field",
           required: false,
           placeholder: "",
-          options: []
+          options: [],
+          validation: {}
         }
       ]
     }))
@@ -78,11 +104,40 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
   const removeField = (index) => {
     const newFields = formData.fields.filter((_, i) => i !== index)
     setFormData(prev => ({ ...prev, fields: newFields }))
+    
+    // Also remove from options inputs
+    setOptionsInputs(prev => {
+      const newInputs = { ...prev }
+      delete newInputs[index]
+      return newInputs
+    })
   }
 
   // Helper function to convert string to boolean for required field
   const getBooleanRequired = (requiredValue) => {
     return requiredValue === true || requiredValue === "true" || false
+  }
+
+  // Handle options input change
+  const handleOptionsInputChange = (index, value) => {
+    // Update the raw input value
+    setOptionsInputs(prev => ({
+      ...prev,
+      [index]: value
+    }))
+
+    // Parse and update the actual options array
+    const optionsArray = value
+      .split(',')
+      .map(opt => opt.trim())
+      .filter(opt => opt !== '')
+    
+    updateField(index, { options: optionsArray })
+  }
+
+  // Get options display value
+  const getOptionsDisplayValue = (index) => {
+    return optionsInputs[index] || ''
   }
 
   if (!form) return null
@@ -156,18 +211,13 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Field Name *</Label>
-                      <Input
-                        value={field.name || ""}
-                        onChange={(e) => updateField(index, { name: e.target.value })}
-                        placeholder="Field name (unique identifier)"
-                      />
-                    </div>
-                    <div className="space-y-2">
                       <Label>Field Label *</Label>
                       <Input
                         value={field.label || ""}
-                        onChange={(e) => updateField(index, { label: e.target.value })}
+                        onChange={(e) => updateField(index, { 
+                          label: e.target.value,
+                          name: e.target.value.toLowerCase().replace(/\s+/g, '_') // Auto-generate name from label
+                        })}
                         placeholder="Field label"
                       />
                     </div>
@@ -210,19 +260,131 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                     </div>
                   </div>
 
+                  {/* Options for select, checkbox, radio */}
                   {(field.type === "select" || field.type === "checkbox" || field.type === "radio") && (
-                    <div className="space-y-2">
-                      <Label>Options (comma-separated)</Label>
-                      <Input
-                        value={Array.isArray(field.options) ? field.options.join(", ") : (field.options || "")}
-                        onChange={(e) => updateField(index, { 
-                          options: e.target.value.split(",").map(opt => opt.trim()).filter(opt => opt) 
-                        })}
-                        placeholder="Option 1, Option 2, Option 3"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Separate options with commas. For select fields, this will be sent as a string to the API.
-                      </p>
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label>Options *</Label>
+                        <Input
+                          value={getOptionsDisplayValue(index)}
+                          onChange={(e) => handleOptionsInputChange(index, e.target.value)}
+                          placeholder="Option 1, Option 2, Option 3"
+                          className="font-mono text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Enter options separated by commas. Example: "Red, Green, Blue"
+                        </p>
+                      </div>
+                      
+                      {/* Preview of options */}
+                      {field.options && field.options.length > 0 && (
+                        <div className="space-y-2">
+                          <Label className="text-xs">Options Preview ({field.options.length}):</Label>
+                          <div className="flex flex-wrap gap-1">
+                            {field.options.map((option, optIndex) => (
+                              <Badge key={optIndex} variant="outline" className="text-xs">
+                                {option}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Debug info */}
+                      <div className="text-xs text-muted-foreground">
+                        <div>Raw input: "{getOptionsDisplayValue(index)}"</div>
+                        <div>Parsed options: {JSON.stringify(field.options)}</div>
+                      </div>
+
+                      {/* Multiple selection for select fields */}
+                      {field.type === "select" && (
+                        <div className="flex items-center space-x-2">
+                          <Switch
+                            id={`multiple-${index}`}
+                            checked={field.validation?.multiple || false}
+                            onCheckedChange={(checked) => updateField(index, {
+                              validation: {
+                                ...field.validation,
+                                multiple: checked
+                              }
+                            })}
+                          />
+                          <Label htmlFor={`multiple-${index}`} className="text-sm">
+                            Allow multiple selection
+                          </Label>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* File upload specific settings */}
+                  {field.type === "file" && (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label>Accepted File Types</Label>
+                        <Input
+                          value={field.validation?.accept || ""}
+                          onChange={(e) => updateField(index, {
+                            validation: {
+                              ...field.validation,
+                              accept: e.target.value
+                            }
+                          })}
+                          placeholder=".pdf,.jpg,.png,image/*"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Specify file types (e.g., .pdf, .jpg) or MIME types (e.g., image/*)
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id={`multiple-files-${index}`}
+                          checked={field.validation?.multiple || false}
+                          onCheckedChange={(checked) => updateField(index, {
+                            validation: {
+                              ...field.validation,
+                              multiple: checked
+                            }
+                          })}
+                        />
+                        <Label htmlFor={`multiple-files-${index}`} className="text-sm">
+                          Allow multiple files
+                        </Label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Number field specific settings */}
+                  {field.type === "number" && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Minimum Value</Label>
+                        <Input
+                          type="number"
+                          value={field.validation?.min || ""}
+                          onChange={(e) => updateField(index, {
+                            validation: {
+                              ...field.validation,
+                              min: e.target.value ? Number(e.target.value) : undefined
+                            }
+                          })}
+                          placeholder="No limit"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Maximum Value</Label>
+                        <Input
+                          type="number"
+                          value={field.validation?.max || ""}
+                          onChange={(e) => updateField(index, {
+                            validation: {
+                              ...field.validation,
+                              max: e.target.value ? Number(e.target.value) : undefined
+                            }
+                          })}
+                          placeholder="No limit"
+                        />
+                      </div>
                     </div>
                   )}
                 </div>

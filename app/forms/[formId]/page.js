@@ -168,7 +168,7 @@ export default function PublicFormPage() {
             }
           }
           
-          // Case 3: Field is already a proper object
+          // Case 3: Field is already a proper object (simple field object)
           if (!fieldData && typeof field === 'object' && field !== null) {
             // Check if it has expected field properties (not character objects)
             if (field.id || field.name || field.type || field.label) {
@@ -179,13 +179,23 @@ export default function PublicFormPage() {
           // If we successfully got fieldData, process it
           if (fieldData) {
             console.log(`Processed field ${index}:`, fieldData)
+            
+            // Handle options - convert string to array if needed
+            let options = []
+            if (Array.isArray(fieldData.options)) {
+              options = fieldData.options
+            } else if (typeof fieldData.options === 'string') {
+              // Split comma-separated string into array
+              options = fieldData.options.split(',').map(opt => opt.trim()).filter(opt => opt)
+            }
+            
             return {
               id: fieldData.id || fieldData.name || `field-${index}-${Date.now()}`,
               type: fieldData.type || 'text',
               label: fieldData.label || fieldData.name || 'Field',
               placeholder: fieldData.placeholder || '',
               required: fieldData.required === true || fieldData.required === 'true' || false,
-              options: Array.isArray(fieldData.options) ? fieldData.options : [],
+              options: options, // Always ensure options is an array
               validation: typeof fieldData.validation === 'object' ? fieldData.validation : {}
             }
           }
@@ -203,7 +213,7 @@ export default function PublicFormPage() {
           }
         })
       }
-
+  
       const parsedForm = {
         form_name: apiForm.form_name || apiForm.name || 'Untitled Form',
         description: apiForm.description || '',

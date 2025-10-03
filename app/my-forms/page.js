@@ -58,10 +58,10 @@ export default function MyFormsPage() {
         }
       }
       
-      // Case 3: Field is already a proper object (simple field object)
+      // Case 3: Field is already a proper object
       if (typeof field === 'object' && field !== null) {
-        // This handles the case where fields are returned as simple objects after update
-        if (field.name || field.type) {
+        // Check if it has expected field properties (not character objects)
+        if (field.id || field.name || field.type || field.label) {
           return field
         }
       }
@@ -182,6 +182,7 @@ const countFormFields = (form) => {
       }
 
       const result = await response.json()
+      console.log('API Forms Response:', result)
       
       if (result.success && Array.isArray(result.form)) {
         // Process the forms to add field counts and format dates
@@ -228,18 +229,9 @@ const countFormFields = (form) => {
       toast.info("Loading form details...")
       const formDetails = await getFormDetails(formId)
       
-      // Parse the fields for editing - handle both character-by-character and simple object formats
+      // Parse the fields for editing
       const parsedFields = formDetails.fields.map(field => {
         const parsedField = parseFieldData(field)
-        
-        // Extract options from the parsed field
-        let options = []
-        if (Array.isArray(parsedField.options)) {
-          options = parsedField.options
-        } else if (typeof parsedField.options === 'string') {
-          options = parsedField.options.split(',').map(opt => opt.trim()).filter(opt => opt)
-        }
-        
         return {
           id: parsedField.id || parsedField.name || `field-${Date.now()}`,
           name: parsedField.name || parsedField.id || `field-${Date.now()}`,
@@ -247,9 +239,10 @@ const countFormFields = (form) => {
           label: parsedField.label || parsedField.name || 'Field',
           placeholder: parsedField.placeholder || '',
           required: parsedField.required === true || parsedField.required === 'true' || false,
-          options: options
+          options: Array.isArray(parsedField.options) ? parsedField.options : 
+                  (typeof parsedField.options === 'string' ? parsedField.options.split(',').map(opt => opt.trim()) : [])
         }
-      }).filter(field => field.name && field.type) // Only include valid fields
+      }).filter(field => field.id && field.type)
       
       setEditingForm({
         ...formDetails,
@@ -277,12 +270,12 @@ const countFormFields = (form) => {
         fields: updatedData.fields.map(field => {
           // Create field object matching the exact API format
           const fieldObj = {
-            name: field.name, // Use name as primary identifier
+            name: field.name || field.id, // Use name as primary identifier
             type: field.type,
             required: field.required ? "true" : "false" // Must be string "true" or "false"
           }
           
-          // Add label if present and different from name
+          // Add label if present
           if (field.label && field.label !== field.name) {
             fieldObj.label = field.label
           }
