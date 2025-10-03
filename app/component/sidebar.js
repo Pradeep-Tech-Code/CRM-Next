@@ -1,6 +1,6 @@
 "use client"
 
-import { Home, Settings, HelpCircle, BookCopy, ClipboardMinus, FileChartColumnIncreasing, X, ChevronLeft, ChevronRight, ChevronDown, FormInput, BarChart3, List } from "lucide-react"
+import { Home, Settings, HelpCircle, BookCopy, ClipboardMinus, FileChartColumnIncreasing, X, ChevronLeft, ChevronRight, ChevronDown, FormInput, BarChart3, List, Table } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -19,6 +19,7 @@ const menuItems = [
             { label: "Form Analytics", icon: BarChart3, href: "form-analytics" },
         ]
     },
+    { label: "Custom Table", icon: Table, href: "custom-table" },
     { label: "Report", icon: ClipboardMinus, href: "report" },
     { label: "Setting", icon: Settings, href: "setting" },
     { label: "Help", icon: HelpCircle, href: "help" },

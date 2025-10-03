@@ -6,6 +6,7 @@ import Topbar from "./component/topbar";
 import CustomFormPage from "./custom-form/page";
 import MyFormsPage from "./my-forms/page"
 import FormAnalyticsPage from "./form-analytics/page"
+import CustomTableBuilder from "./custom-table-builder/page"
 import { cn } from "@/lib/utils";
 
 export default function Home() {
@@ -37,6 +38,8 @@ export default function Home() {
         return <MyFormsPage />
       case "form-analytics":
         return <FormAnalyticsPage />
+      case "custom-table":
+        return <CustomTableBuilder />
       case "dashboard":
       default:
         return (
