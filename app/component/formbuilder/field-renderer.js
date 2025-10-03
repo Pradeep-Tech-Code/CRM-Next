@@ -38,6 +38,8 @@ const PHONE_COUNTRIES = [
 ]
 
 export function FieldRenderer({ field, value, onChange, disabled = false, invalid = false, error }) {
+
+  console.log("hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh", field)
   // Get placeholder text - show error message if invalid, otherwise use field placeholder
   const getPlaceholder = () => {
     if (invalid && error) {
@@ -108,6 +110,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
         )
 
       case "select":
+        console.log("HIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII",field)
+
         if (field.validation?.multiple) {
           // Multiple select using Command inside a Popover for a dropdown UX
           const selectedValues = Array.isArray(value) ? value : []
@@ -140,6 +144,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                       {field.options
                         ?.filter((option) => option && option.trim() !== "")
                         .map((option, index) => {
+                        console.log("HIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII")
+
                           const checked = selectedValues.includes(option)
                           return (
                             <CommandItem

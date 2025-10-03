@@ -76,17 +76,17 @@ export function FormPreview({ fields }) {
         fields: fields.map(field => {
           // Create a clean field object with all necessary properties
           const fieldObj = {
-            id: field.id,
+            name: field.id,
             type: field.type,
-            required: field.required ? "true" : "false",
+            required: String(field.required) ? "true" : "false",
             label: field.label,
             placeholder: field.placeholder || "",
-            options: field.options || [],
-            validation: field.validation || {}
+            options: JSON.stringify(field.options || []),
+            validation: JSON.stringify(field.validation || {})
           }
           
           // Return as a proper JSON string
-          return JSON.stringify(fieldObj)
+          return fieldObj
         }),
         published: true
       }
@@ -425,7 +425,7 @@ export function FormPreview({ fields }) {
                   </Button>
                   <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
                     {([canSubmit, isSubmitting]) => (
-                      <Button type="submit" disabled={!canSubmit} className="gap-2">
+                      <Button type="submit" disabled={true} className="gap-2">
                         <Send className="h-4 w-4" />
                         {isSubmitting ? "Submitting..." : "Submit Form"}
                       </Button>
