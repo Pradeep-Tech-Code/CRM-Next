@@ -159,4 +159,25 @@
     background-size: 120px 120px;
     pointer-events: none;
   }
+
+
+.field-type-button:active {
+  cursor: grabbing !important;
+}
+
+.field-type-button.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+}
+
+/* Drag and drop visual feedback */
+.drag-over {
+  border: 2px dashed var(--color-primary) !important;
+  background-color: color-mix(in oklab, var(--color-primary) 5%, transparent) !important;
+}
+
+.drop-zone-active {
+  border-color: var(--color-primary) !important;
+  background-color: color-mix(in oklab, var(--color-primary) 10%, transparent) !important;
+}
 }

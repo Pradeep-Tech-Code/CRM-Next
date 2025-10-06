@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Button } from "@/components/ui/button"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -398,26 +399,201 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
           </div>
         )
 
-      case "file":
-        return (
-          <div className="space-y-2">
-            <Input
-              type="file"
-              onChange={(e) => onChange?.(e.target.files?.[0] || null)}
-              disabled={disabled}
-              className={`bg-input file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 ${
-                invalid ? "border-red-500" : ""
-              }`}
-              accept={field.validation?.accept}
-              multiple={field.validation?.multiple}
-            />
-            {invalid && (
-              <div className="text-xs text-red-500 font-medium">
-                {error}
+        case "file": {
+          const handleFileChange = async (e) => {
+            const file = e.target.files?.[0] || null
+            
+            if (!file) {
+              onChange?.(null)
+              return
+            }
+        
+            // More flexible file type validation
+            const allowedTypes = [
+              'image/jpeg',
+              'image/jpg', 
+              'image/png',
+              'image/gif',
+              'image/webp',
+              'image/svg+xml',
+              'application/pdf'
+            ]
+            
+            const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.pdf']
+            
+            // Check both MIME type and file extension
+            const isValidType = allowedTypes.includes(file.type) || 
+                               allowedExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
+            
+            if (!isValidType) {
+              alert('Please select only image files (JPEG, PNG, GIF, WebP, SVG) or PDF files.')
+              e.target.value = '' // Reset input
+              onChange?.(null)
+              return
+            }
+        
+            // Validate file size (5MB = 5 * 1024 * 1024 bytes)
+            const maxSize = 5 * 1024 * 1024 // 5MB in bytes
+            if (file.size > maxSize) {
+              alert('File size must be less than 5MB.')
+              e.target.value = '' // Reset input
+              onChange?.(null)
+              return
+            }
+        
+            try {
+              // Convert file to base64
+              const base64 = await fileToBase64(file)
+              
+              // Create object with file info and base64 data
+              const fileData = {
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                lastModified: file.lastModified,
+                base64: base64
+              }
+              
+              console.log('File processed:', {
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                base64Length: base64.length
+              })
+              
+              onChange?.(fileData)
+            } catch (error) {
+              console.error('Error converting file to base64:', error)
+              alert('Error processing file. Please try again.')
+              e.target.value = '' // Reset input
+              onChange?.(null)
+            }
+          }
+        
+          // Helper function to convert file to base64
+          const fileToBase64 = (file) => {
+            return new Promise((resolve, reject) => {
+              const reader = new FileReader()
+              reader.readAsDataURL(file)
+              reader.onload = () => {
+                resolve(reader.result)
+              }
+              reader.onerror = error => reject(error)
+            })
+          }
+        
+          // Get accepted file types for input
+          const getAcceptedTypes = () => {
+            return ".jpg,.jpeg,.png,.gif,.webp,.svg,.pdf"
+          }
+        
+          // Format file size for display
+          const formatFileSize = (bytes) => {
+            if (bytes === 0) return '0 Bytes'
+            const k = 1024
+            const sizes = ['Bytes', 'KB', 'MB', 'GB']
+            const i = Math.floor(Math.log(bytes) / Math.log(k))
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+          }
+        
+          // Check if file is an image (with safe access)
+          const isImageFile = (file) => {
+            return file && file.type && typeof file.type === 'string' && 
+                   (file.type.startsWith('image/') || 
+                    file.name.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|svg)$/))
+          }
+        
+          const fileValue = value || null
+        
+          return (
+            <div className="space-y-2">
+              <Input
+                type="file"
+                onChange={handleFileChange}
+                disabled={disabled}
+                className={`bg-input file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 ${
+                  invalid ? "border-red-500" : ""
+                }`}
+                accept={getAcceptedTypes()}
+              />
+              
+              {/* File info display */}
+              {fileValue && fileValue.name && (
+                <div className="p-3 border border-green-200 bg-green-50 rounded-md">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-8 h-8 flex items-center justify-center rounded ${
+                        fileValue.type === 'application/pdf' || fileValue.name.toLowerCase().endsWith('.pdf')
+                          ? 'bg-red-100 text-red-600' 
+                          : 'bg-blue-100 text-blue-600'
+                      }`}>
+                        {fileValue.type === 'application/pdf' || fileValue.name.toLowerCase().endsWith('.pdf') ? (
+                          <span className="text-xs font-bold">PDF</span>
+                        ) : (
+                          <span className="text-xs">IMG</span>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 truncate max-w-xs">
+                          {fileValue.name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {formatFileSize(fileValue.size || 0)} • {fileValue.type || 'Unknown type'}
+                        </p>
+                        <p className="text-xs text-green-600">
+                          ✓ Ready to upload ({formatFileSize(fileValue.base64?.length || 0)} as base64)
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onChange?.(null)
+                        // Reset the file input
+                        const fileInput = document.querySelector('input[type="file"]')
+                        if (fileInput) fileInput.value = ''
+                      }}
+                      className="px-3 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md border border-transparent hover:border-red-200 transition-colors"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  
+                  {/* Image preview for image files - with safe access */}
+                  {isImageFile(fileValue) && fileValue.base64 && (
+                    <div className="mt-2">
+                      <img 
+                        src={fileValue.base64} 
+                        alt="Preview" 
+                        className="max-h-32 max-w-full rounded border"
+                        onError={(e) => {
+                          console.error('Error loading image preview')
+                          e.target.style.display = 'none'
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Help text */}
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>Allowed formats: JPEG, PNG, GIF, WebP, SVG, PDF</p>
+                <p>Maximum file size: 5MB</p>
+                <p className="text-blue-600">Files will be converted to base64 format</p>
+                {/* {field.validation?.multiple && (
+                  <p>Multiple files allowed</p>
+                )} */}
               </div>
-            )}
-          </div>
-        )
+        
+              {invalid && (
+                <div className="text-xs text-red-500 font-medium">
+                  {error}
+                </div>
+              )}
+            </div>
+          )
+        }
 
       case "datetime":
         return (

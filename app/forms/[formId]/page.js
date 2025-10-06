@@ -18,9 +18,70 @@ const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
 const TABLE_ID = 'b9bc249f-9099-4436-bfc6-9dd74d1e8fdc'
 const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
 
+// Phone countries constant
+const PHONE_COUNTRIES = [
+  { code: '+1', label: 'US/Canada', len: 10 },
+  { code: '+44', label: 'UK', len: 10 },
+  { code: '+91', label: 'India', len: 10 },
+  { code: '+61', label: 'Australia', len: 9 },
+  { code: '+81', label: 'Japan', len: 10 }
+]
+
 // Generate or use a proper token
 const getAuthToken = () => {
   return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzU5MzE0ODY2LCJleHAiOjE3NTk0MDEyNjZ9.QjKz8fTFwia76o7LkkdmlGGhEKoguy8o6iFbCojMwkE'
+}
+
+// Helper functions
+const formatFileSize = (bytes) => {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+// Improved base64 detection
+const isBase64File = (str) => {
+  if (typeof str !== 'string') return false
+  return str.startsWith('data:') && str.includes('base64,')
+}
+
+// Create a proper file object from base64
+const createFileFromBase64 = (base64String, filename = 'uploaded_file') => {
+  if (!base64String) return null
+  
+  try {
+    // Extract mime type and base64 data
+    const matches = base64String.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.*)$/)
+    if (!matches || matches.length !== 3) {
+      console.warn('Invalid base64 format:', base64String?.substring(0, 100))
+      return null
+    }
+    
+    const mimeType = matches[1]
+    const base64Data = matches[2]
+    
+    // Get file extension from mime type
+    const extension = mimeType.split('/')[1] || 'bin'
+    const finalFilename = filename.includes('.') ? filename : `${filename}.${extension}`
+    
+    // Calculate approximate size
+    const size = Math.floor((base64Data.length * 3) / 4)
+    
+    return {
+      name: finalFilename,
+      type: mimeType,
+      size: size,
+      base64: base64String,
+      previewUrl: base64String,
+      lastModified: Date.now(),
+      isFromBase64: true // Flag to identify base64-originated files
+    }
+  } catch (error) {
+    console.error('Error creating file from base64:', error)
+    return null
+  }
 }
 
 export default function PublicFormPage() {
@@ -135,13 +196,14 @@ export default function PublicFormPage() {
       const response = await fetch(
         `${API_BASE_URL}/api/forms/${ORGANIZATION_ID}/${TABLE_ID}/${formId}`
       )
+      console.log('API Response status::::::::::::::::::::::::::::::::::::::', response);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch form: ${response.status} ${response.statusText}`)
       }
 
       const result = await response.json()
-      console.log('API Response:', result)
+      console.log('API Response:::::::::::::', result)
 
       if (result.success && result.form) {
         const parsedForm = parseFormData(result.form)
@@ -162,51 +224,6 @@ export default function PublicFormPage() {
       }
     } finally {
       setLoading(false)
-    }
-  }
-
-  // POST method fallback
-  const tryPostMethod = async () => {
-    try {
-      console.log('Trying POST method...')
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/submit/edit?token=${token}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${getAuthToken()}`
-          },
-          body: JSON.stringify({
-            organization_id: ORGANIZATION_ID,
-            form_id: formId,
-            submission_id: submissionId
-          })
-        }
-      )
-
-      console.log('POST Response status:', response.status)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('POST method failed with response:', errorText)
-        throw new Error(`POST method failed: ${response.status} ${response.statusText}`)
-      }
-
-      const result = await response.json()
-      console.log('POST Submission data response:', result)
-
-      if (result.success && result.data) {
-        setSubmissionData(result.data)
-        toast.success("Submission loaded for editing")
-      } else {
-        throw new Error('Submission data not found in POST response')
-      }
-
-    } catch (postError) {
-      console.error('POST method also failed:', postError)
-      toast.error("Unable to load submission data. Please check the URL parameters.")
     }
   }
 
@@ -425,6 +442,24 @@ export default function PublicFormPage() {
             }
             break
 
+          case "file":
+            // Handle file fields - convert base64 string to file object
+            if (typeof fieldValue === 'string' && fieldValue.startsWith('data:')) {
+              // Create file object from base64
+              const fileObject = createFileFromBase64(fieldValue, field.label || field.name || 'file')
+              if (fileObject) {
+                transformedValues[fieldId] = fileObject
+              } else {
+                transformedValues[fieldId] = null
+              }
+            } else if (typeof fieldValue === 'object' && fieldValue !== null) {
+              // Already a file object
+              transformedValues[fieldId] = fieldValue
+            } else {
+              transformedValues[fieldId] = null
+            }
+            break
+
           case "location":
           case "phone":
             // These should be objects
@@ -522,97 +557,99 @@ export default function PublicFormPage() {
     return mockForms[formId]
   }
 
-  // Transform form values to match API expected format
-// In page.js, update the transformFormValues function:
-
-const transformFormValues = (formValues, fields) => {
-  const transformedValues = {}
-  
-  Object.keys(formValues).forEach(fieldId => {
-    const fieldValue = formValues[fieldId]
-    const field = fields.find(f => f.id === fieldId)
+  const transformFormValues = (formValues, fields) => {
+    const transformedValues = {}
     
-    if (!field) return
-    
-    // Skip empty values for non-required fields
-    if (!field.required && !field.validation?.required) {
-      // Check if the value is empty
-      const isEmpty = 
-        fieldValue === null ||
-        fieldValue === undefined ||
-        fieldValue === '' ||
-        (Array.isArray(fieldValue) && fieldValue.length === 0) ||
-        (typeof fieldValue === 'object' && fieldValue !== null && Object.keys(fieldValue).length === 0)
+    Object.keys(formValues).forEach(fieldId => {
+      const fieldValue = formValues[fieldId]
+      const field = fields.find(f => f.id === fieldId)
       
-      if (isEmpty) {
-        return // Skip this field entirely
+      if (!field) return
+      
+      // Skip empty values for non-required fields
+      if (!field.required && !field.validation?.required) {
+        // Check if the value is empty
+        const isEmpty = 
+          fieldValue === null ||
+          fieldValue === undefined ||
+          fieldValue === '' ||
+          (Array.isArray(fieldValue) && fieldValue.length === 0) ||
+          (typeof fieldValue === 'object' && fieldValue !== null && Object.keys(fieldValue).length === 0) ||
+          (typeof fieldValue === 'object' && fieldValue !== null && !fieldValue.name && !fieldValue.base64)
+        
+        if (isEmpty) {
+          return // Skip this field entirely
+        }
       }
-    }
-    
-    // Handle different field types according to your API format
-    switch (field.type) {
-      case "checkbox":
-        // Checkbox returns array of selected options
-        transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
-        break
       
-      case "select":
-        if (field.validation?.multiple) {
-          // Multiple select returns array like ["a", "b"] in your curl example
+      // Handle different field types according to your API format
+      switch (field.type) {
+        case "checkbox":
+          // Checkbox returns array of selected options
           transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
-        } else {
-          // Single select returns string
-          transformedValues[fieldId] = fieldValue || ""
-        }
-        break
-      
-      case "radio":
-        // Radio returns single string value
-        transformedValues[fieldId] = fieldValue || ""
-        break
-      
-      case "file":
-        // File upload - store file name
-        if (fieldValue && typeof fieldValue === 'object') {
-          transformedValues[fieldId] = fieldValue.name || "Uploaded file"
-        } else {
-          transformedValues[fieldId] = fieldValue || ""
-        }
-        break
-      
-      case "location":
-        // Location returns object with country, state, city
-        if (typeof fieldValue === 'object' && fieldValue !== null) {
-          transformedValues[fieldId] = {
-            country: fieldValue.country || "",
-            state: fieldValue.state || "",
-            city: fieldValue.city || ""
+          break
+        
+        case "select":
+          if (field.validation?.multiple) {
+            // Multiple select returns array like ["a", "b"] in your curl example
+            transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
+          } else {
+            // Single select returns string
+            transformedValues[fieldId] = fieldValue || ""
           }
-        } else {
-          transformedValues[fieldId] = {}
-        }
-        break
-      
-      case "phone":
-        // Phone returns object with country and number
-        if (typeof fieldValue === 'object' && fieldValue !== null) {
-          transformedValues[fieldId] = {
-            country: fieldValue.country || "",
-            number: fieldValue.number || ""
+          break
+        
+        case "radio":
+          // Radio returns single string value
+          transformedValues[fieldId] = fieldValue || ""
+          break
+        
+        case "file":
+          // File upload - send base64 data as string
+          if (fieldValue && typeof fieldValue === 'object' && fieldValue.base64) {
+            // Send base64 string directly
+            transformedValues[fieldId] = fieldValue.base64
+          } else if (fieldValue && typeof fieldValue === 'string' && fieldValue.startsWith('data:')) {
+            // If it's already a base64 string, use it directly
+            transformedValues[fieldId] = fieldValue
+          } else {
+            transformedValues[fieldId] = ""
           }
-        } else {
-          transformedValues[fieldId] = {}
-        }
-        break
-      
-      default:
-        // Text, email, number, textarea - return as string
-        transformedValues[fieldId] = fieldValue || ""
-    }
-  })
-  
-  return transformedValues
-}
+          break
+
+        case "location":
+          // Location returns object with country, state, city
+          if (typeof fieldValue === 'object' && fieldValue !== null) {
+            transformedValues[fieldId] = {
+              country: fieldValue.country || "",
+              state: fieldValue.state || "",
+              city: fieldValue.city || ""
+            }
+          } else {
+            transformedValues[fieldId] = {}
+          }
+          break
+        
+        case "phone":
+          // Phone returns object with country and number
+          if (typeof fieldValue === 'object' && fieldValue !== null) {
+            transformedValues[fieldId] = {
+              country: fieldValue.country || "",
+              number: fieldValue.number || ""
+            }
+          } else {
+            transformedValues[fieldId] = {}
+          }
+          break
+        
+        default:
+          // Text, email, number, textarea - return as string
+          transformedValues[fieldId] = fieldValue || ""
+      }
+    })
+    
+    return transformedValues
+  }
 
   // Get default values for form initialization
   const getDefaultValues = () => {
@@ -630,7 +667,7 @@ const transformFormValues = (formValues, fields) => {
       acc[fieldId] = field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)
         ? []
         : field.type === "file"
-          ? null
+          ? null // File fields should be null initially
           : field.type === "location"
             ? {}
             : field.type === "phone"
@@ -640,9 +677,7 @@ const transformFormValues = (formValues, fields) => {
     }, {})
   }
 
-
   const handleEditResponse = () => {
-
     const savedSubmissionId = localStorage.getItem("SUBMISSION_ID")
     const savedEditToken = localStorage.getItem("EDIT_TOKEN")
 
@@ -695,7 +730,7 @@ const transformFormValues = (formValues, fields) => {
       acc[fieldId] = field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)
         ? []
         : field.type === "file"
-          ? null
+          ? null // File fields should be null when empty
           : field.type === "location"
             ? {}
             : field.type === "phone"
@@ -708,6 +743,116 @@ const transformFormValues = (formValues, fields) => {
   const handleClearSubmission = () => {
     clearSubmissionFromStorage()
     toast.success("Submission cleared. You can now submit a new response.")
+  }
+
+  const validateField = (field, value) => {
+    const errors = []
+
+    // Required validation
+    if (field.required || field.validation?.required) {
+      if (field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)) {
+        if (!Array.isArray(value) || value.length === 0) {
+          errors.push("This field is required")
+        }
+      } else if (field.type === "file") {
+        if (!value) {
+          errors.push("Please select a file")
+        }
+      } else if (field.type === "location") {
+        const v = value || {}
+        if (!v.country) {
+          errors.push("Please select a country")
+        } else if (!v.state) {
+          errors.push("Please select a state")
+        } else if (!v.city) {
+          errors.push("Please select a city")
+        }
+      } else if (field.type === "phone") {
+        const v = value || {}
+        if (!v.country) {
+          errors.push("Please select a country code")
+        } else if (!v.number || String(v.number).trim() === "") {
+          errors.push("Please enter a phone number")
+        }
+      } else if (!value || (typeof value === "string" && value.trim() === "")) {
+        errors.push("This field is required")
+      }
+    }
+
+    // Type-specific validation
+    if (value && ((typeof value === "string" && value.trim() !== "") || field.type === "phone" || field.type === "file")) {
+      switch (field.type) {
+        case "email":
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+          if (!emailRegex.test(value)) {
+            errors.push("Please enter a valid email address")
+          }
+          break
+
+        case "number":
+          const numValue = Number(value)
+          if (isNaN(numValue)) {
+            errors.push("Please enter a valid number")
+          } else {
+            if (field.validation?.min !== undefined && numValue < field.validation.min) {
+              errors.push(`Value must be at least ${field.validation.min}`)
+            }
+            if (field.validation?.max !== undefined && numValue > field.validation.max) {
+              errors.push(`Value must be at most ${field.validation.max}`)
+            }
+          }
+          break
+
+        case "phone": {
+          const v = value || {}
+          const phoneCountry = PHONE_COUNTRIES.find(c => c.code === v.country) || PHONE_COUNTRIES[0]
+          const digits = String(v.number || "").replace(/\D/g, "")
+          const expectedLength = phoneCountry.len
+          
+          if (digits.length !== expectedLength) {
+            errors.push(`Phone number must be ${expectedLength} digits for ${phoneCountry.label}`)
+          }
+          break
+        }
+
+        case "file":
+          // File validation - only allow images and PDFs up to 5MB
+          const allowedTypes = [
+            'image/jpeg',
+            'image/jpg', 
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'image/svg+xml',
+            'application/pdf'
+          ]
+          
+          const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.pdf']
+          
+          if (value) {
+            // Check both MIME type and file extension
+            const isValidType = allowedTypes.includes(value.type) || 
+                              allowedExtensions.some(ext => value.name.toLowerCase().endsWith(ext))
+            
+            if (!isValidType) {
+              errors.push("Please select only image files (JPEG, PNG, GIF, WebP, SVG) or PDF files")
+            }
+            
+            const maxSize = 5 * 1024 * 1024 // 5MB
+            if (value.size > maxSize) {
+              errors.push("File size must be less than 5MB")
+            }
+            
+            // Validate base64 data exists for new uploads
+            if (!value.base64 && !value.isFromBase64) {
+              errors.push("Error processing file. Please try uploading again.")
+            }
+          }
+          break
+      }
+    }
+
+    return errors
   }
 
   const form = useForm({
@@ -794,7 +939,6 @@ const transformFormValues = (formValues, fields) => {
               })
 
               toast.success("Thank you for your response!")
-              // form.reset()
             } else {
               console.error("Response missing submission_id or edit_token", result);
               toast.error("Submission completed but edit feature unavailable")
@@ -823,69 +967,6 @@ const transformFormValues = (formValues, fields) => {
       form.reset(defaultValues)
     }
   }, [submissionData, isEditMode, formData])
-
-  const validateField = (field, value) => {
-    const errors = []
-
-    // Required validation
-    if (field.required || field.validation?.required) {
-      if (field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)) {
-        if (!Array.isArray(value) || value.length === 0) {
-          errors.push("This field is required")
-        }
-      } else if (field.type === "file") {
-        if (!value) {
-          errors.push("Please select a file")
-        }
-      } else if (field.type === "location") {
-        const v = value || {}
-        if (!v.country) {
-          errors.push("Please select a country")
-        } else if (!v.state) {
-          errors.push("Please select a state")
-        } else if (!v.city) {
-          errors.push("Please select a city")
-        }
-      } else if (field.type === "phone") {
-        const v = value || {}
-        if (!v.country) {
-          errors.push("Please select a country code")
-        } else if (!v.number || String(v.number).trim() === "") {
-          errors.push("Please enter a phone number")
-        }
-      } else if (!value || (typeof value === "string" && value.trim() === "")) {
-        errors.push("This field is required")
-      }
-    }
-
-    // Type-specific validation
-    if (value && ((typeof value === "string" && value.trim() !== "") || field.type === "phone")) {
-      switch (field.type) {
-        case "email":
-          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-          if (!emailRegex.test(value)) {
-            errors.push("Please enter a valid email address")
-          }
-          break
-
-        case "number":
-          const numValue = Number(value)
-          if (isNaN(numValue)) {
-            errors.push("Please enter a valid number")
-          } else {
-            if (field.validation?.min !== undefined && numValue < field.validation.min) {
-              errors.push(`Value must be at least ${field.validation.min}`)
-            }
-            if (field.validation?.max !== undefined && numValue > field.validation.max) {
-              errors.push(`Value must be at most ${field.validation.max}`)
-            }
-          }
-          break
-      }
-    }
-
-    return errors
-  }
 
   if (loading) {
     return (
@@ -1010,36 +1091,6 @@ const transformFormValues = (formValues, fields) => {
                       </Button>
                     )}
                   </div>
-
-                  {/* {lastSubmissionId && (
-                    <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                      <p className="text-sm text-blue-700">
-                        <strong>Submission ID:</strong> {lastSubmissionId}
-                      </p>
-                      <p className="text-xs text-blue-600 mt-1">
-                        Keep this ID for your records.
-                        {hasExistingSubmission && "This response is saved in your browser."}
-                      </p>
-                    </div>
-                  )} */}
-
-                  {/* Clear submission option */}
-                  {/* {hasExistingSubmission && (
-                    <div className="mt-4">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleClearSubmission}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50 gap-2"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Clear Submission from Browser
-                      </Button>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        This will remove your submission data from this browser only.
-                      </p>
-                    </div>
-                  )} */}
                 </div>
 
                 {/* Privacy Notice */}

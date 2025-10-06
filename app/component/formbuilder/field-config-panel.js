@@ -248,7 +248,7 @@ export function FieldConfigPanel({ field, onUpdateField }) {
         )}
 
         {/* File: Multiple files toggle */}
-        {field.type === "file" && (
+        {/* {field.type === "file" && (
           <Card className="border-0 shadow-none bg-transparent">
             <CardHeader className="px-0 pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
@@ -280,7 +280,7 @@ export function FieldConfigPanel({ field, onUpdateField }) {
               </div>
             </CardContent>
           </Card>
-        )}
+        )} */}
 
         {/* Number: Min/Max validation */}
         {field.type === "number" && (
