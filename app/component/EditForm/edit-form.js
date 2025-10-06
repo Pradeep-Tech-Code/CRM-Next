@@ -32,13 +32,34 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
           options = field.options.split(',').map(opt => opt.trim()).filter(opt => opt)
         }
         
+        // Parse validation - ensure it's an object
+        let validation = {}
+        if (typeof field.validation === 'string') {
+          try {
+            validation = JSON.parse(field.validation)
+          } catch (e) {
+            console.warn('Failed to parse validation as JSON:', field.validation)
+          }
+        } else if (typeof field.validation === 'object') {
+          validation = field.validation
+        }
+        
+        // Ensure required is properly set in both field and validation
+        const isRequired = field.required === true || field.required === "true" || false
+        
         return {
           ...field,
-          required: field.required === true || field.required === "true" || false,
-          // Ensure validation object exists
-          validation: field.validation || {},
-          // Ensure options is always an array
-          options: options
+          required: isRequired,
+          validation: {
+            required: isRequired,
+            multiple: validation.multiple || false,
+            min: validation.min,
+            max: validation.max,
+            accept: validation.accept,
+            pattern: validation.pattern,
+            ...validation
+          },
+           options: options
         }
       })
       
@@ -77,6 +98,23 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
 
   const updateField = (index, updates) => {
     const newFields = [...formData.fields]
+    
+    // If updating required field, also update validation.required
+    if (updates.hasOwnProperty('required')) {
+      updates.validation = {
+        ...newFields[index].validation,
+        required: updates.required
+      }
+    }
+    
+    // If updating validation with multiple, ensure it's properly set
+    if (updates.validation && updates.validation.hasOwnProperty('multiple')) {
+      updates.validation = {
+        ...newFields[index].validation,
+        multiple: updates.validation.multiple
+      }
+    }
+    
     newFields[index] = { ...newFields[index], ...updates }
     setFormData(prev => ({ ...prev, fields: newFields }))
   }
@@ -95,7 +133,10 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
           required: false,
           placeholder: "",
           options: [],
-          validation: {}
+          validation: {
+            required: false,
+            multiple: false
+          }
         }
       ]
     }))
@@ -198,6 +239,16 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary">{field.type}</Badge>
                       <span className="font-medium">{field.label || "Unnamed Field"}</span>
+                      {field.required && (
+                        <Badge variant="destructive" className="text-xs">
+                          Required
+                        </Badge>
+                      )}
+                      {field.type === "select" && field.validation?.multiple && (
+                        <Badge variant="outline" className="text-xs">
+                          Multiple
+                        </Badge>
+                      )}
                     </div>
                     <Button
                       size="sm"
@@ -289,12 +340,6 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                           </div>
                         </div>
                       )}
-
-                      {/* Debug info */}
-                      <div className="text-xs text-muted-foreground">
-                        <div>Raw input: "{getOptionsDisplayValue(index)}"</div>
-                        <div>Parsed options: {JSON.stringify(field.options)}</div>
-                      </div>
 
                       {/* Multiple selection for select fields */}
                       {field.type === "select" && (

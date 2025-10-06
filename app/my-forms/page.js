@@ -60,10 +60,29 @@ export default function MyFormsPage() {
       
       // Case 3: Field is already a proper object
       if (typeof field === 'object' && field !== null) {
-        // Check if it has expected field properties (not character objects)
-        if (field.id || field.name || field.type || field.label) {
-          return field
+        // Parse options and validation if they are strings
+        const parsedField = { ...field }
+        
+        // Parse options
+        if (typeof parsedField.options === 'string') {
+          try {
+            parsedField.options = JSON.parse(parsedField.options)
+          } catch (e) {
+            // If JSON parsing fails, try comma-separated
+            parsedField.options = parsedField.options.split(',').map(opt => opt.trim()).filter(opt => opt)
+          }
         }
+        
+        // Parse validation
+        if (typeof parsedField.validation === 'string') {
+          try {
+            parsedField.validation = JSON.parse(parsedField.validation)
+          } catch (e) {
+            parsedField.validation = {}
+          }
+        }
+        
+        return parsedField
       }
       
       // Default fallback
@@ -71,7 +90,9 @@ export default function MyFormsPage() {
         id: 'unknown-field',
         type: 'text',
         label: 'Unknown Field',
-        required: false
+        required: false,
+        options: [],
+        validation: {}
       }
       
     } catch (error) {
@@ -80,34 +101,35 @@ export default function MyFormsPage() {
         id: 'error-field',
         type: 'text',
         label: 'Error Parsing Field',
-        required: false
+        required: false,
+        options: [],
+        validation: {}
       }
     }
   }
 
   // Function to count the number of fields in a form
-// Function to count the number of fields in a form
-const countFormFields = (form) => {
-  if (!form.fields || !Array.isArray(form.fields)) return 0
-  
-  let fieldCount = 0
-  
-  form.fields.forEach((field) => {
-    // Direct field object (after update)
-    if (field && typeof field === 'object' && field.name && field.type) {
-      fieldCount++
-    } 
-    // Character-by-character format (new forms)
-    else if (field && typeof field === 'object') {
-      const keys = Object.keys(field).filter(key => !isNaN(key))
-      if (keys.length > 0) {
-        fieldCount++ // Count as one field even if we can't parse it
+  const countFormFields = (form) => {
+    if (!form.fields || !Array.isArray(form.fields)) return 0
+    
+    let fieldCount = 0
+    
+    form.fields.forEach((field) => {
+      // Direct field object (after update)
+      if (field && typeof field === 'object' && field.name && field.type) {
+        fieldCount++
+      } 
+      // Character-by-character format (new forms)
+      else if (field && typeof field === 'object') {
+        const keys = Object.keys(field).filter(key => !isNaN(key))
+        if (keys.length > 0) {
+          fieldCount++ // Count as one field even if we can't parse it
+        }
       }
-    }
-  })
-  
-  return fieldCount
-}
+    })
+    
+    return fieldCount
+  }
 
   // Function to get form details for editing
   const getFormDetails = async (formId) => {
@@ -232,6 +254,31 @@ const countFormFields = (form) => {
       // Parse the fields for editing
       const parsedFields = formDetails.fields.map(field => {
         const parsedField = parseFieldData(field)
+        
+        // Parse validation if it's a string
+        let validation = {}
+        if (typeof parsedField.validation === 'string') {
+          try {
+            validation = JSON.parse(parsedField.validation)
+          } catch (e) {
+            console.warn('Failed to parse validation:', parsedField.validation)
+          }
+        } else if (typeof parsedField.validation === 'object') {
+          validation = parsedField.validation
+        }
+        
+        // Parse options
+        let options = []
+        if (Array.isArray(parsedField.options)) {
+          options = parsedField.options
+        } else if (typeof parsedField.options === 'string') {
+          try {
+            options = JSON.parse(parsedField.options)
+          } catch (e) {
+            options = parsedField.options.split(',').map(opt => opt.trim()).filter(opt => opt)
+          }
+        }
+        
         return {
           id: parsedField.id || parsedField.name || `field-${Date.now()}`,
           name: parsedField.name || parsedField.id || `field-${Date.now()}`,
@@ -239,10 +286,20 @@ const countFormFields = (form) => {
           label: parsedField.label || parsedField.name || 'Field',
           placeholder: parsedField.placeholder || '',
           required: parsedField.required === true || parsedField.required === 'true' || false,
-          options: Array.isArray(parsedField.options) ? parsedField.options : 
-                  (typeof parsedField.options === 'string' ? parsedField.options.split(',').map(opt => opt.trim()) : [])
+          options: options,
+          validation: {
+            required: parsedField.required === true || parsedField.required === 'true' || false,
+            multiple: validation.multiple || false,
+            min: validation.min,
+            max: validation.max,
+            accept: validation.accept,
+            pattern: validation.pattern,
+            ...validation
+          }
         }
       }).filter(field => field.id && field.type)
+      
+      console.log('Parsed fields for editing:', parsedFields)
       
       setEditingForm({
         ...formDetails,
@@ -270,25 +327,45 @@ const countFormFields = (form) => {
         fields: updatedData.fields.map(field => {
           // Create field object matching the exact API format
           const fieldObj = {
-            name: field.name || field.id, // Use name as primary identifier
+            name: field.name || field.id,
             type: field.type,
-            required: field.required ? "true" : "false" // Must be string "true" or "false"
+            required: field.required ? "true" : "false",
+            label: field.label || field.name || 'Field',
+            placeholder: field.placeholder || ""
           }
           
-          // Add label if present
-          if (field.label && field.label !== field.name) {
-            fieldObj.label = field.label
+          // Handle options - convert array to JSON string
+          if ((field.type === "select" || field.type === "checkbox" || field.type === "radio") && field.options) {
+            fieldObj.options = JSON.stringify(Array.isArray(field.options) ? field.options : [])
+          } else {
+            fieldObj.options = "[]"
           }
           
-          // Add placeholder if present
-          if (field.placeholder) {
-            fieldObj.placeholder = field.placeholder
+          // Handle validation - include ALL validation properties
+          const validation = {
+            multiple: field.validation?.multiple || false,
+            required: field.required || false,
+            min: field.validation?.min,
+            max: field.validation?.max,
+            accept: field.validation?.accept,
+            pattern: field.validation?.pattern
           }
           
-          // Add options for select fields (as string)
-          if ((field.type === "select" || field.type === "checkbox" || field.type === "radio") && field.options && field.options.length > 0) {
-            fieldObj.options = Array.isArray(field.options) ? field.options.join(', ') : field.options
-          }
+          // Remove undefined values
+          Object.keys(validation).forEach(key => {
+            if (validation[key] === undefined) {
+              delete validation[key]
+            }
+          })
+          
+          fieldObj.validation = JSON.stringify(validation)
+          
+          console.log('Field being sent:', {
+            name: fieldObj.name,
+            type: fieldObj.type,
+            validation: fieldObj.validation,
+            multiple: validation.multiple
+          })
           
           return fieldObj
         })

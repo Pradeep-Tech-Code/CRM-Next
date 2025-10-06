@@ -83,6 +83,18 @@ export function FieldConfigPanel({ field, onUpdateField }) {
         </div>
         <h3 className="font-medium text-sm truncate">{field.label}</h3>
         <p className="text-xs text-muted-foreground">ID: {field.id}</p>
+        <div className="flex gap-1 mt-1">
+          {field.required && (
+            <Badge variant="destructive" className="text-xs">
+              Required
+            </Badge>
+          )}
+          {field.type === "select" && field.validation?.multiple && (
+            <Badge variant="outline" className="text-xs">
+              Multiple Selection
+            </Badge>
+          )}
+        </div>
       </div>
 
       <div className="p-4 space-y-6">
@@ -127,7 +139,13 @@ export function FieldConfigPanel({ field, onUpdateField }) {
               <Switch
                 id="field-required"
                 checked={field.required || false}
-                onCheckedChange={(checked) => onUpdateField(field.id, { required: checked })}
+                onCheckedChange={(checked) => onUpdateField(field.id, { 
+                  required: checked,
+                  validation: {
+                    ...field.validation,
+                    required: checked
+                  }
+                })}
               />
             </div>
           </CardContent>
@@ -158,6 +176,12 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                   // Remove options for fields that don't need them
                   if (!["select", "checkbox", "radio"].includes(newType)) {
                     updates.options = undefined
+                  }
+
+                  // Reset validation for new field type
+                  updates.validation = {
+                    required: field.required || false,
+                    multiple: false // Reset multiple for non-select fields
                   }
 
                   onUpdateField(field.id, updates)
@@ -243,228 +267,6 @@ export function FieldConfigPanel({ field, onUpdateField }) {
           </Card>
         )}
 
-        {/* Validation */}
-        {/* {supportsValidation && (
-          <Card className="border-0 shadow-none bg-transparent">
-            <CardHeader className="px-0 pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                Validation Rules
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-0 space-y-4">
-              {field.type === "number" && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="field-min" className="text-xs">
-                      Min Value
-                    </Label>
-                    <Input
-                      id="field-min"
-                      type="number"
-                      value={field.validation?.min || ""}
-                      onChange={(e) =>
-                        onUpdateField(field.id, {
-                          validation: {
-                            ...field.validation,
-                            min: e.target.value ? Number(e.target.value) : undefined,
-                          },
-                        })
-                      }
-                      className="bg-input"
-                      placeholder="No limit"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="field-max" className="text-xs">
-                      Max Value
-                    </Label>
-                    <Input
-                      id="field-max"
-                      type="number"
-                      value={field.validation?.max || ""}
-                      onChange={(e) =>
-                        onUpdateField(field.id, {
-                          validation: {
-                            ...field.validation,
-                            max: e.target.value ? Number(e.target.value) : undefined,
-                          },
-                        })
-                      }
-                      className="bg-input"
-                      placeholder="No limit"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {field.type === "file" && (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="field-accept" className="text-xs">
-                      Accepted File Types
-                    </Label>
-                    <Input
-                      id="field-accept"
-                      value={field.validation?.accept || ""}
-                      onChange={(e) =>
-                        onUpdateField(field.id, {
-                          validation: {
-                            ...field.validation,
-                            accept: e.target.value,
-                          },
-                        })
-                      }
-                      placeholder=".pdf,.doc,.docx,image/*"
-                      className="bg-input"
-                    />
-                    <div className="text-xs text-muted-foreground">
-                      Use MIME types or file extensions (e.g., .pdf, image/*, .doc)
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="field-multiple" className="text-sm font-medium">
-                      Allow Multiple Files
-                    </Label>
-                    <Switch
-                      id="field-multiple"
-                      checked={field.validation?.multiple || false}
-                      onCheckedChange={(checked) =>
-                        onUpdateField(field.id, {
-                          validation: {
-                            ...field.validation,
-                            multiple: checked,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-              )}
-
-              {field.type === "datetime" && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="field-min-date" className="text-xs">
-                      Min Date/Time
-                    </Label>
-                    <Input
-                      id="field-min-date"
-                      type="datetime-local"
-                      value={field.validation?.min || ""}
-                      onChange={(e) =>
-                        onUpdateField(field.id, {
-                          validation: {
-                            ...field.validation,
-                            min: e.target.value,
-                          },
-                        })
-                      }
-                      className="bg-input"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="field-max-date" className="text-xs">
-                      Max Date/Time
-                    </Label>
-                    <Input
-                      id="field-max-date"
-                      type="datetime-local"
-                      value={field.validation?.max || ""}
-                      onChange={(e) =>
-                        onUpdateField(field.id, {
-                          validation: {
-                            ...field.validation,
-                            max: e.target.value,
-                          },
-                        })
-                      }
-                      className="bg-input"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {field.type === "select" && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="field-multiple-select" className="text-sm font-medium">
-                      Allow Multiple Selection
-                    </Label>
-                    <Switch
-                      id="field-multiple-select"
-                      checked={field.validation?.multiple || false}
-                      onCheckedChange={(checked) =>
-                        onUpdateField(field.id, {
-                          validation: {
-                            ...field.validation,
-                            multiple: checked,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {field.validation?.multiple
-                      ? "Users can select multiple options from the list"
-                      : "Users can select only one option from the dropdown"}
-                  </div>
-                </div>
-              )}
-
-              {(field.type === "text" || field.type === "textarea") && (
-                <div className="space-y-2">
-                  <Label htmlFor="field-pattern" className="text-xs">
-                    Pattern (RegEx)
-                  </Label>
-                  <Input
-                    id="field-pattern"
-                    value={field.validation?.pattern || ""}
-                    onChange={(e) => {
-                      const pattern = e.target.value.trim()
-                      let isValid = true
-
-                      if (pattern !== "") {
-                        try {
-                          new RegExp(pattern)
-                        } catch (error) {
-                          isValid = false
-                        }
-                      }
-
-                      onUpdateField(field.id, {
-                        validation: {
-                          ...field.validation,
-                          pattern: pattern,
-                          patternValid: isValid,
-                        },
-                      })
-                    }}
-                    placeholder="^[A-Za-z]+$"
-                    className={`bg-input ${field.validation?.patternValid === false ? "border-destructive" : ""}`}
-                  />
-                  {field.validation?.patternValid === false && (
-                    <div className="text-xs text-destructive">Invalid regular expression pattern</div>
-                  )}
-                  <div className="text-xs text-muted-foreground">Use regular expressions to validate input format</div>
-                </div>
-              )}
-
-              {field.type === "email" && (
-                <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-md">
-                  Email validation is automatically applied to this field type.
-                </div>
-              )}
-
-              {field.type === "location" && (
-                <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-md">
-                  Location validation is automatically applied to this field type.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )} */}
-
         {/* Select: Multiple toggle (quick access) */}
         {field.type === "select" && (
           <Card className="border-0 shadow-none bg-transparent">
@@ -485,8 +287,8 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                     onUpdateField(field.id, {
                       validation: {
                         ...field.validation,
-                        multiple: checked,
-                      },
+                        multiple: checked
+                      }
                     })
                   }
                 />
@@ -500,44 +302,95 @@ export function FieldConfigPanel({ field, onUpdateField }) {
           </Card>
         )}
 
-        {/* Advanced Settings */}
-        {/* <Card className="border-0 shadow-none bg-transparent">
-          <CardHeader className="px-0 pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-              Advanced
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-0 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="field-description" className="text-sm font-medium">
-                Help Text
-              </Label>
-              <Textarea
-                id="field-description"
-                value={field.description || ""}
-                onChange={(e) => onUpdateField(field.id, { description: e.target.value })}
-                placeholder="Optional help text for users"
-                className="bg-input min-h-[60px]"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Field ID</Label>
-              <div className="flex items-center gap-2">
-                <code className="bg-muted px-2 py-1 rounded text-xs flex-1 font-mono">{field.id}</code>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0"
-                  onClick={() => navigator.clipboard.writeText(field.id)}
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
+        {/* File: Multiple files toggle */}
+        {field.type === "file" && (
+          <Card className="border-0 shadow-none bg-transparent">
+            <CardHeader className="px-0 pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                File Options
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-0 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="field-multiple-files" className="text-sm font-medium">
+                  Allow Multiple Files
+                </Label>
+                <Switch
+                  id="field-multiple-files"
+                  checked={field.validation?.multiple || false}
+                  onCheckedChange={(checked) =>
+                    onUpdateField(field.id, {
+                      validation: {
+                        ...field.validation,
+                        multiple: checked
+                      }
+                    })
+                  }
+                />
               </div>
-              <div className="text-xs text-muted-foreground">Use this ID to reference the field in your code</div>
-            </div>
-          </CardContent>
-        </Card> */}
+              <div className="text-xs text-muted-foreground">
+                {field.validation?.multiple
+                  ? "Users can upload multiple files"
+                  : "Users can upload only one file"}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Number: Min/Max validation */}
+        {field.type === "number" && (
+          <Card className="border-0 shadow-none bg-transparent">
+            <CardHeader className="px-0 pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                Number Validation
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-0 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="field-min" className="text-xs">
+                    Min Value
+                  </Label>
+                  <Input
+                    id="field-min"
+                    type="number"
+                    value={field.validation?.min || ""}
+                    onChange={(e) =>
+                      onUpdateField(field.id, {
+                        validation: {
+                          ...field.validation,
+                          min: e.target.value ? Number(e.target.value) : undefined,
+                        },
+                      })
+                    }
+                    className="bg-input"
+                    placeholder="No limit"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="field-max" className="text-xs">
+                    Max Value
+                  </Label>
+                  <Input
+                    id="field-max"
+                    type="number"
+                    value={field.validation?.max || ""}
+                    onChange={(e) =>
+                      onUpdateField(field.id, {
+                        validation: {
+                          ...field.validation,
+                          max: e.target.value ? Number(e.target.value) : undefined,
+                        },
+                      })
+                    }
+                    className="bg-input"
+                    placeholder="No limit"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )

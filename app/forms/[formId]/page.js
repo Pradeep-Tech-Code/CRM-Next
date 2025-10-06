@@ -148,12 +148,73 @@ export default function PublicFormPage() {
     toast.info("Using demo data - submission loaded for editing")
   }
 
+  // const fetchSubmissionData = async () => {
+  //   if (!token || !submissionId) {
+  //     console.error('Missing token or submissionId:', { token, submissionId })
+  //     return
+  //   }
+
+  //   try {
+  //     console.log('Fetching submission data for editing:', { 
+  //       submissionId, 
+  //       token,
+  //       organization_id: ORGANIZATION_ID,
+  //       form_id: formId
+  //     })
+      
+  //     const url = new URL(`${API_BASE_URL}/api/submit/edit`)
+  //     const params = {
+  //       token: token,
+  //       organization_id: ORGANIZATION_ID,
+  //       form_id: formId,
+  //       submission_id: submissionId
+  //     }
+      
+  //     Object.keys(params).forEach(key => 
+  //       url.searchParams.append(key, params[key])
+  //     )
+
+  //     console.log('Trying GET request to:', url.toString())
+      
+  //     const response = await fetch(url.toString(), {
+  //       method: 'GET',
+  //       headers: {
+  //         'Accept': 'application/json',
+  //         'Authorization': `Bearer ${getAuthToken()}`
+  //       }
+  //     })
+
+  //     console.log('GET Response status:', response.status)
+      
+  //     if (!response.ok) {
+  //       // Try POST method as fallback
+  //       await tryPostMethod()
+  //       return
+  //     }
+
+  //     const result = await response.json()
+  //     console.log('GET Submission data response:', result)
+      
+  //     if (result.success && result.data) {
+  //       setSubmissionData(result.data)
+  //       toast.success("Submission loaded for editing")
+  //     } else {
+  //       throw new Error('Submission data not found in GET response')
+  //     }
+      
+  //   } catch (error) {
+  //     console.error('Error in GET method:', error)
+  //     // Try POST method as fallback
+  //     await tryPostMethod()
+  //   }
+  // }
+
   const fetchSubmissionData = async () => {
     if (!token || !submissionId) {
       console.error('Missing token or submissionId:', { token, submissionId })
       return
     }
-
+  
     try {
       console.log('Fetching submission data for editing:', { 
         submissionId, 
@@ -162,51 +223,45 @@ export default function PublicFormPage() {
         form_id: formId
       })
       
-      // Method 1: GET with query parameters (as per curl example structure)
-      const url = new URL(`${API_BASE_URL}/api/submit/edit`)
-      const params = {
-        token: token,
-        organization_id: ORGANIZATION_ID,
-        form_id: formId,
-        submission_id: submissionId
-      }
-      
-      Object.keys(params).forEach(key => 
-        url.searchParams.append(key, params[key])
-      )
-
-      console.log('Trying GET request to:', url.toString())
-      
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${getAuthToken()}`
+      const response = await fetch(
+        `${API_BASE_URL}/api/submit/edit?token=${token}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getAuthToken()}`
+          },
+          body: JSON.stringify({
+            organization_id: ORGANIZATION_ID,
+            form_id: formId,
+            submission_id: submissionId
+          })
         }
-      })
-
-      console.log('GET Response status:', response.status)
+      )
+  
+      console.log('POST Response status:', response.status)
       
       if (!response.ok) {
-        // Try POST method as fallback
-        await tryPostMethod()
-        return
+        const errorText = await response.text()
+        console.error('Failed to fetch submission data:', errorText)
+        throw new Error(`Failed to fetch submission: ${response.status} ${response.statusText}`)
       }
-
+  
       const result = await response.json()
-      console.log('GET Submission data response:', result)
+      console.log('Submission data response:', result)
       
-      if (result.success && result.data) {
-        setSubmissionData(result.data)
+      if (result.success && result.submission) {
+        setSubmissionData(result.submission)
         toast.success("Submission loaded for editing")
       } else {
-        throw new Error('Submission data not found in GET response')
+        throw new Error('Submission data not found in response')
       }
       
     } catch (error) {
-      console.error('Error in GET method:', error)
-      // Try POST method as fallback
-      await tryPostMethod()
+      console.error('Error fetching submission data:', error)
+      toast.error("Unable to load submission data. Please check the URL parameters.")
+      
+      // setMockSubmissionData()
     }
   }
 
@@ -224,9 +279,6 @@ export default function PublicFormPage() {
           
           // Case 1: Field is an object with numeric keys (character-by-character JSON)
           if (typeof field === 'object' && field !== null && !Array.isArray(field)) {
-          
-
-          
             const keys = Object.keys(field).filter(key => !isNaN(key))
             
             if (keys.length > 0) {
@@ -278,14 +330,37 @@ export default function PublicFormPage() {
               options = fieldData.options.split(',').map(opt => opt.trim()).filter(opt => opt)
             }
             
+            // Parse validation - ensure it's an object
+            let validation = {}
+            if (typeof fieldData.validation === 'string') {
+              try {
+                validation = JSON.parse(fieldData.validation)
+              } catch (e) {
+                console.warn('Failed to parse validation as JSON:', fieldData.validation)
+              }
+            } else if (typeof fieldData.validation === 'object') {
+              validation = fieldData.validation
+            }
+            
+            // Ensure required is properly set in both field and validation
+            const isRequired = fieldData.required === true || fieldData.required === 'true' || false
+            
             return {
               id: fieldData.id || fieldData.name || `field-${index}-${Date.now()}`,
               type: fieldData.type || 'text',
               label: fieldData.label || fieldData.name || 'Field',
               placeholder: fieldData.placeholder || '',
-              required: fieldData.required === true || fieldData.required === 'true' || false,
-              options: JSON.parse(options) || [], // Always ensure options is an array
-              validation: typeof fieldData.validation === 'object' ? JSON.parse(fieldData.validation) : {}
+              required: isRequired,
+              options: fieldData.options ? JSON.parse(options): [],
+              validation: {
+                required: isRequired,
+                multiple: validation.multiple || false,
+                min: validation.min,
+                max: validation.max,
+                accept: validation.accept,
+                pattern: validation.pattern,
+                ...validation
+              }
             }
           }
           
@@ -298,7 +373,10 @@ export default function PublicFormPage() {
             placeholder: 'Enter text',
             required: false,
             options: [],
-            validation: {}
+            validation: {
+              required: false,
+              multiple: false
+            }
           }
         })
       }
@@ -336,20 +414,13 @@ export default function PublicFormPage() {
       
       if (fieldValue !== undefined && fieldValue !== null) {
         // Handle different field types
-        console.log("HIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII")
         switch (field.type) {
-
           case "checkbox":
           case "select":
-            console.log("HIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII")
-
             if (field.validation?.multiple) {
-              console.log("HIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII")
-
               // Multiple select/checkbox - ensure array format
               transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : [fieldValue].filter(Boolean)
             } else {
-              console.log("HIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII")
               // Single value
               transformedValues[fieldId] = fieldValue
             }
@@ -395,51 +466,61 @@ export default function PublicFormPage() {
             type: "text",
             label: "Full Name",
             placeholder: "Enter your full name",
-            required: true
+            required: true,
+            validation: {
+              required: true,
+              multiple: false
+            }
           },
           {
             id: "email",
             type: "email",
             label: "Email Address",
             placeholder: "Enter your email address",
-            required: true
+            required: true,
+            validation: {
+              required: true,
+              multiple: false
+            }
           },
           {
             id: "company",
             type: "text",
             label: "Company",
             placeholder: "Enter your company name",
-            required: false
+            required: false,
+            validation: {
+              required: false,
+              multiple: false
+            }
           },
           {
             id: "phone",
             type: "phone",
             label: "Phone Number",
             placeholder: "Enter your phone number",
-            required: false
+            required: false,
+            validation: {
+              required: false,
+              multiple: false
+            }
           },
           {
             id: "message",
             type: "textarea",
             label: "Message",
             placeholder: "Tell us about your requirements",
-            required: false
+            required: false,
+            validation: {
+              required: false,
+              multiple: false
+            }
           }
         ]
       }
     }
 
     return mockForms[formId]
-  }
-
-  // Generate edit token (client-side fallback)
-  const generateEditToken = (submissionId) => {
-    // Create a simple token for demo purposes
-    // In production, this should come from your API
-    return btoa(`${ORGANIZATION_ID}:${formId}:${submissionId}:${Date.now()}`)
-      .replace(/=/g, '')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
   }
 
   // Transform form values to match API expected format
@@ -543,10 +624,6 @@ export default function PublicFormPage() {
     }, {})
   }
 
-  // Generate mock submission ID if API doesn't return one
-  const generateMockSubmissionId = () => {
-    return `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-  }
 
   const handleEditResponse = () => {
     if (lastSubmissionId && lastSubmissionToken) {
@@ -615,19 +692,24 @@ export default function PublicFormPage() {
             console.log('Submission successful:', result)
             
             // ALWAYS generate token and set submission success
-            const newSubmissionId = result.data?.submission_id || generateMockSubmissionId()
-            const editToken = result.data?.token || generateEditToken(newSubmissionId)
+            const newSubmissionId = result?.submission_id 
+            const editToken = result?.edit_token
+
+            if (newSubmissionId && editToken) {
+              setLastSubmissionId(newSubmissionId)
+              setLastSubmissionToken(editToken)
+              setSubmissionSuccess(true)
+              
+              console.log('Edit token generated:', editToken)
+              console.log('Submission ID:', newSubmissionId)
+              
+              toast.success("Thank you for your response!")
+              form.reset()
+            } else {
+              console.error("Response missing submission_id or edit_token", result);
+              toast.error("Submission completed but edit feature unavailable")
+            }
             
-            setLastSubmissionId(newSubmissionId)
-            setLastSubmissionToken(editToken)
-            setSubmissionSuccess(true)
-            
-            console.log('Edit token generated:', editToken)
-            console.log('Submission ID:', newSubmissionId)
-            
-            toast.success("Thank you for your response!")
-            
-            form.reset()
           } else {
             const errorText = await response.text()
             console.error('Submission failed:', errorText)
@@ -656,7 +738,7 @@ export default function PublicFormPage() {
     const errors = []
 
     // Required validation
-    if (field.required) {
+    if (field.required || field.validation?.required) {
       if (field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)) {
         if (!Array.isArray(value) || value.length === 0) {
           errors.push("This field is required")
@@ -944,13 +1026,7 @@ export default function PublicFormPage() {
                         },
                       }}
                     >
-                        {
-                          
-                          (fieldApi) => {
-                            
-                            console.log('MMMMMMMMMMMMMMMMMMMMMMMMMMMM', formData)
-
-                          return  (
+                      {(fieldApi) => (
                         <div className="space-y-2">
                           <FieldRenderer
                             field={field}
@@ -960,9 +1036,7 @@ export default function PublicFormPage() {
                             error={fieldApi.state.meta.errors.length > 0 ? fieldApi.state.meta.errors[0] : undefined}
                           />
                         </div>
-                      )
-                          }
-                      }
+                      )}
                     </form.Field>
                   )
                 })}

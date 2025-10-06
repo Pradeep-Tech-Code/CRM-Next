@@ -78,14 +78,13 @@ export function FormPreview({ fields }) {
           const fieldObj = {
             name: field.id,
             type: field.type,
-            required: String(field.required) ? "true" : "false",
+            required: String(field.required), // Ensure this is string
             label: field.label,
             placeholder: field.placeholder || "",
             options: JSON.stringify(field.options || []),
-            validation: JSON.stringify(field.validation || {})
+            validation: JSON.stringify(field.validation || {}) // Include full validation object
           }
           
-          // Return as a proper JSON string
           return fieldObj
         }),
         published: true
@@ -163,11 +162,25 @@ export function FormPreview({ fields }) {
   const validateField = (field, value) => {
     const errors = []
 
-    // Required validation
-    if (field.required) {
-      if (field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)) {
+    // Required validation - check both field.required and validation.required
+    const isRequired = field.required || field.validation?.required
+    if (isRequired) {
+      if (field.type === "select") {
+        if (field.validation?.multiple) {
+          // Multiple select - should be array with at least one item
+          if (!Array.isArray(value) || value.length === 0) {
+            errors.push("Please select at least one option")
+          }
+        } else {
+          // Single select - should have a value
+          if (!value || value === "") {
+            errors.push("Please select an option")
+          }
+        }
+      } else if (field.type === "checkbox") {
+        // Checkbox group - should have at least one selected
         if (!Array.isArray(value) || value.length === 0) {
-          errors.push("This field is required")
+          errors.push("Please select at least one option")
         }
       } else if (field.type === "file") {
         if (!value) {
