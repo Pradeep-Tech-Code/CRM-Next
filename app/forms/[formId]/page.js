@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { CheckCircle2, Send, ArrowLeft, Building, User, Save, Edit, FileText } from "lucide-react"
+import { CheckCircle2, Send, ArrowLeft, Building, User, Save, Edit, FileText, Trash2 } from "lucide-react"
 import { FieldRenderer } from "../../component/formbuilder/field-renderer"
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
@@ -29,7 +29,7 @@ export default function PublicFormPage() {
   const formId = params.formId
   const token = searchParams.get('token')
   const submissionId = searchParams.get('submission_id')
-  
+
   const [formData, setFormData] = useState(null)
   const [submissionData, setSubmissionData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -38,25 +38,100 @@ export default function PublicFormPage() {
   const [submissionSuccess, setSubmissionSuccess] = useState(false)
   const [lastSubmissionId, setLastSubmissionId] = useState(null)
   const [lastSubmissionToken, setLastSubmissionToken] = useState(null)
+  const [hasExistingSubmission, setHasExistingSubmission] = useState(false)
 
   useEffect(() => {
     if (formId) {
+      checkExistingSubmission()
       fetchFormData()
     }
   }, [formId])
 
   useEffect(() => {
-    // Check if we're in edit mode (has token and submission_id)
     if (token && submissionId) {
       setIsEditMode(true)
       fetchSubmissionData()
+    } else {
+      checkExistingSubmission()
     }
   }, [token, submissionId])
+
+  const checkExistingSubmission = () => {
+    try {
+      const savedFormId = localStorage.getItem("FORM_ID")
+      const savedSubmissionId = localStorage.getItem("SUBMISSION_ID")
+      const savedEditToken = localStorage.getItem("EDIT_TOKEN")
+      const isSubmitted = localStorage.getItem("FORM_SUBMITTED") === 'true'
+  
+      console.log('Checking existing submission from localStorage:', {
+        savedFormId,
+        savedSubmissionId: savedSubmissionId ? `${savedSubmissionId.substring(0, 8)}...` : null,
+        savedEditToken: savedEditToken ? `${savedEditToken.substring(0, 8)}...` : null,
+        isSubmitted,
+        currentFormId: formId
+      })
+  
+      if (savedFormId === formId && savedSubmissionId && savedEditToken && isSubmitted) {
+        setHasExistingSubmission(true)
+        setLastSubmissionId(savedSubmissionId)
+        setLastSubmissionToken(savedEditToken)
+        setSubmissionSuccess(true)
+        
+        console.log('Found existing submission for this form')
+      } else {
+        console.log('No valid existing submission found')
+        setHasExistingSubmission(false)
+        setSubmissionSuccess(false)
+      }
+    } catch (error) {
+      console.error('Error checking localStorage:', error)
+      setHasExistingSubmission(false)
+      setSubmissionSuccess(false)
+    }
+  }
+
+  const saveSubmissionToStorage = (submissionId, editToken) => {
+    try {
+      localStorage.setItem("SUBMISSION_ID", submissionId)
+      localStorage.setItem("EDIT_TOKEN", editToken)
+      localStorage.setItem("FORM_SUBMITTED", 'true')
+      localStorage.setItem("FORM_ID", formId)
+      
+      console.log('Successfully saved to localStorage:', {
+        submissionId,
+        editToken,
+        formId
+      })
+    } catch (error) {
+      console.error('Error saving to localStorage:', error)
+      toast.error("Failed to save submission data locally")
+    }
+  }
+
+  const clearSubmissionFromStorage = () => {
+    try {
+      localStorage.removeItem("SUBMISSION_ID")
+      localStorage.removeItem("EDIT_TOKEN")
+      localStorage.removeItem("FORM_SUBMITTED")
+      localStorage.removeItem("FORM_ID")
+
+      setHasExistingSubmission(false)
+      setSubmissionSuccess(false)
+      setLastSubmissionId(null)
+      setLastSubmissionToken(null)
+      setSubmissionData(null)
+      setIsEditMode(false)
+      
+      console.log('Cleared submission data from localStorage')
+    } catch (error) {
+      console.error('Error clearing localStorage:', error)
+    }
+  }
 
   const fetchFormData = async () => {
     try {
       console.log('Fetching form data for ID:', formId)
-      
+
       const response = await fetch(
         `${API_BASE_URL}/api/forms/${ORGANIZATION_ID}/${TABLE_ID}/${formId}`
       )
@@ -67,7 +142,7 @@ export default function PublicFormPage() {
 
       const result = await response.json()
       console.log('API Response:', result)
-      
+
       if (result.success && result.form) {
         const parsedForm = parseFormData(result.form)
         console.log('Parsed form data:', parsedForm)
@@ -75,11 +150,11 @@ export default function PublicFormPage() {
       } else {
         throw new Error('Form not found in response')
       }
-      
+
     } catch (error) {
       console.error('Error fetching form:', error)
       toast.error("Form not found or access denied")
-      
+
       // Fallback to mock data for demo
       const mockForm = getMockFormData(formId)
       if (mockForm) {
@@ -94,7 +169,7 @@ export default function PublicFormPage() {
   const tryPostMethod = async () => {
     try {
       console.log('Trying POST method...')
-      
+
       const response = await fetch(
         `${API_BASE_URL}/api/submit/edit?token=${token}`,
         {
@@ -112,7 +187,7 @@ export default function PublicFormPage() {
       )
 
       console.log('POST Response status:', response.status)
-      
+
       if (!response.ok) {
         const errorText = await response.text()
         console.error('POST method failed with response:', errorText)
@@ -121,108 +196,34 @@ export default function PublicFormPage() {
 
       const result = await response.json()
       console.log('POST Submission data response:', result)
-      
+
       if (result.success && result.data) {
         setSubmissionData(result.data)
         toast.success("Submission loaded for editing")
       } else {
         throw new Error('Submission data not found in POST response')
       }
-      
+
     } catch (postError) {
       console.error('POST method also failed:', postError)
       toast.error("Unable to load submission data. Please check the URL parameters.")
-      
-      // For development, set mock data
-      setMockSubmissionData()
     }
   }
-
-  // Mock data for development
-  const setMockSubmissionData = () => {
-    console.log('Setting mock submission data for development')
-    const mockData = {
-      values: getDefaultValues() // Use the form's default values structure
-    }
-    setSubmissionData(mockData)
-    toast.info("Using demo data - submission loaded for editing")
-  }
-
-  // const fetchSubmissionData = async () => {
-  //   if (!token || !submissionId) {
-  //     console.error('Missing token or submissionId:', { token, submissionId })
-  //     return
-  //   }
-
-  //   try {
-  //     console.log('Fetching submission data for editing:', { 
-  //       submissionId, 
-  //       token,
-  //       organization_id: ORGANIZATION_ID,
-  //       form_id: formId
-  //     })
-      
-  //     const url = new URL(`${API_BASE_URL}/api/submit/edit`)
-  //     const params = {
-  //       token: token,
-  //       organization_id: ORGANIZATION_ID,
-  //       form_id: formId,
-  //       submission_id: submissionId
-  //     }
-      
-  //     Object.keys(params).forEach(key => 
-  //       url.searchParams.append(key, params[key])
-  //     )
-
-  //     console.log('Trying GET request to:', url.toString())
-      
-  //     const response = await fetch(url.toString(), {
-  //       method: 'GET',
-  //       headers: {
-  //         'Accept': 'application/json',
-  //         'Authorization': `Bearer ${getAuthToken()}`
-  //       }
-  //     })
-
-  //     console.log('GET Response status:', response.status)
-      
-  //     if (!response.ok) {
-  //       // Try POST method as fallback
-  //       await tryPostMethod()
-  //       return
-  //     }
-
-  //     const result = await response.json()
-  //     console.log('GET Submission data response:', result)
-      
-  //     if (result.success && result.data) {
-  //       setSubmissionData(result.data)
-  //       toast.success("Submission loaded for editing")
-  //     } else {
-  //       throw new Error('Submission data not found in GET response')
-  //     }
-      
-  //   } catch (error) {
-  //     console.error('Error in GET method:', error)
-  //     // Try POST method as fallback
-  //     await tryPostMethod()
-  //   }
-  // }
 
   const fetchSubmissionData = async () => {
     if (!token || !submissionId) {
       console.error('Missing token or submissionId:', { token, submissionId })
       return
     }
-  
+
     try {
-      console.log('Fetching submission data for editing:', { 
-        submissionId, 
+      console.log('Fetching submission data for editing:', {
+        submissionId,
         token,
         organization_id: ORGANIZATION_ID,
         form_id: formId
       })
-      
+
       const response = await fetch(
         `${API_BASE_URL}/api/submit/edit?token=${token}`,
         {
@@ -238,30 +239,28 @@ export default function PublicFormPage() {
           })
         }
       )
-  
+
       console.log('POST Response status:', response.status)
-      
+
       if (!response.ok) {
         const errorText = await response.text()
         console.error('Failed to fetch submission data:', errorText)
         throw new Error(`Failed to fetch submission: ${response.status} ${response.statusText}`)
       }
-  
+
       const result = await response.json()
       console.log('Submission data response:', result)
-      
+
       if (result.success && result.submission) {
         setSubmissionData(result.submission)
         toast.success("Submission loaded for editing")
       } else {
         throw new Error('Submission data not found in response')
       }
-      
+
     } catch (error) {
       console.error('Error fetching submission data:', error)
       toast.error("Unable to load submission data. Please check the URL parameters.")
-      
-      // setMockSubmissionData()
     }
   }
 
@@ -269,18 +268,18 @@ export default function PublicFormPage() {
   const parseFormData = (apiForm) => {
     try {
       let parsedFields = []
-      
+
       console.log('Raw API form fields:', apiForm.fields)
-      
+
       // Handle different field formats
       if (Array.isArray(apiForm.fields)) {
         parsedFields = apiForm.fields.map((field, index) => {
           let fieldData = null
-          
+
           // Case 1: Field is an object with numeric keys (character-by-character JSON)
           if (typeof field === 'object' && field !== null && !Array.isArray(field)) {
             const keys = Object.keys(field).filter(key => !isNaN(key))
-            
+
             if (keys.length > 0) {
               try {
                 // Reconstruct the JSON string by sorting numeric keys and joining characters
@@ -288,9 +287,9 @@ export default function PublicFormPage() {
                   .sort((a, b) => parseInt(a) - parseInt(b))
                   .map(key => field[key])
                   .join('')
-                
+
                 console.log(`Reconstructed JSON for field ${index}:`, jsonString)
-                
+
                 if (jsonString.trim()) {
                   fieldData = JSON.parse(jsonString)
                 }
@@ -299,7 +298,7 @@ export default function PublicFormPage() {
               }
             }
           }
-          
+
           // Case 2: Field is a JSON string
           if (!fieldData && typeof field === 'string') {
             try {
@@ -308,7 +307,7 @@ export default function PublicFormPage() {
               console.warn(`Failed to parse field ${index} as JSON string:`, field)
             }
           }
-          
+
           // Case 3: Field is already a proper object (simple field object)
           if (!fieldData && typeof field === 'object' && field !== null) {
             // Check if it has expected field properties (not character objects)
@@ -316,11 +315,11 @@ export default function PublicFormPage() {
               fieldData = field
             }
           }
-          
+
           // If we successfully got fieldData, process it
           if (fieldData) {
             console.log(`Processed field ${index}:`, fieldData)
-            
+
             // Handle options - convert string to array if needed
             let options = []
             if (Array.isArray(fieldData.options)) {
@@ -329,7 +328,7 @@ export default function PublicFormPage() {
               // Split comma-separated string into array
               options = fieldData.options.split(',').map(opt => opt.trim()).filter(opt => opt)
             }
-            
+
             // Parse validation - ensure it's an object
             let validation = {}
             if (typeof fieldData.validation === 'string') {
@@ -341,17 +340,17 @@ export default function PublicFormPage() {
             } else if (typeof fieldData.validation === 'object') {
               validation = fieldData.validation
             }
-            
+
             // Ensure required is properly set in both field and validation
             const isRequired = fieldData.required === true || fieldData.required === 'true' || false
-            
+
             return {
               id: fieldData.id || fieldData.name || `field-${index}-${Date.now()}`,
               type: fieldData.type || 'text',
               label: fieldData.label || fieldData.name || 'Field',
               placeholder: fieldData.placeholder || '',
               required: isRequired,
-              options: fieldData.options ? JSON.parse(options): [],
+              options: fieldData.options ? JSON.parse(options) : [],
               validation: {
                 required: isRequired,
                 multiple: validation.multiple || false,
@@ -363,7 +362,7 @@ export default function PublicFormPage() {
               }
             }
           }
-          
+
           // Default fallback if all parsing attempts failed
           console.warn(`Field ${index} could not be parsed, using default`)
           return {
@@ -380,16 +379,16 @@ export default function PublicFormPage() {
           }
         })
       }
-  
+
       const parsedForm = {
         form_name: apiForm.form_name || apiForm.name || 'Untitled Form',
         description: apiForm.description || '',
         fields: parsedFields
       }
-      
+
       console.log('Final parsed form:', parsedForm)
       return parsedForm
-      
+
     } catch (error) {
       console.error('Error parsing form data:', error)
       return getMockFormData(formId) || {
@@ -403,7 +402,7 @@ export default function PublicFormPage() {
   // Transform submission values to match form field structure
   const transformSubmissionValues = (submissionValues, fields) => {
     const transformedValues = {}
-    
+
     if (!submissionValues || typeof submissionValues !== 'object') {
       return transformedValues
     }
@@ -411,7 +410,7 @@ export default function PublicFormPage() {
     fields.forEach(field => {
       const fieldId = field.id
       const fieldValue = submissionValues[fieldId]
-      
+
       if (fieldValue !== undefined && fieldValue !== null) {
         // Handle different field types
         switch (field.type) {
@@ -425,7 +424,7 @@ export default function PublicFormPage() {
               transformedValues[fieldId] = fieldValue
             }
             break
-          
+
           case "location":
           case "phone":
             // These should be objects
@@ -443,14 +442,14 @@ export default function PublicFormPage() {
               transformedValues[fieldId] = {}
             }
             break
-          
+
           default:
             // Text, email, number, textarea, etc.
             transformedValues[fieldId] = fieldValue
         }
       }
     })
-    
+
     return transformedValues
   }
 
@@ -524,79 +523,96 @@ export default function PublicFormPage() {
   }
 
   // Transform form values to match API expected format
-  const transformFormValues = (formValues, fields) => {
-    const transformedValues = {}
+// In page.js, update the transformFormValues function:
+
+const transformFormValues = (formValues, fields) => {
+  const transformedValues = {}
+  
+  Object.keys(formValues).forEach(fieldId => {
+    const fieldValue = formValues[fieldId]
+    const field = fields.find(f => f.id === fieldId)
     
-    Object.keys(formValues).forEach(fieldId => {
-      const fieldValue = formValues[fieldId]
-      const field = fields.find(f => f.id === fieldId)
+    if (!field) return
+    
+    // Skip empty values for non-required fields
+    if (!field.required && !field.validation?.required) {
+      // Check if the value is empty
+      const isEmpty = 
+        fieldValue === null ||
+        fieldValue === undefined ||
+        fieldValue === '' ||
+        (Array.isArray(fieldValue) && fieldValue.length === 0) ||
+        (typeof fieldValue === 'object' && fieldValue !== null && Object.keys(fieldValue).length === 0)
       
-      if (!field) return
-      
-      // Handle different field types according to your API format
-      switch (field.type) {
-        case "checkbox":
-          // Checkbox returns array of selected options
-          transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
-          break
-        
-        case "select":
-          if (field.validation?.multiple) {
-            // Multiple select returns array like ["a", "b"] in your curl example
-            transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
-          } else {
-            // Single select returns string
-            transformedValues[fieldId] = fieldValue || ""
-          }
-          break
-        
-        case "radio":
-          // Radio returns single string value
-          transformedValues[fieldId] = fieldValue || ""
-          break
-        
-        case "file":
-          // File upload - store file name
-          if (fieldValue && typeof fieldValue === 'object') {
-            transformedValues[fieldId] = fieldValue.name || "Uploaded file"
-          } else {
-            transformedValues[fieldId] = fieldValue || ""
-          }
-          break
-        
-        case "location":
-          // Location returns object with country, state, city
-          if (typeof fieldValue === 'object' && fieldValue !== null) {
-            transformedValues[fieldId] = {
-              country: fieldValue.country || "",
-              state: fieldValue.state || "",
-              city: fieldValue.city || ""
-            }
-          } else {
-            transformedValues[fieldId] = {}
-          }
-          break
-        
-        case "phone":
-          // Phone returns object with country and number
-          if (typeof fieldValue === 'object' && fieldValue !== null) {
-            transformedValues[fieldId] = {
-              country: fieldValue.country || "",
-              number: fieldValue.number || ""
-            }
-          } else {
-            transformedValues[fieldId] = {}
-          }
-          break
-        
-        default:
-          // Text, email, number, textarea - return as string
-          transformedValues[fieldId] = fieldValue || ""
+      if (isEmpty) {
+        return // Skip this field entirely
       }
-    })
+    }
     
-    return transformedValues
-  }
+    // Handle different field types according to your API format
+    switch (field.type) {
+      case "checkbox":
+        // Checkbox returns array of selected options
+        transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
+        break
+      
+      case "select":
+        if (field.validation?.multiple) {
+          // Multiple select returns array like ["a", "b"] in your curl example
+          transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
+        } else {
+          // Single select returns string
+          transformedValues[fieldId] = fieldValue || ""
+        }
+        break
+      
+      case "radio":
+        // Radio returns single string value
+        transformedValues[fieldId] = fieldValue || ""
+        break
+      
+      case "file":
+        // File upload - store file name
+        if (fieldValue && typeof fieldValue === 'object') {
+          transformedValues[fieldId] = fieldValue.name || "Uploaded file"
+        } else {
+          transformedValues[fieldId] = fieldValue || ""
+        }
+        break
+      
+      case "location":
+        // Location returns object with country, state, city
+        if (typeof fieldValue === 'object' && fieldValue !== null) {
+          transformedValues[fieldId] = {
+            country: fieldValue.country || "",
+            state: fieldValue.state || "",
+            city: fieldValue.city || ""
+          }
+        } else {
+          transformedValues[fieldId] = {}
+        }
+        break
+      
+      case "phone":
+        // Phone returns object with country and number
+        if (typeof fieldValue === 'object' && fieldValue !== null) {
+          transformedValues[fieldId] = {
+            country: fieldValue.country || "",
+            number: fieldValue.number || ""
+          }
+        } else {
+          transformedValues[fieldId] = {}
+        }
+        break
+      
+      default:
+        // Text, email, number, textarea - return as string
+        transformedValues[fieldId] = fieldValue || ""
+    }
+  })
+  
+  return transformedValues
+}
 
   // Get default values for form initialization
   const getDefaultValues = () => {
@@ -610,7 +626,7 @@ export default function PublicFormPage() {
     // Otherwise, use empty defaults
     return formData.fields.reduce((acc, field) => {
       const fieldId = field.id
-      
+
       acc[fieldId] = field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)
         ? []
         : field.type === "file"
@@ -626,20 +642,87 @@ export default function PublicFormPage() {
 
 
   const handleEditResponse = () => {
-    if (lastSubmissionId && lastSubmissionToken) {
-      const editUrl = `${window.location.origin}${window.location.pathname}?token=${lastSubmissionToken}&submission_id=${lastSubmissionId}`
+
+    const savedSubmissionId = localStorage.getItem("SUBMISSION_ID")
+    const savedEditToken = localStorage.getItem("EDIT_TOKEN")
+
+    console.log('Edit response data:', {
+      savedSubmissionId,
+      savedEditToken,
+      hasExistingSubmission,
+      lastSubmissionId,
+      lastSubmissionToken
+    })
+
+    if (savedSubmissionId && savedEditToken) {
+      const editUrl = `${window.location.origin}${window.location.pathname}?token=${savedEditToken}&submission_id=${savedSubmissionId}`
       window.location.href = editUrl
+    } else if (lastSubmissionId && lastSubmissionToken) {
+      const editUrl = `${window.location.origin}${window.location.pathname}?token=${lastSubmissionToken}&submission_id=${lastSubmissionId}`
+      console.log('Navigating to edit URL (fallback):', editUrl)
+      window.location.href = editUrl
+    } else {
+      console.error("Missing submission ID or token for editing", {
+        savedSubmissionId,
+        savedEditToken,
+        lastSubmissionId,
+        lastSubmissionToken
+      })
+      toast.error("Unable to edit response. Missing submission data.")
     }
+  }
+
+  const handleSubmitAnotherResponse = () => {
+    clearSubmissionFromStorage()
+    setSubmissionSuccess(false)
+    setHasExistingSubmission(false) 
+    setIsEditMode(false)
+    setSubmissionData(null) 
+
+    if (formData) {
+      const emptyValues = getEmptyFormValues()
+      form.reset(emptyValues)
+    }
+
+    toast.success("You can now submit a new response")
+  }
+
+  const getEmptyFormValues = () => {
+    if (!formData?.fields) return {}
+    
+    return formData.fields.reduce((acc, field) => {
+      const fieldId = field.id
+      acc[fieldId] = field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)
+        ? []
+        : field.type === "file"
+          ? null
+          : field.type === "location"
+            ? {}
+            : field.type === "phone"
+              ? {}
+              : ""
+      return acc
+    }, {})
+  }
+
+  const handleClearSubmission = () => {
+    clearSubmissionFromStorage()
+    toast.success("Submission cleared. You can now submit a new response.")
   }
 
   const form = useForm({
     defaultValues: getDefaultValues(),
     onSubmit: async ({ value }) => {
+      if (hasExistingSubmission && !isEditMode) {
+        toast.error("You have already submitted this form. Please use the edit link to modify your response")
+        return
+      }
+
       setSubmitting(true)
       try {
         // Transform form values to match API expected format
         const transformedValues = transformFormValues(value, formData?.fields || [])
-        
+
         if (isEditMode) {
           // Update existing submission
           const updateData = {
@@ -650,7 +733,7 @@ export default function PublicFormPage() {
           }
 
           console.log('Form update data:', updateData)
-          
+
           const response = await fetch(`${API_BASE_URL}/api/submit/update?token=${token}`, {
             method: 'POST',
             headers: {
@@ -678,7 +761,7 @@ export default function PublicFormPage() {
           }
 
           console.log('Form submission data:', submissionData)
-          
+
           const response = await fetch(`${API_BASE_URL}/api/submit`, {
             method: 'POST',
             headers: {
@@ -690,33 +773,40 @@ export default function PublicFormPage() {
           if (response.ok) {
             const result = await response.json()
             console.log('Submission successful:', result)
-            
-            // ALWAYS generate token and set submission success
-            const newSubmissionId = result?.submission_id 
+
+            const newSubmissionId = result?.submission_id
             const editToken = result?.edit_token
 
             if (newSubmissionId && editToken) {
+              saveSubmissionToStorage(newSubmissionId, editToken)
+
               setLastSubmissionId(newSubmissionId)
               setLastSubmissionToken(editToken)
               setSubmissionSuccess(true)
-              
+              setHasExistingSubmission(true)
+
               console.log('Edit token generated:', editToken)
               console.log('Submission ID:', newSubmissionId)
-              
+              console.log('Saved to localStorage:', {
+                submissionId: newSubmissionId,
+                editToken: editToken,
+                formId: formId
+              })
+
               toast.success("Thank you for your response!")
-              form.reset()
+              // form.reset()
             } else {
               console.error("Response missing submission_id or edit_token", result);
               toast.error("Submission completed but edit feature unavailable")
             }
-            
+
           } else {
             const errorText = await response.text()
             console.error('Submission failed:', errorText)
             toast.error("Failed to submit form. Please try again.")
           }
         }
-        
+
       } catch (error) {
         console.error('Error submitting form:', error)
         toast.error("An error occurred while submitting the form.")
@@ -837,7 +927,7 @@ export default function PublicFormPage() {
   }
 
   // Success View
-  if (submissionSuccess && !isEditMode) {
+  if ((submissionSuccess && !isEditMode) || (hasExistingSubmission && !isEditMode)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
         {/* Header */}
@@ -854,7 +944,7 @@ export default function PublicFormPage() {
                 </div>
               </div>
               <Badge variant="outline" className="text-xs">
-                Submission Complete
+                {hasExistingSubmission ? "Already Submitted" : "Submission Complete"}
               </Badge>
             </div>
           </div>
@@ -869,55 +959,87 @@ export default function PublicFormPage() {
                   <CheckCircle2 className="h-8 w-8 text-green-600" />
                 </div>
                 <CardTitle className="text-2xl font-bold text-green-700">
-                  Thank You!
+                  {hasExistingSubmission ? "Response Recorded" : "Thank You!"}
                 </CardTitle>
                 <p className="text-muted-foreground mt-2">
-                  Your response has been submitted successfully.
+                  {hasExistingSubmission ? "You have already submitted a response to this form." : "Your response has been submitted successfully."}
                 </p>
               </CardHeader>
-              
+
               <CardContent className="p-6 text-center">
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <h3 className="text-lg font-semibold">What would you like to do next?</h3>
                     <p className="text-sm text-muted-foreground">
-                      You can edit your response or submit another one.
+                      {hasExistingSubmission ? "You can edit your existing response or clear it to submit a new one." : "You can edit your response or submit another one."}
                     </p>
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                    <Button 
+                    <Button
                       onClick={handleEditResponse}
                       className="gap-2"
                       size="lg"
                     >
                       <Edit className="h-4 w-4" />
-                      Edit Your Response
+                      {hasExistingSubmission ? "Edit Your Response" : "Edit Response"}
                     </Button>
-                    <Button 
-                      variant="outline"
-                      onClick={() => {
-                        setSubmissionSuccess(false)
-                        form.reset()
-                      }}
-                      className="gap-2"
-                      size="lg"
-                    >
-                      <FileText className="h-4 w-4" />
-                      Submit Another Response
-                    </Button>
+
+                    {hasExistingSubmission ? (
+                      <Button
+                        variant="outline"
+                        onClick={handleSubmitAnotherResponse}
+                        className="gap-2"
+                        size="lg"
+                      >
+                        <FileText className="h-4 w-4" />
+                        Submit New Response
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setSubmissionSuccess(false)
+                          form.reset()
+                        }}
+                        className="gap-2"
+                        size="lg"
+                      >
+                        <FileText className="h-4 w-4" />
+                        Submit Another Response
+                      </Button>
+                    )}
                   </div>
 
-                  {lastSubmissionId && (
+                  {/* {lastSubmissionId && (
                     <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
                       <p className="text-sm text-blue-700">
                         <strong>Submission ID:</strong> {lastSubmissionId}
                       </p>
                       <p className="text-xs text-blue-600 mt-1">
                         Keep this ID for your records.
+                        {hasExistingSubmission && "This response is saved in your browser."}
                       </p>
                     </div>
-                  )}
+                  )} */}
+
+                  {/* Clear submission option */}
+                  {/* {hasExistingSubmission && (
+                    <div className="mt-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleClearSubmission}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 gap-2"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Clear Submission from Browser
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        This will remove your submission data from this browser only.
+                      </p>
+                    </div>
+                  )} */}
                 </div>
 
                 {/* Privacy Notice */}
@@ -998,7 +1120,7 @@ export default function PublicFormPage() {
                 </p>
               )}
             </CardHeader>
-            
+
             <CardContent className="p-6">
               <form
                 onSubmit={(e) => {
@@ -1052,9 +1174,9 @@ export default function PublicFormPage() {
 
                   <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
                     {([canSubmit, isSubmitting]) => (
-                      <Button 
-                        type="submit" 
-                        disabled={!canSubmit || submitting} 
+                      <Button
+                        type="submit"
+                        disabled={!canSubmit || submitting}
                         className="gap-2 min-w-32"
                       >
                         {submitting || isSubmitting ? (

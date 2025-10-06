@@ -1,4 +1,3 @@
-
 "use client"
 
 import { Input } from "@/components/ui/input"
@@ -9,48 +8,172 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Check, ChevronsUpDown } from "lucide-react"
-
-const LOCATION_DATA = {
-  USA: {
-    California: ["Los Angeles", "San Francisco", "San Diego"],
-    Texas: ["Houston", "Dallas", "Austin"],
-    NewYork: ["New York City", "Buffalo", "Rochester"],
-  },
-  India: {
-    Maharashtra: ["Mumbai", "Pune", "Nagpur"],
-    Karnataka: ["Bengaluru", "Mysuru", "Mangaluru"],
-    Delhi: ["New Delhi", "Dwarka", "Rohini"],
-  },
-  Canada: {
-    Ontario: ["Toronto", "Ottawa", "Hamilton"],
-    Quebec: ["Montreal", "Quebec City", "Laval"],
-    BC: ["Vancouver", "Victoria", "Richmond"],
-  },
-}
-
-const PHONE_COUNTRIES = [
-  { code: "US", label: "United States", dial: "+1", len: 10 },
-  { code: "IN", label: "India", dial: "+91", len: 10 },
-  { code: "GB", label: "United Kingdom", dial: "+44", len: 10 },
-  { code: "CA", label: "Canada", dial: "+1", len: 10 },
-  { code: "AU", label: "Australia", dial: "+61", len: 9 },
-]
+import { Check, ChevronsUpDown, Search, AlertCircle, Info } from "lucide-react"
+import { fetchCountries, fetchStates, fetchCities, fetchPhoneCountries } from "@/lib/constants/location-api"
+import { useState, useEffect } from "react"
 
 export function FieldRenderer({ field, value, onChange, disabled = false, invalid = false, error }) {
+  const [countries, setCountries] = useState([])
+  const [phoneCountries, setPhoneCountries] = useState([])
+  const [states, setStates] = useState([])
+  const [cities, setCities] = useState([])
+  const [loadingStates, setLoadingStates] = useState(false)
+  const [loadingCities, setLoadingCities] = useState(false)
+  const [loadingPhoneCountries, setLoadingPhoneCountries] = useState(false)
+  const [apiError, setApiError] = useState(null)
 
-  console.log("hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh", field)
-  // Get placeholder text - show error message if invalid, otherwise use field placeholder
+  // State for search functionality
+  const [countrySearch, setCountrySearch] = useState("")
+  const [stateSearch, setStateSearch] = useState("")
+  const [citySearch, setCitySearch] = useState("")
+  const [phoneCountrySearch, setPhoneCountrySearch] = useState("")
+
+  // State for popover open/close
+  const [countryOpen, setCountryOpen] = useState(false)
+  const [stateOpen, setStateOpen] = useState(false)
+  const [cityOpen, setCityOpen] = useState(false)
+  const [phoneCountryOpen, setPhoneCountryOpen] = useState(false)
+
+  // Fetch countries on component mount
+  useEffect(() => {
+    const loadCountries = async () => {
+      try {
+        const countriesData = await fetchCountries()
+        setCountries(countriesData)
+        if (countriesData.length === 0) {
+          setApiError('No countries data available')
+        } else {
+          setApiError(null)
+        }
+      } catch (error) {
+        console.error('Failed to load countries:', error)
+        setApiError('Failed to load countries data')
+      }
+    }
+    loadCountries()
+  }, [])
+
+  // Fetch phone countries on component mount
+  useEffect(() => {
+    const loadPhoneCountries = async () => {
+      try {
+        setLoadingPhoneCountries(true)
+        const phoneCountriesData = await fetchPhoneCountries()
+        setPhoneCountries(phoneCountriesData)
+      } catch (error) {
+        console.error('Failed to load phone countries:', error)
+      } finally {
+        setLoadingPhoneCountries(false)
+      }
+    }
+    loadPhoneCountries()
+  }, [])
+
+  // Fetch states when country changes
+  useEffect(() => {
+    const loadStates = async () => {
+      const current = value || {}
+      if (current.country) {
+        try {
+          setLoadingStates(true)
+          const statesData = await fetchStates(current.country)
+          setStates(statesData)
+          if (statesData.length === 0) {
+            setApiError(`No states available for selected country`)
+          } else {
+            setApiError(null)
+          }
+        } catch (error) {
+          console.error('Failed to load states:', error)
+          setApiError('Failed to load states data')
+          setStates([])
+        } finally {
+          setLoadingStates(false)
+        }
+      } else {
+        setStates([])
+        setCities([])
+      }
+    }
+    loadStates()
+  }, [value?.country])
+
+  // Fetch cities when state changes
+  useEffect(() => {
+    const loadCities = async () => {
+      const current = value || {}
+      if (current.state) {
+        try {
+          setLoadingCities(true)
+          const citiesData = await fetchCities(current.state)
+          setCities(citiesData)
+          if (citiesData.length === 0) {
+            setApiError(`No cities available for selected state`)
+          } else {
+            setApiError(null)
+          }
+        } catch (error) {
+          console.error('Failed to load cities:', error)
+          setApiError('Failed to load cities data')
+          setCities([])
+        } finally {
+          setLoadingCities(false)
+        }
+      } else {
+        setCities([])
+      }
+    }
+    loadCities()
+  }, [value?.state])
+
+  // Filter functions for search
+  const filteredCountries = countries.filter(country =>
+    country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+    country.iso2.toLowerCase().includes(countrySearch.toLowerCase())
+  )
+
+  const filteredStates = states.filter(state =>
+    state.name.toLowerCase().includes(stateSearch.toLowerCase())
+  )
+
+  const filteredCities = cities.filter(city =>
+    city.name.toLowerCase().includes(citySearch.toLowerCase())
+  )
+
+  const filteredPhoneCountries = phoneCountries.filter(country =>
+    country.label.toLowerCase().includes(phoneCountrySearch.toLowerCase()) ||
+    country.code.toLowerCase().includes(phoneCountrySearch.toLowerCase()) ||
+    country.dial.includes(phoneCountrySearch)
+  )
+
+  // Reset search when popover closes
+  useEffect(() => {
+    if (!countryOpen) setCountrySearch("")
+  }, [countryOpen])
+
+  useEffect(() => {
+    if (!stateOpen) setStateSearch("")
+  }, [stateOpen])
+
+  useEffect(() => {
+    if (!cityOpen) setCitySearch("")
+  }, [cityOpen])
+
+  useEffect(() => {
+    if (!phoneCountryOpen) setPhoneCountrySearch("")
+  }, [phoneCountryOpen])
+
+  // Get placeholder text
   const getPlaceholder = () => {
     if (invalid && error) {
-      return error // Show validation message in placeholder
+      return error
     }
     return field.placeholder || (field.type === "email" ? "Enter your email" : "")
   }
 
   const getSelectPlaceholder = () => {
     if (invalid && error) {
-      return error // Show validation message in placeholder
+      return error
     }
     return field.placeholder || "Select an option"
   }
@@ -110,42 +233,66 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
         )
 
       case "select":
-        console.log("HIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII",field)
-
         if (field.validation?.multiple) {
-          // Multiple select using Command inside a Popover for a dropdown UX
           const selectedValues = Array.isArray(value) ? value : []
+          
           return (
             <Popover>
               <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  disabled={disabled}
+                <div
                   className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${
                     invalid 
                       ? "border-red-500 text-red-500 placeholder-red-500" 
                       : "border-input text-foreground"
-                  }`}
+                  } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
-                  <span className="truncate">
-                    {selectedValues.length > 0
-                      ? `${selectedValues.length} selected`
-                      : selectPlaceholder}
-                  </span>
-                  <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
-                </button>
+                  <div className="flex flex-wrap items-center gap-1 flex-1 overflow-hidden">
+                    {selectedValues.length > 0 ? (
+                      selectedValues.map((selectedValue, index) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-xs"
+                        >
+                          {selectedValue}
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (!onChange) return
+                              onChange(selectedValues.filter((v) => v !== selectedValue))
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                if (!onChange) return
+                                onChange(selectedValues.filter((v) => v !== selectedValue))
+                              }
+                            }}
+                            className="hover:bg-primary/20 rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold cursor-pointer"
+                            title={`Remove ${selectedValue}`}
+                          >
+                            X
+                          </span>
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-muted-foreground">{selectPlaceholder}</span>
+                    )}
+                  </div>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+                </div>
               </PopoverTrigger>
               <PopoverContent className="p-0 w-72 sm:w-80 bg-background text-foreground border border-border shadow-md" align="start">
-                <Command className="bg-background text-foreground">
-                  <CommandInput placeholder="Search..." />
+                <Command shouldFilter={false}>
+                  <CommandInput placeholder="Search options..." />
                   <CommandEmpty>No option found.</CommandEmpty>
                   <CommandList>
                     <CommandGroup>
                       {field.options
                         ?.filter((option) => option && option.trim() !== "")
                         .map((option, index) => {
-                        console.log("HIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII")
-
                           const checked = selectedValues.includes(option)
                           return (
                             <CommandItem
@@ -175,7 +322,6 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
             </Popover>
           )
         } else {
-          // Single select
           return (
             <Select value={value || ""} onValueChange={onChange} disabled={disabled}>
               <SelectTrigger className={`bg-input ${invalid ? "border-red-500 text-red-500" : ""}`}>
@@ -289,18 +435,37 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
 
       case "location": {
         const current = value || {}
-        const countries = Object.keys(LOCATION_DATA)
-        const states = current.country ? Object.keys(LOCATION_DATA[current.country] || {}) : []
-        const cities = current.country && current.state ? LOCATION_DATA[current.country]?.[current.state] || [] : []
-
-        const handleCountry = (country) => {
-          onChange?.({ country, state: undefined, city: undefined })
+        
+        const handleCountry = (countryId) => {
+          const country = countries.find(c => c.id === parseInt(countryId))
+          onChange?.({ 
+            country: countryId, 
+            country_name: country?.name,
+            state: undefined, 
+            city: undefined 
+          })
+          setCountryOpen(false)
         }
-        const handleState = (state) => {
-          onChange?.({ country: current.country, state, city: undefined })
+        
+        const handleState = (stateId) => {
+          const state = states.find(s => s.id === parseInt(stateId))
+          onChange?.({ 
+            ...current, 
+            state: stateId,
+            state_name: state?.name,
+            city: undefined 
+          })
+          setStateOpen(false)
         }
-        const handleCity = (city) => {
-          onChange?.({ country: current.country, state: current.state, city })
+        
+        const handleCity = (cityId) => {
+          const city = cities.find(c => c.id === parseInt(cityId))
+          onChange?.({ 
+            ...current, 
+            city: cityId,
+            city_name: city?.name
+          })
+          setCityOpen(false)
         }
 
         const getLocationPlaceholder = (type) => {
@@ -309,60 +474,221 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
             if (type === "state" && !current.country) return "Select country first"
             if (type === "city" && !current.state) return "Select state first"
           }
+          
+          if (type === "country" && countries.length === 0) return "No countries available"
+          if (type === "state" && states.length === 0) return "No states available"
+          if (type === "city" && cities.length === 0) return "No cities available"
+          
           return type === "country" ? "Select country" : type === "state" ? "Select state" : "Select city"
         }
 
+        const selectedCountry = countries.find(c => c.id === parseInt(current.country))
+        const selectedState = states.find(s => s.id === parseInt(current.state))
+        const selectedCity = cities.find(c => c.id === parseInt(current.city))
+
         return (
           <div className="space-y-3">
+            {apiError && (
+              <div className="flex items-center gap-2 text-amber-600 text-xs bg-amber-50 p-2 rounded-md">
+                <AlertCircle className="h-3 w-3" />
+                <span>{apiError}</span>
+              </div>
+            )}
+            
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Country Select with Search */}
               <div>
                 <Label className="text-xs text-muted-foreground">Country</Label>
-                <Select value={current.country || ""} onValueChange={handleCountry} disabled={disabled}>
-                  <SelectTrigger className={`bg-input ${invalid ? "border-red-500 text-red-500" : ""}`}>
-                    <SelectValue placeholder={getLocationPlaceholder("country")} />
-                  </SelectTrigger>
-                  <SelectContent className="bg-background text-foreground border border-border">
-                    {countries.map((c) => (
-                      <SelectItem key={c} value={c} className="hover:bg-accent">
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={countryOpen} onOpenChange={setCountryOpen}>
+                  <PopoverTrigger asChild>
+                    <div
+                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${
+                        invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                      } ${disabled || countries.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        {selectedCountry ? (
+                          <>
+                            <span>{selectedCountry.emoji}</span>
+                            <span className="truncate">{selectedCountry.name}</span>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            {getLocationPlaceholder("country")}
+                          </span>
+                        )}
+                      </div>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+                    </div>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
+                    <Command shouldFilter={false}>
+                      <div className="flex items-center border-b px-3">
+                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                        <CommandInput 
+                          placeholder="Search countries..." 
+                          value={countrySearch}
+                          onValueChange={setCountrySearch}
+                        />
+                      </div>
+                      <CommandList>
+                        <CommandEmpty>No country found.</CommandEmpty>
+                        <CommandGroup>
+                          {filteredCountries.map((country) => (
+                            <CommandItem
+                              key={country.id}
+                              value={country.name}
+                              onSelect={() => handleCountry(String(country.id))}
+                              className="cursor-pointer"
+                            >
+                              <Check
+                                className={`mr-2 h-4 w-4 ${
+                                  current.country === String(country.id) ? "opacity-100" : "opacity-0"
+                                }`}
+                              />
+                              <span className="mr-2">{country.emoji}</span>
+                              <span>{country.name}</span>
+                              <span className="ml-2 text-xs text-muted-foreground">({country.iso2})</span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
+              {/* State Select with Search */}
               <div>
                 <Label className="text-xs text-muted-foreground">State</Label>
-                <Select value={current.state || ""} onValueChange={handleState} disabled={disabled || !current.country}>
-                  <SelectTrigger className={`bg-input ${invalid ? "border-red-500 text-red-500" : ""}`}>
-                    <SelectValue placeholder={getLocationPlaceholder("state")} />
-                  </SelectTrigger>
-                  <SelectContent className="bg-background text-foreground border border-border">
-                    {states.map((s) => (
-                      <SelectItem key={s} value={s} className="hover:bg-accent">
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={stateOpen} onOpenChange={setStateOpen}>
+                  <PopoverTrigger asChild>
+                    <div
+                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${
+                        invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                      } ${disabled || !current.country || states.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      <div className="truncate">
+                        {selectedState ? (
+                          selectedState.name
+                        ) : (
+                          <span className="text-muted-foreground">
+                            {loadingStates ? "Loading..." : getLocationPlaceholder("state")}
+                          </span>
+                        )}
+                      </div>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+                    </div>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
+                    <Command shouldFilter={false}>
+                      <div className="flex items-center border-b px-3">
+                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                        <CommandInput 
+                          placeholder="Search states..." 
+                          value={stateSearch}
+                          onValueChange={setStateSearch}
+                        />
+                      </div>
+                      <CommandList>
+                        <CommandEmpty>
+                          {states.length === 0 ? "No states available" : "No state found"}
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {filteredStates.map((state) => (
+                            <CommandItem
+                              key={state.id}
+                              value={state.name}
+                              onSelect={() => handleState(String(state.id))}
+                              className="cursor-pointer"
+                            >
+                              <Check
+                                className={`mr-2 h-4 w-4 ${
+                                  current.state === String(state.id) ? "opacity-100" : "opacity-0"
+                                }`}
+                              />
+                              {state.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
+              {/* City Select with Search */}
               <div>
                 <Label className="text-xs text-muted-foreground">City</Label>
-                <Select value={current.city || ""} onValueChange={handleCity} disabled={disabled || !current.state}>
-                  <SelectTrigger className={`bg-input ${invalid ? "border-red-500 text-red-500" : ""}`}>
-                    <SelectValue placeholder={getLocationPlaceholder("city")} />
-                  </SelectTrigger>
-                  <SelectContent className="bg-background text-foreground border border-border">
-                    {cities.map((city) => (
-                      <SelectItem key={city} value={city} className="hover:bg-accent">
-                        {city}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={cityOpen} onOpenChange={setCityOpen}>
+                  <PopoverTrigger asChild>
+                    <div
+                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${
+                        invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                      } ${disabled || !current.state || cities.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      <div className="truncate">
+                        {selectedCity ? (
+                          selectedCity.name
+                        ) : (
+                          <span className="text-muted-foreground">
+                            {loadingCities ? "Loading..." : getLocationPlaceholder("city")}
+                          </span>
+                        )}
+                      </div>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+                    </div>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
+                    <Command shouldFilter={false}>
+                      <div className="flex items-center border-b px-3">
+                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                        <CommandInput 
+                          placeholder="Search cities..." 
+                          value={citySearch}
+                          onValueChange={setCitySearch}
+                        />
+                      </div>
+                      <CommandList>
+                        <CommandEmpty>
+                          {cities.length === 0 ? "No cities available" : "No city found"}
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {filteredCities.map((city) => (
+                            <CommandItem
+                              key={city.id}
+                              value={city.name}
+                              onSelect={() => handleCity(String(city.id))}
+                              className="cursor-pointer"
+                            >
+                              <Check
+                                className={`mr-2 h-4 w-4 ${
+                                  current.city === String(city.id) ? "opacity-100" : "opacity-0"
+                                }`}
+                              />
+                              {city.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
+            
+            {/* Information message when no data available */}
+            {(countries.length === 0 || states.length === 0 || cities.length === 0) && (
+              <div className="flex items-center gap-2 text-blue-600 text-xs bg-blue-50 p-2 rounded-md">
+                <Info className="h-3 w-3" />
+                <span>
+                  {countries.length === 0 && "Countries data not available. "}
+                  {states.length === 0 && current.country && "States data not available for selected country. "}
+                  {cities.length === 0 && current.state && "Cities data not available for selected state."}
+                </span>
+              </div>
+            )}
+            
             {invalid && error && !current.country && (
               <div className="text-xs text-red-500 font-medium">
                 {error}
@@ -374,42 +700,134 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
 
       case "phone": {
         const current = value || {}
-        const country = current.country || "US"
+        const country = current.country || ""
         const number = current.number || ""
-        const handleCountry = (c) => onChange?.({ country: c, number })
-        const handleNumber = (val) => {
-          onChange?.({ country, number: val })
+        
+        const handleCountry = (countryCode) => {
+          const phoneCountry = phoneCountries.find(c => c.code === countryCode)
+          onChange?.({ 
+            country: countryCode, 
+            dial_code: phoneCountry?.dial,
+            number: number 
+          })
+          setPhoneCountryOpen(false)
         }
-
+        
+        const handleNumber = (val) => {
+          // Remove all non-digit characters
+          const numbersOnly = val.replace(/\D/g, '')
+          onChange?.({ 
+            ...current, 
+            number: numbersOnly 
+          })
+        }
+      
+        const handleKeyDown = (e) => {
+          // Prevent non-numeric characters
+          if (!/[0-9]|Backspace|Delete|Tab|ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Home|End/.test(e.key)) {
+            e.preventDefault()
+          }
+        }
+      
+        const handlePaste = (e) => {
+          e.preventDefault()
+          const pastedText = e.clipboardData.getData('text')
+          // Remove all non-digit characters from pasted text
+          const numbersOnly = pastedText.replace(/\D/g, '')
+          // Update the input value
+          e.target.value = numbersOnly
+          handleNumber(numbersOnly)
+        }
+      
+        const selectedCountry = phoneCountries.find(c => c.code === country)
+      
         return (
           <div className="space-y-2">
-            <div className="grid grid-cols-[120px_1fr] gap-2">
-              <Select value={country} onValueChange={handleCountry} disabled={disabled}>
-                <SelectTrigger className={`bg-input ${invalid ? "border-red-500 text-red-500" : ""}`}>
-                  <SelectValue placeholder={invalid && error ? error : "CC"} />
-                </SelectTrigger>
-                <SelectContent className="bg-background text-foreground border border-border">
-                  {PHONE_COUNTRIES.map((c) => (
-                    <SelectItem key={c.code} value={c.code} className="hover:bg-accent">
-                      {c.dial} {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Input
-                type="tel"
-                inputMode="tel"
-                placeholder={invalid && error ? error : (field.placeholder || "Phone number")}
-                value={number}
-                onChange={(e) => handleNumber(e.target.value)}
-                disabled={disabled}
-                className={`bg-input ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
-                aria-label="Phone number"
-              />
+            <div className="grid grid-cols-[140px_1fr] gap-2">
+              {/* Phone Country Select with Search */}
+              <div>
+                <Label className="text-xs text-muted-foreground">Country Code</Label>
+                <Popover open={phoneCountryOpen} onOpenChange={setPhoneCountryOpen}>
+                  <PopoverTrigger asChild>
+                    <div
+                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${
+                        invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                      } ${disabled || loadingPhoneCountries ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        {selectedCountry ? (
+                          <>
+                            {selectedCountry.emoji}
+                            <span className="truncate text-xs">{selectedCountry.dial}</span>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">
+                            {loadingPhoneCountries ? "Loading..." : "Select"}
+                          </span>
+                        )}
+                      </div>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+                    </div>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0 w-80 bg-background text-foreground border border-border shadow-md" align="start">
+                    <Command shouldFilter={false}>
+                      <div className="flex items-center border-b px-3">
+                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                        <CommandInput 
+                          placeholder="Search countries..." 
+                          value={phoneCountrySearch}
+                          onValueChange={setPhoneCountrySearch}
+                        />
+                      </div>
+                      <CommandEmpty>No country found.</CommandEmpty>
+                      <CommandList className="max-h-60">
+                        <CommandGroup>
+                          {filteredPhoneCountries.map((country) => (
+                            <CommandItem
+                              key={country.code}
+                              value={`${country.label} ${country.dial}`}
+                              onSelect={() => handleCountry(country.code)}
+                              className="cursor-pointer"
+                            >
+                              <Check
+                                className={`mr-2 h-4 w-4 ${
+                                  current.country === country.code ? "opacity-100" : "opacity-0"
+                                }`}
+                              />
+                              {country.emoji} {country.label} ({country.dial})
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+      
+              <div>
+                <Label className="text-xs text-muted-foreground">Phone Number</Label>
+                <Input
+                  type="tel"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder={invalid && error ? error : (field.placeholder || "1234567890")}
+                  value={number}
+                  onChange={(e) => handleNumber(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
+                  disabled={disabled}
+                  className={`bg-input ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
+                  aria-label="Phone number"
+                />
+              </div>
             </div>
-            {!invalid && (
-              <p className="text-xs text-muted-foreground">Select country code, then enter local number (digits only).</p>
+            {!invalid && selectedCountry && (
+              <p className="text-xs text-muted-foreground">
+                Selected: {selectedCountry.emoji} {selectedCountry.label} • Format: {selectedCountry.dial} {selectedCountry.len} digits
+              </p>
+            )}
+            {!invalid && !selectedCountry && (
+              <p className="text-xs text-muted-foreground">Select country code, then enter phone number</p>
             )}
           </div>
         )
@@ -431,7 +849,6 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
         {field.required && <span className="text-red-500 ml-1 font-bold">*</span>}
       </Label>
       {renderField()}
-      {/* Remove the error message display below the field */}
       {!invalid && field.validation?.pattern && (
         <p className="text-xs text-muted-foreground">Pattern: {field.validation.pattern}</p>
       )}

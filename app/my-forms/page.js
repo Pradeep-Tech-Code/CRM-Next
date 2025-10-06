@@ -5,7 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Eye, Copy, BarChart3, Calendar, Users, ExternalLink, Loader2, Edit, Trash2 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
+import { Eye, Copy, BarChart3, Calendar, Users, ExternalLink, Loader2, Edit, Trash2, RotateCcw, Search, ArrowUpDown } from "lucide-react"
 import { toast } from "sonner"
 import EditFormDialog from "../component/EditForm/edit-form"
 
@@ -20,6 +23,14 @@ export default function MyFormsPage() {
   const [loading, setLoading] = useState(true)
   const [editingForm, setEditingForm] = useState(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+  
+  // Search, filter, sort, and pagination states
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [sortField, setSortField] = useState("form_name")
+  const [sortDirection, setSortDirection] = useState("asc")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(5)
 
   useEffect(() => {
     fetchForms()
@@ -214,6 +225,7 @@ export default function MyFormsPage() {
           fieldCount: countFormFields(form),
           // Format the created date
           created: form.created_at ? new Date(form.created_at).toLocaleDateString() : 'Unknown',
+          createdDate: form.created_at ? new Date(form.created_at) : new Date(),
           // Ensure we have a form_id
           form_id: form.form_id || form.id
         }))
@@ -395,6 +407,59 @@ export default function MyFormsPage() {
     fetchForms()
   }
 
+  // Filter and search functions
+  const filteredForms = forms.filter(form => {
+    const matchesSearch = form.form_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         form.description?.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    const matchesStatus = statusFilter === "all" || 
+                         (statusFilter === "published" && form.published) ||
+                         (statusFilter === "draft" && !form.published)
+    
+    return matchesSearch && matchesStatus
+  })
+
+  // Sort functions
+  const sortedForms = [...filteredForms].sort((a, b) => {
+    let aValue = a[sortField]
+    let bValue = b[sortField]
+    
+    // Handle date sorting
+    if (sortField === "createdDate") {
+      aValue = a.createdDate
+      bValue = b.createdDate
+    }
+    
+    // Handle numeric sorting for fieldCount
+    if (sortField === "fieldCount") {
+      aValue = a.fieldCount || 0
+      bValue = b.fieldCount || 0
+    }
+    
+    if (aValue < bValue) return sortDirection === "asc" ? -1 : 1
+    if (aValue > bValue) return sortDirection === "asc" ? 1 : -1
+    return 0
+  })
+
+  // Pagination functions
+  const totalPages = Math.ceil(sortedForms.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const paginatedForms = sortedForms.slice(startIndex, startIndex + itemsPerPage)
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc")
+    } else {
+      setSortField(field)
+      setSortDirection("asc")
+    }
+  }
+
+  const handleItemsPerPageChange = (value) => {
+    setItemsPerPage(Number(value))
+    setCurrentPage(1) // Reset to first page when changing items per page
+  }
+
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center min-h-64">
@@ -416,14 +481,49 @@ export default function MyFormsPage() {
           </p>
         </div>
         <Button onClick={refreshForms} variant="outline" className="gap-2">
-          <Loader2 className="h-4 w-4" />
+          <RotateCcw className="h-4 w-4" />
           Refresh
         </Button>
       </div>
 
+      {/* Search and Filters */}
+      <Card className="mb-6">
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search forms..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            
+            {/* Status Filter */}
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="published">Published</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Results Count */}
+            <div className="flex items-center justify-end text-sm text-muted-foreground">
+              Showing {paginatedForms.length} of {filteredForms.length} forms
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
-          <CardTitle>Forms List ({forms.length} forms)</CardTitle>
+          <CardTitle>Forms List ({filteredForms.length} forms)</CardTitle>
         </CardHeader>
         <CardContent>
           {forms.length === 0 ? (
@@ -439,89 +539,239 @@ export default function MyFormsPage() {
                 Try Again
               </Button>
             </div>
+          ) : filteredForms.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+                <Search className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">No Matching Forms</h3>
+              <p className="text-muted-foreground mb-4">
+                No forms match your current search and filter criteria.
+              </p>
+              <Button 
+                onClick={() => {
+                  setSearchTerm("")
+                  setStatusFilter("all")
+                }} 
+                variant="outline"
+              >
+                Clear Filters
+              </Button>
+            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Form Name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Fields</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {forms.map((form) => (
-                  <TableRow key={form.form_id}>
-                    <TableCell className="font-medium">
-                      <div>
-                        {form.form_name}
-                        <div className="text-xs text-muted-foreground mt-1">
-                          ID: {form.form_id?.substring(0, 8)}...
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {form.description || 'No description'}
-                    </TableCell>
-                    <TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleSort("form_name")}
+                    >
                       <div className="flex items-center gap-1">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                        {form.fieldCount || 0} fields
+                        Form Name
+                        <ArrowUpDown className="h-4 w-4" />
                       </div>
-                    </TableCell>
-                    <TableCell>
+                    </TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleSort("fieldCount")}
+                    >
                       <div className="flex items-center gap-1">
-                        <Calendar className="h-4 w-4" />
-                        {form.created}
+                        Fields
+                        <ArrowUpDown className="h-4 w-4" />
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={form.published ? "default" : "secondary"}>
-                        {form.published ? "Published" : "Draft"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          onClick={() => handleEditForm(form.form_id)}
-                          title="Edit form"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          onClick={() => copyFormLink(form.form_id)}
-                          title="Copy form link"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => openFormInNewTab(form.form_id)}
-                          title="Open form in new tab"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          title="View analytics"
-                          disabled
-                        >
-                          <BarChart3 className="h-4 w-4" />
-                        </Button>
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => handleSort("createdDate")}
+                    >
+                      <div className="flex items-center gap-1">
+                        Created
+                        <ArrowUpDown className="h-4 w-4" />
                       </div>
-                    </TableCell>
+                    </TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {paginatedForms.map((form) => (
+                    <TableRow key={form.form_id}>
+                      <TableCell className="font-medium">
+                        <div>
+                          {form.form_name}
+                          <div className="text-xs text-muted-foreground mt-1">
+                            ID: {form.form_id?.substring(0, 8)}...
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {form.description || 'No description'}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                          {form.fieldCount || 0} fields
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          {form.created}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={form.published ? "default" : "secondary"}>
+                          {form.published ? "Published" : "Draft"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => handleEditForm(form.form_id)}
+                            title="Edit form"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => copyFormLink(form.form_id)}
+                            title="Copy form link"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => openFormInNewTab(form.form_id)}
+                            title="Open form in new tab"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            title="View analytics"
+                            disabled
+                          >
+                            <BarChart3 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    {/* Items per page selector */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Show</span>
+                      <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+                        <SelectTrigger className="w-20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5">5</SelectItem>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <span className="text-sm text-muted-foreground">per page</span>
+                    </div>
+
+                    {/* Page info */}
+                    <div className="text-sm text-muted-foreground">
+                      Page {currentPage} of {totalPages}
+                    </div>
+                  </div>
+
+                  {/* Pagination controls */}
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious 
+                          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                          className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                      
+                      {/* Show limited page numbers for better UX */}
+                      {(() => {
+                        const pages = [];
+                        const maxVisiblePages = 5;
+                        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                        
+                        // Adjust start page if we're near the end
+                        if (endPage - startPage + 1 < maxVisiblePages) {
+                          startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                        }
+                        
+                        for (let i = startPage; i <= endPage; i++) {
+                          pages.push(
+                            <PaginationItem key={i}>
+                              <PaginationLink
+                                onClick={() => setCurrentPage(i)}
+                                isActive={currentPage === i}
+                                className="cursor-pointer"
+                              >
+                                {i}
+                              </PaginationLink>
+                            </PaginationItem>
+                          );
+                        }
+                        return pages;
+                      })()}
+                      
+                      <PaginationItem>
+                        <PaginationNext 
+                          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                          className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
+
+              {/* Show pagination info even when there's only one page */}
+              {totalPages <= 1 && (
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    {/* Items per page selector */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Show</span>
+                      <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+                        <SelectTrigger className="w-20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5">5</SelectItem>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <span className="text-sm text-muted-foreground">per page</span>
+                    </div>
+
+                    {/* Page info */}
+                    <div className="text-sm text-muted-foreground">
+                      Page 1 of 1
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

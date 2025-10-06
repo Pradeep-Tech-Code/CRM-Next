@@ -151,61 +151,6 @@ export function FieldConfigPanel({ field, onUpdateField }) {
           </CardContent>
         </Card>
 
-        {/* Field Type Conversion */}
-        <Card className="border-0 shadow-none bg-transparent">
-          <CardHeader className="px-0 pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-              Field Type
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-0">
-            <div className="space-y-2">
-              <Label htmlFor="field-type" className="text-sm font-medium">
-                Change Type
-              </Label>
-              <Select
-                value={field.type}
-                onValueChange={(newType) => {
-                  const updates = { type: newType }
-
-                  // Add default options for fields that need them
-                  if (["select", "checkbox", "radio"].includes(newType) && !field.options) {
-                    updates.options = ["Option 1", "Option 2", "Option 3"]
-                  }
-
-                  // Remove options for fields that don't need them
-                  if (!["select", "checkbox", "radio"].includes(newType)) {
-                    updates.options = undefined
-                  }
-
-                  // Reset validation for new field type
-                  updates.validation = {
-                    required: field.required || false,
-                    multiple: false // Reset multiple for non-select fields
-                  }
-
-                  onUpdateField(field.id, updates)
-                }}
-              >
-                <SelectTrigger className="bg-input">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="text">Text Input</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
-                  <SelectItem value="number">Number</SelectItem>
-                  <SelectItem value="textarea">Textarea</SelectItem>
-                  <SelectItem value="select">Select</SelectItem>
-                  <SelectItem value="checkbox">Checkbox</SelectItem>
-                  <SelectItem value="radio">Radio</SelectItem>
-                  <SelectItem value="file">File Upload</SelectItem>
-                  <SelectItem value="datetime">Date Time</SelectItem>
-                  <SelectItem value="location">Location</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Options for select, checkbox, radio */}
         {needsOptions && (
