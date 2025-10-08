@@ -16,24 +16,47 @@ export function FormPreview({ fields }) {
   const [generatedLink, setGeneratedLink] = useState(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [formName, setFormName] = useState("Generated Form")
-  const [formDescription, setFormDescription] = useState("Form created with form builder")
+  const [formName, setFormName] = useState("")
+  const [formDescription, setFormDescription] = useState("")
+
+  // Filter out table_column type fields from preview
+  const previewFields = fields.filter(field => field.type !== "table_column")
+
+  // Separate table columns from regular form fields
+  const tableColumnFields = previewFields.filter(field => field.source === 'table')
+  const regularFormFields = previewFields.filter(field => field.source !== 'table')
+
+  console.log('📋 Field Separation:', {
+    tableColumnFields,
+    regularFormFields,
+    allFields: previewFields
+  })
 
   // Ensure unique field IDs for form default values
   const getDefaultValues = () => {
-    return fields.reduce((acc, field) => {
-      // Use the actual field ID
+    return previewFields.reduce((acc, field) => {
       const fieldKey = field.id
-      acc[fieldKey] =
-        field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)
-          ? []
-          : field.type === "file"
-            ? null
-            : field.type === "location"
-              ? {}
-              : field.type === "phone"
-                ? {}
-                : ""
+      
+      if (["select", "checkbox", "radio"].includes(field.type)) {
+        if (field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)) {
+          acc[fieldKey] = {
+            value: [],
+            nestedField: {}
+          }
+        } else {
+          acc[fieldKey] = {
+            value: "",
+            nestedField: {}
+          }
+        }
+      } else if (field.type === "file") {
+        acc[fieldKey] = null
+      } else if (field.type === "location" || field.type === "phone") {
+        acc[fieldKey] = {}
+      } else {
+        acc[fieldKey] = ""
+      }
+      
       return acc
     }, {})
   }
@@ -46,53 +69,170 @@ export function FormPreview({ fields }) {
     },
   })
 
+  // Update the handleGenerateLink function in form-preview.js
   const handleGenerateLink = async () => {
     if (!formName.trim()) {
       toast.error("Please enter a form name")
       return
     }
-  
+
     if (fields.length === 0) {
       toast.error("Please add at least one field to the form")
       return
     }
-  
+
+    if (previewFields.length === 0) {
+      toast.error("Please add at least one field to the form")
+      return
+    }
+
     setIsGenerating(true)
     try {
       // API configuration
       const API_BASE_URL = 'http://10.10.15.194:3000'
       const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
-      const TABLE_ID = 'b9bc249f-9099-4436-bfc6-9dd74d1e8fdc'
+      const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
       const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
-      const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzU5MjIzMzk4LCJleHAiOjE3NTkzMDk3OTh9.7fn3GDnJJGao23XGVvzXbNLEpVMFs6kKSHR4YmGiNWo'
-  
-      // Prepare the form data for API - ensure proper JSON string format
+      const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzU5OTIyNjU5LCJleHAiOjE3NjAwMDkwNTl9.Bb5R50EowPaDDnIHPCE_-8FNxoE4jbRlJmG8Gv974RE'
+
+      // Get existing table columns to avoid duplicates
+      let existingColumns = []
+      try {
+        const columnsResponse = await fetch(`${API_BASE_URL}/api/datatables/${TABLE_ID}/columns`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        })
+
+        if (columnsResponse.ok) {
+          const columnsData = await columnsResponse.json()
+          existingColumns = Array.isArray(columnsData) ? columnsData : []
+          console.log('📊 Existing table columns:', existingColumns.map(col => col.column_name))
+        }
+      } catch (error) {
+        console.log('⚠️ Could not fetch existing columns, continuing anyway...')
+      }
+
+      // Prepare table column fields (from table columns) - ONLY NEW FIELDS
+      const tableFields = tableColumnFields
+        .filter(field => {
+          const fieldName = field.tableColumnName || field.label
+          const alreadyExists = existingColumns.some(col =>
+            col.column_name?.toLowerCase() === fieldName?.toLowerCase()
+          )
+
+          if (alreadyExists) {
+            console.log(`⏭️ Skipping duplicate field: ${fieldName}`)
+            toast.warning(`Field "${fieldName}" already exists in the table and was skipped`)
+            return false
+          }
+          return true
+        })
+        .map(field => {
+          // Ensure nested fields are properly structured for table fields
+          const nestedFields = field.nestedFields || {}
+          const hasNestedFields = Object.keys(nestedFields).length > 0
+          
+          const fieldObj = {
+            id: field.tableColumnId || field.id,
+            name: field.tableColumnName || field.label,
+            type: field.type,
+            required: String(field.required),
+            label: field.label,
+            validations: JSON.stringify(field.validation || {}),
+            options: field.options ? String(field.options) : undefined,
+            nested_fields: JSON.stringify(nestedFields),
+            has_nested_fields: hasNestedFields
+            // Include nested fields for table fields as well
+          }
+          console.log('📊 Table Field:', fieldObj)
+          console.log('🔍 Nested Fields for table field:', field.label, field.nestedFields)
+          return fieldObj
+        })
+
+      // Prepare extra fields (regular form fields) - CHECK FOR DUPLICATES
+      const extraFields = regularFormFields
+        .filter(field => {
+          const fieldName = field.label
+          const alreadyExists = existingColumns.some(col =>
+            col.column_name?.toLowerCase() === fieldName?.toLowerCase()
+          )
+
+          if (alreadyExists) {
+            console.log(`⏭️ Skipping duplicate extra field: ${fieldName}`)
+            toast.warning(`Field "${fieldName}" already exists in the table and was skipped`)
+            return false
+          }
+          return true
+        })
+        .map(field => {
+          // Convert options array to proper string format
+          let optionsString = ""
+          if (field.options && Array.isArray(field.options)) {
+            optionsString = field.options.join(', ') // Convert array to comma-separated string
+          } else if (field.options) {
+            optionsString = String(field.options)
+          }
+
+          // Ensure nested fields are properly structured
+          const nestedFields = field.nestedFields || {}
+          const hasNestedFields = Object.keys(nestedFields).length > 0
+          
+          const fieldObj = {
+            name: field.label,
+            type: field.type,
+            required: String(field.required),
+            label: field.label,
+            validations: JSON.stringify(field.validation || {}),
+            options: optionsString,
+            nested_fields: JSON.stringify(nestedFields),
+            has_nested_fields: hasNestedFields
+          }
+
+          console.log('📝 Extra Field:', fieldObj)
+          console.log('🔍 Nested Fields for field:', field.label, field.nestedFields)
+          return fieldObj
+        })
+
+      // Check if we have any fields to send after filtering duplicates
+      if (tableFields.length === 0 && extraFields.length === 0) {
+        toast.error("All fields already exist in the table. No new fields to add.")
+        setIsGenerating(false)
+        return
+      }
+
+      // Prepare the form data for API
       const formData = {
         organization_id: ORGANIZATION_ID,
         table_id: TABLE_ID,
         form_name: formName,
         description: formDescription,
         created_by: USER_ID,
-        fields: fields.map(field => {
-          // Create a clean field object with all necessary properties
-          const fieldObj = {
-            name: field.id,
-            type: field.type,
-            required: String(field.required), // Ensure this is string
-            label: field.label,
-            placeholder: field.placeholder || "",
-            options: JSON.stringify(field.options || []),
-            validation: JSON.stringify(field.validation || {}) // Include full validation object
-          }
-          
-          return fieldObj
-        }),
+        fields: tableFields,
+        extraFields: extraFields,
         published: true
       }
 
-      console.log('Saving form to API:', formData)
-  
-      const response = await fetch(`${API_BASE_URL}/api/forms`, {
+      console.log('🚀 Sending form data to API:', formData)
+      console.log('🔍 Detailed nested fields analysis:')
+      extraFields.forEach((field, index) => {
+        console.log(`Field ${index + 1}: ${field.name}`)
+        console.log(`  - Nested fields: ${field.nested_fields}`)
+        try {
+          const parsedNested = JSON.parse(field.nested_fields)
+          console.log(`  - Parsed nested fields:`, parsedNested)
+        } catch (e) {
+          console.log(`  - Error parsing nested fields:`, e.message)
+        }
+      })
+
+      // Use only the correct endpoint
+      const endpoint = `${API_BASE_URL}/api/forms`
+      console.log(`🔄 Using endpoint: ${endpoint}`)
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${AUTH_TOKEN}`,
@@ -100,36 +240,72 @@ export function FormPreview({ fields }) {
         },
         body: JSON.stringify(formData)
       })
-  
+
       if (!response.ok) {
         const errorText = await response.text()
         console.error('API Error Response:', errorText)
+
+        // Handle specific error cases
+        if (response.status === 409) {
+          // Field already exists error
+          const errorData = JSON.parse(errorText)
+          throw new Error(`Field already exists: ${errorData.error}`)
+        } else if (response.status === 500) {
+          // Invalid data format error
+          const errorData = JSON.parse(errorText)
+          throw new Error(`Invalid data format: ${errorData.error}`)
+        }
+
         throw new Error(`Failed to create form: ${response.status} - ${errorText}`)
       }
-  
+
       const result = await response.json()
-      console.log('API Success Response:', result)
-      
+      console.log('✅ API Success Response:', result)
+
       if (result.success && result.form) {
         // Generate the public URL using the form_id from API response
         const publicUrl = `${window.location.origin}/forms/${result.form.form_id}`
         setGeneratedLink(publicUrl)
+
+        // Store form data locally for the form view page
+        const completeFormData = {
+          form_name: formName,
+          description: formDescription,
+          // Store all preview fields with their complete data including options
+          previewFields: previewFields.map(field => ({
+            id: field.id,
+            type: field.type,
+            label: field.label,
+            placeholder: field.placeholder,
+            required: field.required,
+            options: field.options, // Include options array directly for local storage
+            validation: field.validation,
+            source: field.source,
+            tableColumnId: field.tableColumnId,
+            tableColumnName: field.tableColumnName
+          })),
+          tableFields: tableFields,
+          extraFields: extraFields,
+          generatedAt: new Date().toISOString()
+        }
+
+        localStorage.setItem(`form-${result.form.form_id}`, JSON.stringify(completeFormData))
         toast.success("Form link generated successfully!")
       } else {
         throw new Error('Invalid response from server: ' + JSON.stringify(result))
       }
-      
+
     } catch (error) {
       console.error('Error generating form link:', error)
-      
-      // Fallback: Generate a mock URL for demo purposes
-      const mockFormId = `form-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      const publicUrl = `${window.location.origin}/forms/${mockFormId}`
-      setGeneratedLink(publicUrl)
-      toast.success("Form link generated successfully! (Demo mode - using mock data)")
-      
-      // Uncomment to show actual error in production:
-      // toast.error(`Failed to generate form link: ${error.message}`)
+
+      // Show specific error messages based on error type
+      if (error.message.includes('already exists')) {
+        toast.error(error.message)
+      } else if (error.message.includes('Invalid data format')) {
+        toast.error(error.message)
+      } else {
+        toast.error(`Failed to generate form: ${error.message}`)
+      }
     } finally {
       setIsGenerating(false)
     }
@@ -157,6 +333,120 @@ export function FormPreview({ fields }) {
     GB: { dial: "+44", len: 10 },
     CA: { dial: "+1", len: 10 },
     AU: { dial: "+61", len: 9 },
+  }
+  const validateNestedField = (nestedField, value) => {
+    const errors = []
+
+    // Required validation
+    const isRequired = nestedField.required || nestedField.validation?.required
+    if (isRequired) {
+      if (nestedField.type === "select") {
+        if (!value || value === "") {
+          errors.push("Please select an option")
+        }
+      } else if (nestedField.type === "checkbox") {
+        if (!Array.isArray(value) || value.length === 0) {
+          errors.push("Please select at least one option")
+        }
+      } else if (nestedField.type === "file") {
+        if (!value) {
+          errors.push("Please select a file")
+        }
+      } else if (!value || (typeof value === "string" && value.trim() === "")) {
+        errors.push("This field is required")
+      }
+    }
+
+    // File type validation
+    if (nestedField.type === "file" && value && nestedField.validation?.accept) {
+      const acceptedTypes = nestedField.validation.accept.split(",").map((type) => type.trim())
+      const fileName = value.name || ""
+      const fileType = value.type || ""
+
+      const isAccepted = acceptedTypes.some((acceptType) => {
+        if (acceptType.startsWith(".")) {
+          return fileName.toLowerCase().endsWith(acceptType.toLowerCase())
+        } else if (acceptType.includes("*")) {
+          const baseType = acceptType.split("/")[0]
+          return fileType.startsWith(baseType + "/")
+        } else {
+          return fileType === acceptType
+        }
+      })
+
+      if (!isAccepted) {
+        errors.push(`File type not allowed. Accepted types: ${nestedField.validation.accept}`)
+      }
+    }
+
+    // File size validation
+    if (nestedField.type === "file" && value && nestedField.validation?.maxSize) {
+      const maxSizeBytes = nestedField.validation.maxSize * 1024 * 1024
+      if (value.size > maxSizeBytes) {
+        errors.push(`File size must be less than ${nestedField.validation.maxSize}MB`)
+      }
+    }
+
+    // Type-specific validation
+    if (value && typeof value === "string" && value.trim() !== "") {
+      switch (nestedField.type) {
+        case "email":
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+          if (!emailRegex.test(value)) {
+            errors.push("Please enter a valid email address")
+          }
+          break
+
+        case "number":
+          const numValue = Number(value)
+          if (isNaN(numValue)) {
+            errors.push("Please enter a valid number")
+          } else {
+            if (nestedField.validation?.min !== undefined && numValue < nestedField.validation.min) {
+              errors.push(`Value must be at least ${nestedField.validation.min}`)
+            }
+            if (nestedField.validation?.max !== undefined && numValue > nestedField.validation.max) {
+              errors.push(`Value must be at most ${nestedField.validation.max}`)
+            }
+          }
+          break
+
+        case "text":
+        case "textarea":
+          if (nestedField.validation?.pattern && nestedField.validation.pattern.trim() !== "") {
+            try {
+              const pattern = nestedField.validation.pattern.trim()
+              if (pattern) {
+                const regex = new RegExp(pattern)
+                if (!regex.test(value)) {
+                  errors.push("Value does not match the required pattern")
+                }
+              }
+            } catch (e) {
+              console.warn("Invalid regex pattern:", nestedField.validation.pattern, e.message)
+            }
+          }
+          if (nestedField.validation?.minLength && value.length < nestedField.validation.minLength) {
+            errors.push(`Value must be at least ${nestedField.validation.minLength} characters`)
+          }
+          if (nestedField.validation?.maxLength && value.length > nestedField.validation.maxLength) {
+            errors.push(`Value must be at most ${nestedField.validation.maxLength} characters`)
+          }
+          break
+
+        case "phone":
+          const digits = value.replace(/\D/g, "")
+          if (nestedField.validation?.minLength && digits.length < nestedField.validation.minLength) {
+            errors.push(`Phone number must be at least ${nestedField.validation.minLength} digits`)
+          }
+          if (nestedField.validation?.maxLength && digits.length > nestedField.validation.maxLength) {
+            errors.push(`Phone number must be at most ${nestedField.validation.maxLength} digits`)
+          }
+          break
+      }
+    }
+
+    return errors
   }
 
   const validateField = (field, value) => {
@@ -294,10 +584,23 @@ export function FormPreview({ fields }) {
       }
     }
 
+    if (field.nestedFields && value?.nestedFields) {
+      Object.entries(field.nestedFields).forEach(([optionIndex, nestedFields]) => {
+        const optionNestedValues = value.nestedFields[optionIndex] || {}
+        nestedFields.forEach(nestedField => {
+          const nestedValue = optionNestedValues[nestedField.id]
+          const nestedErrors = validateNestedField(nestedField, nestedValue)
+          if (nestedErrors.length > 0) {
+            errors.push(`${nestedField.label}: ${nestedErrors[0]}`)
+          }
+        })
+      })
+    }
+
     return errors
   }
 
-  if (fields.length === 0) {
+  if (previewFields.length === 0) {
     return (
       <div className="h-full flex items-center justify-center p-6">
         <div className="text-center max-w-md">
@@ -324,6 +627,23 @@ export function FormPreview({ fields }) {
           <p className="text-muted-foreground">
             This is how your form will appear to users. All validation rules are active.
           </p>
+
+          {/* Field Statistics */}
+          <div className="flex gap-2 mt-3">
+            <Badge variant="outline" className="text-xs">
+              {previewFields.length} total fields
+            </Badge>
+            {tableColumnFields.length > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                {tableColumnFields.length} from table
+              </Badge>
+            )}
+            {regularFormFields.length > 0 && (
+              <Badge variant="default" className="text-xs">
+                {regularFormFields.length} custom fields
+              </Badge>
+            )}
+          </div>
         </div>
 
         {/* Form Configuration Section */}
@@ -379,7 +699,7 @@ export function FormPreview({ fields }) {
               }}
               className="space-y-6"
             >
-              {fields.map((field) => (
+              {previewFields.map((field) => (
                 <form.Field
                   key={field.id}
                   name={field.id}
@@ -412,16 +732,16 @@ export function FormPreview({ fields }) {
 
               <div className="flex items-center justify-between pt-4">
                 <div className="text-sm text-muted-foreground">
-                  {fields.length} {fields.length === 1 ? "field" : "fields"} • {fields.filter((f) => f.required).length}{" "}
+                  {previewFields.length} {previewFields.length === 1 ? "field" : "fields"} • {previewFields.filter((f) => f.required).length}{" "}
                   required
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button 
-                    type="button" 
-                    variant="secondary" 
+                  <Button
+                    type="button"
+                    variant="secondary"
                     onClick={handleGenerateLink}
-                    disabled={isGenerating || fields.length === 0}
+                    disabled={isGenerating || previewFields.length === 0}
                     className="gap-2"
                   >
                     {isGenerating ? (
@@ -502,25 +822,32 @@ export function FormPreview({ fields }) {
         {/* Form Data Debug Panel */}
         <Card className="mt-6">
           <CardHeader>
-            <CardTitle className="text-sm">Form State (Debug)</CardTitle>
+            <CardTitle className="text-sm">Form Structure (Debug)</CardTitle>
           </CardHeader>
           <CardContent>
-            <form.Subscribe>
-              {(state) => (
-                <pre className="text-xs bg-muted p-3 rounded-md overflow-auto max-h-40">
-                  {JSON.stringify(
-                    {
-                      values: state.values,
-                      errors: state.errors,
-                      canSubmit: state.canSubmit,
-                      isSubmitting: state.isSubmitting,
-                    },
-                    null,
-                    2,
-                  )}
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-medium mb-2">Table Columns ({tableColumnFields.length})</h4>
+                <pre className="text-xs bg-muted p-3 rounded-md overflow-auto max-h-32">
+                  {JSON.stringify(tableColumnFields.map(f => ({
+                    id: f.tableColumnId,
+                    name: f.tableColumnName,
+                    type: f.type,
+                    required: f.required
+                  })), null, 2)}
                 </pre>
-              )}
-            </form.Subscribe>
+              </div>
+              <div>
+                <h4 className="text-sm font-medium mb-2">Extra Fields ({regularFormFields.length})</h4>
+                <pre className="text-xs bg-muted p-3 rounded-md overflow-auto max-h-32">
+                  {JSON.stringify(regularFormFields.map(f => ({
+                    name: f.label,
+                    type: f.type,
+                    required: f.required
+                  })), null, 2)}
+                </pre>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

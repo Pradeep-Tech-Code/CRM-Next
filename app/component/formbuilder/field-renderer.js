@@ -12,8 +12,859 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Check, ChevronsUpDown, Search, AlertCircle, Info } from "lucide-react"
 import { fetchCountries, fetchStates, fetchCities, fetchPhoneCountries } from "@/lib/constants/location-api"
 import { useState, useEffect } from "react"
+import { Database } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+
+const renderNestedFields = (field, selectedOptions, onChange, parentValue, disabled, invalid, locationData) => {
+  if (!field.nestedFields || Object.keys(field.nestedFields).length === 0) {
+    return null
+  }
+
+  const nestedFieldsToShow = []
+
+  // For multiple select/checkbox, show nested fields for all selected options
+  if (Array.isArray(selectedOptions)) {
+    selectedOptions.forEach(option => {
+      const optionIndex = field.options?.indexOf(option)
+      if (optionIndex !== -1 && field.nestedFields[optionIndex]) {
+        nestedFieldsToShow.push(...field.nestedFields[optionIndex].map(nestedField => ({
+          ...nestedField,
+          optionIndex,
+          optionValue: option
+        })))
+      }
+    })
+  }
+  // For single select/radio, show nested fields for the selected option
+  else if (selectedOptions && typeof selectedOptions === 'string') {
+    const optionIndex = field.options?.indexOf(selectedOptions)
+    if (optionIndex !== -1 && field.nestedFields[optionIndex]) {
+      nestedFieldsToShow.push(...field.nestedFields[optionIndex].map(nestedField => ({
+        ...nestedField,
+        optionIndex,
+        optionValue: selectedOptions
+      })))
+    }
+  }
+
+  if (nestedFieldsToShow.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="mt-4 pl-4 border-l-2 border-primary/20 space-y-4">
+      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+        <div className="w-2 h-2 bg-primary rounded-full"></div>
+        Additional Information
+        <Badge variant="secondary" className="text-xs">
+          {nestedFieldsToShow.length} field{nestedFieldsToShow.length !== 1 ? 's' : ''}
+        </Badge>
+      </div>
+      <div className="space-y-4">
+        {nestedFieldsToShow.map((nestedField) => {
+          const nestedFieldId = `${field.id}_${nestedField.optionIndex}_${nestedField.id}`
+          const nestedValue = parentValue?.nestedFields?.[nestedField.optionIndex]?.[nestedField.id] || ""
+
+          const handleNestedChange = (value) => {
+            const currentNestedFields = parentValue?.nestedFields || {}
+            const optionNestedFields = currentNestedFields[nestedField.optionIndex] || {}
+
+            const updatedNestedFields = {
+              ...currentNestedFields,
+              [nestedField.optionIndex]: {
+                ...optionNestedFields,
+                [nestedField.id]: value
+              }
+            }
+
+            onChange({
+              ...parentValue,
+              nestedFields: updatedNestedFields
+            })
+          }
+
+          return (
+            <div key={nestedFieldId} className="p-3 bg-muted/30 rounded-lg space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">
+                  {nestedField.label}
+                  {nestedField.required && <span className="text-red-500 ml-1">*</span>}
+                </Label>
+                <Badge variant="outline" className="text-xs">
+                  {nestedField.type}
+                </Badge>
+              </div>
+              {renderNestedFieldInput(nestedField, nestedValue, handleNestedChange, disabled, invalid, locationData)}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid, {
+  countries = [],
+  states = [],
+  cities = [],
+  phoneCountries = [],
+  loadingStates = false,
+  loadingCities = false,
+  loadingPhoneCountries = false,
+  apiError = null,
+  countrySearch = "",
+  stateSearch = "",
+  citySearch = "",
+  phoneCountrySearch = "",
+  countryOpen = false,
+  stateOpen = false,
+  cityOpen = false,
+  phoneCountryOpen = false,
+  setCountrySearch = () => { },
+  setStateSearch = () => { },
+  setCitySearch = () => { },
+  setPhoneCountrySearch = () => { },
+  setCountryOpen = () => { },
+  setStateOpen = () => { },
+  setCityOpen = () => { },
+  setPhoneCountryOpen = () => { },
+  filteredCountries = [],
+  filteredStates = [],
+  filteredCities = [],
+  filteredPhoneCountries = []
+}) => {
+  switch (nestedField.type) {
+    case "text":
+    case "email":
+      return (
+        <Input
+          type={nestedField.type}
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          placeholder={nestedField.placeholder}
+          minLength={nestedField.validation?.minLength}
+          maxLength={nestedField.validation?.maxLength}
+          className={invalid ? "border-red-500" : ""}
+        />
+      )
+    case "number":
+      return (
+        <Input
+          type="number"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          placeholder={nestedField.placeholder}
+          min={nestedField.validation?.min}
+          max={nestedField.validation?.max}
+          className={invalid ? "border-red-500" : ""}
+        />
+      )
+    case "textarea":
+      return (
+        <Textarea
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          placeholder={nestedField.placeholder}
+          minLength={nestedField.validation?.minLength}
+          maxLength={nestedField.validation?.maxLength}
+          className={invalid ? "border-red-500" : ""}
+        />
+      )
+    case "select":
+      if (nestedField.validation?.multiple) {
+        const selectedValues = Array.isArray(value) ? value : []
+
+        return (
+          <div className="space-y-3">
+            <Popover>
+              <PopoverTrigger asChild>
+                <div
+                  className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid
+                    ? "border-red-500 text-red-500 placeholder-red-500"
+                    : "border-input text-foreground"
+                    } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  <div className="flex flex-wrap items-center gap-1 flex-1 overflow-hidden">
+                    {selectedValues.length > 0 ? (
+                      selectedValues.map((selectedValue, index) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-xs"
+                        >
+                          {selectedValue}
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (!onChange) return
+                              const newValues = selectedValues.filter((v) => v !== selectedValue)
+                              onChange(newValues)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                if (!onChange) return
+                                const newValues = selectedValues.filter((v) => v !== selectedValue)
+                                onChange(newValues)
+                              }
+                            }}
+                            className="hover:bg-primary/20 rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold cursor-pointer"
+                            title={`Remove ${selectedValue}`}
+                          >
+                            X
+                          </span>
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-muted-foreground">{nestedField.placeholder || "Select options"}</span>
+                    )}
+                  </div>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+                </div>
+              </PopoverTrigger>
+              <PopoverContent className="p-0 w-72 sm:w-80 bg-background text-foreground border border-border shadow-md" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput placeholder="Search options..." />
+                  <CommandEmpty>No option found.</CommandEmpty>
+                  <CommandList>
+                    <CommandGroup>
+                      {nestedField.options
+                        ?.filter((option) => option && option.trim() !== "")
+                        .map((option, index) => {
+                          const checked = selectedValues.includes(option)
+                          return (
+                            <CommandItem
+                              key={`${nestedField.id}-${index}`}
+                              value={option}
+                              onSelect={() => {
+                                if (!onChange) return
+                                let newValues
+                                if (checked) {
+                                  newValues = selectedValues.filter((v) => v !== option)
+                                } else {
+                                  newValues = [...selectedValues, option]
+                                }
+                                onChange(newValues)
+                              }}
+                              className="cursor-pointer"
+                            >
+                              <span className="mr-2 flex h-4 w-4 items-center justify-center border rounded-sm bg-background">
+                                {checked && <Check className="h-3 w-3" />}
+                              </span>
+                              {option}
+                            </CommandItem>
+                          )
+                        })}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+        )
+      } else {
+        return (
+          <Select
+            value={value || ""}
+            onValueChange={onChange}
+            disabled={disabled}
+          >
+            <SelectTrigger className={invalid ? "border-red-500" : ""}>
+              <SelectValue placeholder={nestedField.placeholder || "Select an option"} />
+            </SelectTrigger>
+            <SelectContent>
+              {nestedField.options?.map((option, index) => (
+                <SelectItem key={index} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )
+      }
+    case "checkbox":
+      return (
+        <div className="space-y-2">
+          {nestedField.options && nestedField.options.length > 0 ? nestedField.options.map((option, index) => (
+            <div key={index} className="flex items-center space-x-2">
+              <Checkbox
+                id={`${nestedField.id}-${index}`}
+                checked={Array.isArray(value) ? value.includes(option) : false}
+                onCheckedChange={(checked) => {
+                  const currentValue = Array.isArray(value) ? value : []
+                  if (checked) {
+                    onChange([...currentValue, option])
+                  } else {
+                    onChange(currentValue.filter((v) => v !== option))
+                  }
+                }}
+                disabled={disabled}
+                className={invalid ? "border-red-500" : ""}
+              />
+              <Label htmlFor={`${nestedField.id}-${index}`} className="text-sm font-normal cursor-pointer">
+                {option}
+              </Label>
+            </div>
+          )) : (
+            <div className="text-sm text-muted-foreground p-2 border border-dashed rounded text-center">
+              No options available
+            </div>
+          )}
+        </div>
+      )
+    case "radio":
+      return (
+        <div className="space-y-2">
+          {nestedField.options && nestedField.options.length > 0 ? (
+            <RadioGroup
+              value={value || ""}
+              onValueChange={onChange}
+              disabled={disabled}
+              className={invalid ? "text-red-500" : ""}
+            >
+              {nestedField.options.map((option, index) => (
+                <div key={index} className="flex items-center space-x-2">
+                  <RadioGroupItem value={option} id={`${nestedField.id}-${index}`} className={invalid ? "border-red-500" : ""} />
+                  <Label htmlFor={`${nestedField.id}-${index}`} className="text-sm font-normal cursor-pointer">
+                    {option}
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+          ) : (
+            <div className="text-sm text-muted-foreground p-2 border border-dashed rounded text-center">
+              No options available
+            </div>
+          )}
+        </div>
+      )
+    case "file":
+      const handleFileChange = async (e) => {
+        const file = e.target.files?.[0] || null
+
+        if (!file) {
+          onChange(null)
+          return
+        }
+
+        // File type validation
+        if (nestedField.validation?.accept) {
+          const acceptedTypes = nestedField.validation.accept.split(",").map((type) => type.trim())
+          const fileName = file.name || ""
+          const fileType = file.type || ""
+
+          const isAccepted = acceptedTypes.some((acceptType) => {
+            if (acceptType.startsWith(".")) {
+              return fileName.toLowerCase().endsWith(acceptType.toLowerCase())
+            } else if (acceptType.includes("*")) {
+              const baseType = acceptType.split("/")[0]
+              return fileType.startsWith(baseType + "/")
+            } else {
+              return fileType === acceptType
+            }
+          })
+
+          if (!isAccepted) {
+            alert(`File type not allowed. Accepted types: ${nestedField.validation.accept}`)
+            e.target.value = ''
+            onChange(null)
+            return
+          }
+        }
+
+        // File size validation
+        if (nestedField.validation?.maxSize) {
+          const maxSizeBytes = nestedField.validation.maxSize * 1024 * 1024 // Convert MB to bytes
+          if (file.size > maxSizeBytes) {
+            alert(`File size must be less than ${nestedField.validation.maxSize}MB.`)
+            e.target.value = ''
+            onChange(null)
+            return
+          }
+        }
+
+        try {
+          const base64 = await fileToBase64(file)
+          const fileData = {
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            lastModified: file.lastModified,
+            base64: base64
+          }
+          onChange(fileData)
+        } catch (error) {
+          console.error('Error converting file to base64:', error)
+          alert('Error processing file. Please try again.')
+          e.target.value = ''
+          onChange(null)
+        }
+      }
+
+      const fileToBase64 = (file) => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.readAsDataURL(file)
+          reader.onload = () => resolve(reader.result)
+          reader.onerror = error => reject(error)
+        })
+      }
+
+      return (
+        <div className="space-y-2">
+          <Input
+            type="file"
+            onChange={handleFileChange}
+            disabled={disabled}
+            className={`bg-input file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 ${invalid ? "border-red-500" : ""
+              }`}
+            accept={nestedField.validation?.accept || ".jpg,.jpeg,.png,.gif,.webp,.svg,.pdf"}
+          />
+          {value && value.name && (
+            <div className="p-2 border border-green-200 bg-green-50 rounded-md text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{value.name}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(null)
+                    const fileInput = document.querySelector('input[type="file"]')
+                    if (fileInput) fileInput.value = ''
+                  }}
+                  className="text-red-600 hover:text-red-700"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    case "datetime":
+      return (
+        <Input
+          type="datetime-local"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          placeholder={nestedField.placeholder}
+          className={invalid ? "border-red-500" : ""}
+        />
+      )
+    case "phone": {
+      const current = value || {}
+      const country = current.country || ""
+      const number = current.number || ""
+
+      const handleCountry = (countryCode) => {
+        const phoneCountry = phoneCountries.find(c => c.code === countryCode)
+        onChange?.({
+          country: countryCode,
+          dial_code: phoneCountry?.dial,
+          number: number
+        })
+        setPhoneCountryOpen(false)
+      }
+
+      const handleNumber = (val) => {
+        // Remove all non-digit characters
+        const numbersOnly = val.replace(/\D/g, '')
+        onChange?.({
+          ...current,
+          number: numbersOnly
+        })
+      }
+
+      const handleKeyDown = (e) => {
+        // Prevent non-numeric characters
+        if (!/[0-9]|Backspace|Delete|Tab|ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Home|End/.test(e.key)) {
+          e.preventDefault()
+        }
+      }
+
+      const handlePaste = (e) => {
+        e.preventDefault()
+        const pastedText = e.clipboardData.getData('text')
+        // Remove all non-digit characters from pasted text
+        const numbersOnly = pastedText.replace(/\D/g, '')
+        // Update the input value
+        e.target.value = numbersOnly
+        handleNumber(numbersOnly)
+      }
+
+      const selectedCountry = phoneCountries.find(c => c.code === country)
+
+      return (
+        <div className="space-y-2">
+          <div className="grid grid-cols-[140px_1fr] gap-2">
+            {/* Phone Country Select with Search */}
+            <div>
+              <Label className="text-xs text-muted-foreground">Country Code</Label>
+              <Popover open={phoneCountryOpen} onOpenChange={setPhoneCountryOpen}>
+                <PopoverTrigger asChild>
+                  <div
+                    className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                      } ${disabled || loadingPhoneCountries ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      {selectedCountry ? (
+                        <>
+                          {selectedCountry.emoji}
+                          <span className="truncate text-xs">{selectedCountry.dial}</span>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">
+                          {loadingPhoneCountries ? "Loading..." : "Select"}
+                        </span>
+                      )}
+                    </div>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-80 bg-background text-foreground border border-border shadow-md" align="start">
+                  <Command shouldFilter={false}>
+                    <div className="flex items-center border-b px-3">
+                      <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                      <CommandInput
+                        placeholder="Search countries..."
+                        value={phoneCountrySearch}
+                        onValueChange={setPhoneCountrySearch}
+                      />
+                    </div>
+                    <CommandEmpty>No country found.</CommandEmpty>
+                    <CommandList className="max-h-60">
+                      <CommandGroup>
+                        {filteredPhoneCountries.map((country) => (
+                          <CommandItem
+                            key={country.code}
+                            value={`${country.label} ${country.dial}`}
+                            onSelect={() => handleCountry(country.code)}
+                            className="cursor-pointer"
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${current.country === country.code ? "opacity-100" : "opacity-0"
+                                }`}
+                            />
+                            {country.emoji} {country.label} ({country.dial})
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div>
+              <Label className="text-xs text-muted-foreground">Phone Number</Label>
+              <Input
+                type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder={invalid && error ? error : (nestedField.placeholder || "1234567890")}
+                value={number}
+                onChange={(e) => handleNumber(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                disabled={disabled}
+                className={`bg-input ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
+                aria-label="Phone number"
+              />
+            </div>
+          </div>
+          {!invalid && selectedCountry && (
+            <p className="text-xs text-muted-foreground">
+              Selected: {selectedCountry.emoji} {selectedCountry.label} • Format: {selectedCountry.dial} {selectedCountry.len} digits
+            </p>
+          )}
+          {!invalid && !selectedCountry && (
+            <p className="text-xs text-muted-foreground">Select country code, then enter phone number</p>
+          )}
+        </div>
+      )
+    }
+
+    case "location": {
+      const current = value || {}
+
+      const handleCountry = (countryId) => {
+        const country = countries.find(c => c.id === parseInt(countryId))
+        onChange?.({
+          country: countryId,
+          country_name: country?.name,
+          state: undefined,
+          city: undefined
+        })
+        setCountryOpen(false)
+      }
+
+      const handleState = (stateId) => {
+        const state = states.find(s => s.id === parseInt(stateId))
+        onChange?.({
+          ...current,
+          state: stateId,
+          state_name: state?.name,
+          city: undefined
+        })
+        setStateOpen(false)
+      }
+
+      const handleCity = (cityId) => {
+        const city = cities.find(c => c.id === parseInt(cityId))
+        onChange?.({
+          ...current,
+          city: cityId,
+          city_name: city?.name
+        })
+        setCityOpen(false)
+      }
+
+      const getLocationPlaceholder = (type) => {
+        if (invalid && error) {
+          if (type === "country") return error
+          if (type === "state" && !current.country) return "Select country first"
+          if (type === "city" && !current.state) return "Select state first"
+        }
+
+        if (type === "country" && countries.length === 0) return "No countries available"
+        if (type === "state" && states.length === 0) return "No states available"
+        if (type === "city" && cities.length === 0) return "No cities available"
+
+        return type === "country" ? "Select country" : type === "state" ? "Select state" : "Select city"
+      }
+
+      const selectedCountry = countries.find(c => c.id === parseInt(current.country))
+      const selectedState = states.find(s => s.id === parseInt(current.state))
+      const selectedCity = cities.find(c => c.id === parseInt(current.city))
+
+      return (
+        <div className="space-y-3">
+          {apiError && (
+            <div className="flex items-center gap-2 text-amber-600 text-xs bg-amber-50 p-2 rounded-md">
+              <AlertCircle className="h-3 w-3" />
+              <span>{apiError}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Country Select with Search */}
+            <div>
+              <Label className="text-xs text-muted-foreground">Country</Label>
+              <Popover open={countryOpen} onOpenChange={setCountryOpen}>
+                <PopoverTrigger asChild>
+                  <div
+                    className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                      } ${disabled || countries.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      {selectedCountry ? (
+                        <>
+                          <span>{selectedCountry.emoji}</span>
+                          <span className="truncate">{selectedCountry.name}</span>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          {getLocationPlaceholder("country")}
+                        </span>
+                      )}
+                    </div>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
+                  <Command shouldFilter={false}>
+                    <div className="flex items-center border-b px-3">
+                      <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                      <CommandInput
+                        placeholder="Search countries..."
+                        value={countrySearch}
+                        onValueChange={setCountrySearch}
+                      />
+                    </div>
+                    <CommandList>
+                      <CommandEmpty>No country found.</CommandEmpty>
+                      <CommandGroup>
+                        {filteredCountries.map((country) => (
+                          <CommandItem
+                            key={country.id}
+                            value={country.name}
+                            onSelect={() => handleCountry(String(country.id))}
+                            className="cursor-pointer"
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${current.country === String(country.id) ? "opacity-100" : "opacity-0"
+                                }`}
+                            />
+                            <span className="mr-2">{country.emoji}</span>
+                            <span>{country.name}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">({country.iso2})</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* State Select with Search */}
+            <div>
+              <Label className="text-xs text-muted-foreground">State</Label>
+              <Popover open={stateOpen} onOpenChange={setStateOpen}>
+                <PopoverTrigger asChild>
+                  <div
+                    className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                      } ${disabled || !current.country || states.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <div className="truncate">
+                      {selectedState ? (
+                        selectedState.name
+                      ) : (
+                        <span className="text-muted-foreground">
+                          {loadingStates ? "Loading..." : getLocationPlaceholder("state")}
+                        </span>
+                      )}
+                    </div>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
+                  <Command shouldFilter={false}>
+                    <div className="flex items-center border-b px-3">
+                      <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                      <CommandInput
+                        placeholder="Search states..."
+                        value={stateSearch}
+                        onValueChange={setStateSearch}
+                      />
+                    </div>
+                    <CommandList>
+                      <CommandEmpty>
+                        {states.length === 0 ? "No states available" : "No state found"}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {filteredStates.map((state) => (
+                          <CommandItem
+                            key={state.id}
+                            value={state.name}
+                            onSelect={() => handleState(String(state.id))}
+                            className="cursor-pointer"
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${current.state === String(state.id) ? "opacity-100" : "opacity-0"
+                                }`}
+                            />
+                            {state.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* City Select with Search */}
+            <div>
+              <Label className="text-xs text-muted-foreground">City</Label>
+              <Popover open={cityOpen} onOpenChange={setCityOpen}>
+                <PopoverTrigger asChild>
+                  <div
+                    className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                      } ${disabled || !current.state || cities.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <div className="truncate">
+                      {selectedCity ? (
+                        selectedCity.name
+                      ) : (
+                        <span className="text-muted-foreground">
+                          {loadingCities ? "Loading..." : getLocationPlaceholder("city")}
+                        </span>
+                      )}
+                    </div>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
+                  <Command shouldFilter={false}>
+                    <div className="flex items-center border-b px-3">
+                      <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                      <CommandInput
+                        placeholder="Search cities..."
+                        value={citySearch}
+                        onValueChange={setCitySearch}
+                      />
+                    </div>
+                    <CommandList>
+                      <CommandEmpty>
+                        {cities.length === 0 ? "No cities available" : "No city found"}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {filteredCities.map((city) => (
+                          <CommandItem
+                            key={city.id}
+                            value={city.name}
+                            onSelect={() => handleCity(String(city.id))}
+                            className="cursor-pointer"
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${current.city === String(city.id) ? "opacity-100" : "opacity-0"
+                                }`}
+                            />
+                            {city.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+
+          {/* Information message when no data available */}
+          {(countries.length === 0 || states.length === 0 || cities.length === 0) && (
+            <div className="flex items-center gap-2 text-blue-600 text-xs bg-blue-50 p-2 rounded-md">
+              <Info className="h-3 w-3" />
+              <span>
+                {countries.length === 0 && "Countries data not available. "}
+                {states.length === 0 && current.country && "States data not available for selected country. "}
+                {cities.length === 0 && current.state && "Cities data not available for selected state."}
+              </span>
+            </div>
+          )}
+
+          {invalid && error && !current.country && (
+            <div className="text-xs text-red-500 font-medium">
+              {error}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    default:
+      return (
+        <Input
+          type="text"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          placeholder={nestedField.placeholder}
+          className={invalid ? "border-red-500" : ""}
+        />
+      )
+  }
+}
 
 export function FieldRenderer({ field, value, onChange, disabled = false, invalid = false, error }) {
+  // Provide a default onChange function if none is provided
+  const safeOnChange = onChange || (() => {})
   const [countries, setCountries] = useState([])
   const [phoneCountries, setPhoneCountries] = useState([])
   const [states, setStates] = useState([])
@@ -179,6 +1030,37 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
     return field.placeholder || "Select an option"
   }
 
+  const locationData = {
+    countries,
+    states,
+    cities,
+    phoneCountries,
+    loadingStates,
+    loadingCities,
+    loadingPhoneCountries,
+    apiError,
+    countrySearch,
+    stateSearch,
+    citySearch,
+    phoneCountrySearch,
+    countryOpen,
+    stateOpen,
+    cityOpen,
+    phoneCountryOpen,
+    setCountrySearch,
+    setStateSearch,
+    setCitySearch,
+    setPhoneCountrySearch,
+    setCountryOpen,
+    setStateOpen,
+    setCityOpen,
+    setPhoneCountryOpen,
+    filteredCountries,
+    filteredStates,
+    filteredCities,
+    filteredPhoneCountries
+  }
+
   const renderField = () => {
     const placeholder = getPlaceholder()
     const selectPlaceholder = getSelectPlaceholder()
@@ -235,141 +1117,196 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
 
       case "select":
         if (field.validation?.multiple) {
-          const selectedValues = Array.isArray(value) ? value : []
-          
+          const selectedValues = Array.isArray(value?.value) ? value?.value : []
+
           return (
-            <Popover>
-              <PopoverTrigger asChild>
-                <div
-                  className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${
-                    invalid 
-                      ? "border-red-500 text-red-500 placeholder-red-500" 
+            <div className="space-y-3">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <div
+                    className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid
+                      ? "border-red-500 text-red-500 placeholder-red-500"
                       : "border-input text-foreground"
-                  } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                >
-                  <div className="flex flex-wrap items-center gap-1 flex-1 overflow-hidden">
-                    {selectedValues.length > 0 ? (
-                      selectedValues.map((selectedValue, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-xs"
-                        >
-                          {selectedValue}
+                      } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <div className="flex flex-wrap items-center gap-1 flex-1 overflow-hidden">
+                      {selectedValues.length > 0 ? (
+                        selectedValues.map((selectedValue, index) => (
                           <span
-                            role="button"
-                            tabIndex={0}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (!onChange) return
-                              onChange(selectedValues.filter((v) => v !== selectedValue))
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
+                            key={index}
+                            className="inline-flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-xs"
+                          >
+                            {selectedValue}
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
                                 e.stopPropagation()
                                 if (!onChange) return
-                                onChange(selectedValues.filter((v) => v !== selectedValue))
-                              }
-                            }}
-                            className="hover:bg-primary/20 rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold cursor-pointer"
-                            title={`Remove ${selectedValue}`}
-                          >
-                            X
-                          </span>
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-muted-foreground">{selectPlaceholder}</span>
-                    )}
-                  </div>
-                  <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="p-0 w-72 sm:w-80 bg-background text-foreground border border-border shadow-md" align="start">
-                <Command shouldFilter={false}>
-                  <CommandInput placeholder="Search options..." />
-                  <CommandEmpty>No option found.</CommandEmpty>
-                  <CommandList>
-                    <CommandGroup>
-                      {field.options
-                        ?.filter((option) => option && option.trim() !== "")
-                        .map((option, index) => {
-                          const checked = selectedValues.includes(option)
-                          return (
-                            <CommandItem
-                              key={`${field.id}-${index}`}
-                              value={option}
-                              onSelect={() => {
-                                if (!onChange) return
-                                if (checked) {
-                                  onChange(selectedValues.filter((v) => v !== option))
-                                } else {
-                                  onChange([...selectedValues, option])
+                                const newValues = selectedValues.filter((v) => v !== selectedValue)
+                                safeOnChange({
+                                  value: newValues,
+                                  nestedFields: value?.nestedFields || {}
+                                })
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  if (!onChange) return
+                                  const newValues = selectedValues.filter((v) => v !== selectedValue)
+                                  safeOnChange({
+                                    value: newValues,
+                                    nestedFields: value?.nestedFields || {}
+                                  })
                                 }
                               }}
-                              className="cursor-pointer"
+                              className="hover:bg-primary/20 rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold cursor-pointer"
+                              title={`Remove ${selectedValue}`}
                             >
-                              <span className="mr-2 flex h-4 w-4 items-center justify-center border rounded-sm bg-background">
-                                {checked && <Check className="h-3 w-3" />}
-                              </span>
-                              {option}
-                            </CommandItem>
-                          )
-                        })}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+                              X
+                            </span>
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">{selectPlaceholder}</span>
+                      )}
+                    </div>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-72 sm:w-80 bg-background text-foreground border border-border shadow-md" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput placeholder="Search options..." />
+                    <CommandEmpty>No option found.</CommandEmpty>
+                    <CommandList>
+                      <CommandGroup>
+                        {field.options
+                          ?.filter((option) => option && option.trim() !== "")
+                          .map((option, index) => {
+                            const checked = selectedValues.includes(option)
+                            return (
+                              <CommandItem
+                                key={`${field.id}-${index}`}
+                                value={option}
+                                onSelect={() => {
+                                  if (!onChange) return
+                                  let newValues
+                                  if (checked) {
+                                    newValues = selectedValues.filter((v) => v !== option)
+                                  } else {
+                                    newValues = [...selectedValues, option]
+                                  }
+                                  safeOnChange({
+                                    value: newValues,
+                                    nestedFields: value?.nestedFields || {}
+                                  })
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <span className="mr-2 flex h-4 w-4 items-center justify-center border rounded-sm bg-background">
+                                  {checked && <Check className="h-3 w-3" />}
+                                </span>
+                                {option}
+                              </CommandItem>
+                            )
+                          })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+
+              {renderNestedFields(field, selectedValues, onChange, value, disabled, invalid, locationData)}
+            </div>
           )
         } else {
           return (
-            <Select value={value || ""} onValueChange={onChange} disabled={disabled}>
-              <SelectTrigger className={`bg-input ${invalid ? "border-red-500 text-red-500" : ""}`}>
-                <SelectValue placeholder={selectPlaceholder} />
-              </SelectTrigger>
-              <SelectContent className="bg-background text-foreground border border-border shadow-md z-50">
-                {field.options
-                  ?.filter((option) => option && option.trim() !== "")
-                  .map((option, index) => (
-                    <SelectItem
-                      key={index}
-                      value={option || `option-${index}`}
-                      className="hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                    >
-                      {option}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-3">
+              <Select value={value?.value || ""} onValueChange={(selectedValue) => {
+                safeOnChange({
+                  value: selectedValue,
+                  nestedFields: value?.nestedFields || {}
+                })
+              }} disabled={disabled}>
+                <SelectTrigger className={`bg-input ${invalid ? "border-red-500 text-red-500" : ""}`}>
+                  <SelectValue placeholder={selectPlaceholder} />
+                </SelectTrigger>
+                <SelectContent className="bg-background text-foreground border border-border shadow-md z-50">
+                  {field.options
+                    ?.filter((option) => option && option.trim() !== "")
+                    .map((option, index) => (
+                      <SelectItem
+                        key={index}
+                        value={option || `option-${index}`}
+                        className="hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                      >
+                        {option}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+
+              {renderNestedFields(field, value?.value, onChange, value, disabled, invalid, locationData)}
+            </div>
           )
         }
 
       case "checkbox":
         return (
           <div className="space-y-3">
-            {field.options?.map((option, index) => (
-              <div key={index} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`${field.id}-${index}`}
-                  checked={Array.isArray(value) ? value.includes(option) : false}
-                  onCheckedChange={(checked) => {
-                    if (!onChange) return
-                    const currentValue = Array.isArray(value) ? value : []
-                    if (checked) {
-                      onChange([...currentValue, option])
-                    } else {
-                      onChange(currentValue.filter((v) => v !== option))
-                    }
-                  }}
-                  disabled={disabled}
-                  className={invalid ? "border-red-500" : ""}
-                />
-                <Label htmlFor={`${field.id}-${index}`} className={`text-sm font-normal cursor-pointer ${invalid ? "text-red-500" : ""}`}>
-                  {option}
-                </Label>
+            {field.options && field.options.length > 0 ? field.options.map((option, index) => (
+              <div key={index} className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`${field.id}-${index}`}
+                    checked={Array.isArray(value?.value) ? value.value.includes(option) : false}
+                    onCheckedChange={(checked) => {
+                      if (!onChange) return
+                      const currentValue = Array.isArray(value?.value) ? value.value : []
+                      const currentNestedFields = value?.nestedFields || {}
+
+                      let newValue
+                      if (checked) {
+                        newValue = [...currentValue, option]
+                      } else {
+                        newValue = currentValue.filter((v) => v !== option)
+                        
+                        // Remove nested fields for this option if they exist
+                        if (field.nestedFields && field.nestedFields[index]) {
+                          const { [index]: removed, ...remainingNestedFields } = currentNestedFields
+                          safeOnChange({
+                            value: newValue,
+                            nestedFields: remainingNestedFields
+                          })
+                          return
+                        }
+                      }
+
+                      safeOnChange({
+                        value: newValue,
+                        nestedFields: currentNestedFields
+                      })
+                    }}
+                    disabled={disabled}
+                    className={invalid ? "border-red-500" : ""}
+                  />
+                  <Label htmlFor={`${field.id}-${index}`} className={`text-sm font-normal cursor-pointer ${invalid ? "text-red-500" : ""}`}>
+                    {option}
+                  </Label>
+                </div>
+
+                {Array.isArray(value?.value) && value.value?.includes(option) && field.nestedFields && field.nestedFields[index] && (
+                  <div className="ml-6 space-y-3">
+                    {renderNestedFields(field, [option], onChange, value, disabled, invalid, locationData)}
+                  </div>
+                )}
               </div>
-            ))}
+            )) : (
+              <div className="text-sm text-muted-foreground p-3 border border-dashed rounded-lg text-center">
+                No options available. Add options in the field configuration panel.
+              </div>
+            )}
             {invalid && (
               <div className="text-xs text-red-500 font-medium">
                 {error}
@@ -381,16 +1318,40 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
       case "radio":
         return (
           <div className="space-y-3">
-            <RadioGroup value={value} onValueChange={onChange} disabled={disabled} className={invalid ? "text-red-500" : ""}>
-              {field.options?.map((option, index) => (
-                <div key={index} className="flex items-center space-x-2">
-                  <RadioGroupItem value={option} id={`${field.id}-${index}`} className={invalid ? "border-red-500" : ""} />
-                  <Label htmlFor={`${field.id}-${index}`} className="text-sm font-normal cursor-pointer">
-                    {option}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
+            {field.options && field.options.length > 0 ? (
+              <RadioGroup 
+                value={value?.value || ""} 
+                onValueChange={(selectedValue) => {
+                  safeOnChange({
+                    value: selectedValue,
+                    nestedFields: value?.nestedFields || {}
+                  })
+                }}
+                disabled={disabled}
+                className={invalid ? "text-red-500" : ""}
+              >
+                {field.options.map((option, index) => (
+                  <div key={index} className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value={option} id={`${field.id}-${index}`} className={invalid ? "border-red-500" : ""} />
+                      <Label htmlFor={`${field.id}-${index}`} className="text-sm font-normal cursor-pointer">
+                        {option}
+                      </Label>
+                    </div>
+
+                    {value?.value === option && field.nestedFields && field.nestedFields[index] && (
+                      <div className="ml-6 space-y-3">
+                        {renderNestedFields(field, option, onChange, value, disabled, invalid, locationData)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </RadioGroup>
+            ) : (
+              <div className="text-sm text-muted-foreground p-3 border border-dashed rounded-lg text-center">
+                No options available. Add options in the field configuration panel.
+              </div>
+            )}
             {invalid && (
               <div className="text-xs text-red-500 font-medium">
                 {error}
@@ -399,201 +1360,199 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
           </div>
         )
 
-        case "file": {
-          const handleFileChange = async (e) => {
-            const file = e.target.files?.[0] || null
-            
-            if (!file) {
-              onChange?.(null)
-              return
-            }
-        
-            // More flexible file type validation
-            const allowedTypes = [
-              'image/jpeg',
-              'image/jpg', 
-              'image/png',
-              'image/gif',
-              'image/webp',
-              'image/svg+xml',
-              'application/pdf'
-            ]
-            
-            const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.pdf']
-            
-            // Check both MIME type and file extension
-            const isValidType = allowedTypes.includes(file.type) || 
-                               allowedExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
-            
-            if (!isValidType) {
-              alert('Please select only image files (JPEG, PNG, GIF, WebP, SVG) or PDF files.')
-              e.target.value = '' // Reset input
-              onChange?.(null)
-              return
-            }
-        
-            // Validate file size (5MB = 5 * 1024 * 1024 bytes)
-            const maxSize = 5 * 1024 * 1024 // 5MB in bytes
-            if (file.size > maxSize) {
-              alert('File size must be less than 5MB.')
-              e.target.value = '' // Reset input
-              onChange?.(null)
-              return
-            }
-        
-            try {
-              // Convert file to base64
-              const base64 = await fileToBase64(file)
-              
-              // Create object with file info and base64 data
-              const fileData = {
-                name: file.name,
-                type: file.type,
-                size: file.size,
-                lastModified: file.lastModified,
-                base64: base64
-              }
-              
-              console.log('File processed:', {
-                name: file.name,
-                type: file.type,
-                size: file.size,
-                base64Length: base64.length
-              })
-              
-              onChange?.(fileData)
-            } catch (error) {
-              console.error('Error converting file to base64:', error)
-              alert('Error processing file. Please try again.')
-              e.target.value = '' // Reset input
-              onChange?.(null)
-            }
+      case "file": {
+        const handleFileChange = async (e) => {
+          const file = e.target.files?.[0] || null
+
+          if (!file) {
+            onChange?.(null)
+            return
           }
-        
-          // Helper function to convert file to base64
-          const fileToBase64 = (file) => {
-            return new Promise((resolve, reject) => {
-              const reader = new FileReader()
-              reader.readAsDataURL(file)
-              reader.onload = () => {
-                resolve(reader.result)
-              }
-              reader.onerror = error => reject(error)
+
+          // More flexible file type validation
+          const allowedTypes = [
+            'image/jpeg',
+            'image/jpg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'image/svg+xml',
+            'application/pdf'
+          ]
+
+          const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.pdf']
+
+          // Check both MIME type and file extension
+          const isValidType = allowedTypes.includes(file.type) ||
+            allowedExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
+
+          if (!isValidType) {
+            toast.error('Please select only image files (JPEG, PNG, GIF, WebP, SVG) or PDF files.')
+            e.target.value = ''
+            onChange?.(null)
+            return
+          }
+
+          // Validate file size (5MB = 5 * 1024 * 1024 bytes)
+          const maxSize = 5 * 1024 * 1024 // 5MB in bytes
+          if (file.size > maxSize) {
+            toast.error('File size must be less than 5MB.')
+            e.target.value = ''
+            onChange?.(null)
+            return
+          }
+
+          try {
+            // Convert file to base64
+            const base64 = await fileToBase64(file)
+
+            // Create object with file info and base64 data
+            const fileData = {
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              lastModified: file.lastModified,
+              base64: base64
+            }
+
+            console.log('File processed:', {
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              base64Length: base64.length
             })
+
+            onChange?.(fileData)
+          } catch (error) {
+            console.error('Error converting file to base64:', error)
+            toast.error('Error processing file. Please try again.')
+            e.target.value = ''
+            onChange?.(null)
           }
-        
-          // Get accepted file types for input
-          const getAcceptedTypes = () => {
-            return ".jpg,.jpeg,.png,.gif,.webp,.svg,.pdf"
-          }
-        
-          // Format file size for display
-          const formatFileSize = (bytes) => {
-            if (bytes === 0) return '0 Bytes'
-            const k = 1024
-            const sizes = ['Bytes', 'KB', 'MB', 'GB']
-            const i = Math.floor(Math.log(bytes) / Math.log(k))
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-          }
-        
-          // Check if file is an image (with safe access)
-          const isImageFile = (file) => {
-            return file && file.type && typeof file.type === 'string' && 
-                   (file.type.startsWith('image/') || 
-                    file.name.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|svg)$/))
-          }
-        
-          const fileValue = value || null
-        
-          return (
-            <div className="space-y-2">
-              <Input
-                type="file"
-                onChange={handleFileChange}
-                disabled={disabled}
-                className={`bg-input file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 ${
-                  invalid ? "border-red-500" : ""
+        }
+
+        // Helper function to convert file to base64
+        const fileToBase64 = (file) => {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.readAsDataURL(file)
+            reader.onload = () => {
+              resolve(reader.result)
+            }
+            reader.onerror = error => reject(error)
+          })
+        }
+
+        // Get accepted file types for input
+        const getAcceptedTypes = () => {
+          return ".jpg,.jpeg,.png,.gif,.webp,.svg,.pdf"
+        }
+
+        // Format file size for display
+        const formatFileSize = (bytes) => {
+          if (bytes === 0) return '0 Bytes'
+          const k = 1024
+          const sizes = ['Bytes', 'KB', 'MB', 'GB']
+          const i = Math.floor(Math.log(bytes) / Math.log(k))
+          return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+        }
+
+        // Check if file is an image (with safe access)
+        const isImageFile = (file) => {
+          return file && file.type && typeof file.type === 'string' &&
+            (file.type.startsWith('image/') ||
+              file.name.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|svg)$/))
+        }
+
+        const fileValue = value || null
+
+        return (
+          <div className="space-y-2">
+            <Input
+              type="file"
+              onChange={handleFileChange}
+              disabled={disabled}
+              className={`bg-input file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 ${invalid ? "border-red-500" : ""
                 }`}
-                accept={getAcceptedTypes()}
-              />
-              
-              {/* File info display */}
-              {fileValue && fileValue.name && (
-                <div className="p-3 border border-green-200 bg-green-50 rounded-md">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className={`w-8 h-8 flex items-center justify-center rounded ${
-                        fileValue.type === 'application/pdf' || fileValue.name.toLowerCase().endsWith('.pdf')
-                          ? 'bg-red-100 text-red-600' 
-                          : 'bg-blue-100 text-blue-600'
+              accept={getAcceptedTypes()}
+            />
+
+            {/* File info display */}
+            {fileValue && fileValue.name && (
+              <div className="p-3 border border-green-200 bg-green-50 rounded-md">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-8 h-8 flex items-center justify-center rounded ${fileValue.type === 'application/pdf' || fileValue.name.toLowerCase().endsWith('.pdf')
+                      ? 'bg-red-100 text-red-600'
+                      : 'bg-blue-100 text-blue-600'
                       }`}>
-                        {fileValue.type === 'application/pdf' || fileValue.name.toLowerCase().endsWith('.pdf') ? (
-                          <span className="text-xs font-bold">PDF</span>
-                        ) : (
-                          <span className="text-xs">IMG</span>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 truncate max-w-xs">
-                          {fileValue.name}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {formatFileSize(fileValue.size || 0)} • {fileValue.type || 'Unknown type'}
-                        </p>
-                        <p className="text-xs text-green-600">
-                          ✓ Ready to upload ({formatFileSize(fileValue.base64?.length || 0)} as base64)
-                        </p>
-                      </div>
+                      {fileValue.type === 'application/pdf' || fileValue.name.toLowerCase().endsWith('.pdf') ? (
+                        <span className="text-xs font-bold">PDF</span>
+                      ) : (
+                        <span className="text-xs">IMG</span>
+                      )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onChange?.(null)
-                        // Reset the file input
-                        const fileInput = document.querySelector('input[type="file"]')
-                        if (fileInput) fileInput.value = ''
-                      }}
-                      className="px-3 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md border border-transparent hover:border-red-200 transition-colors"
-                    >
-                      Remove
-                    </button>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 truncate max-w-xs">
+                        {fileValue.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {formatFileSize(fileValue.size || 0)} • {fileValue.type || 'Unknown type'}
+                      </p>
+                      <p className="text-xs text-green-600">
+                        ✓ Ready to upload ({formatFileSize(fileValue.base64?.length || 0)} as base64)
+                      </p>
+                    </div>
                   </div>
-                  
-                  {/* Image preview for image files - with safe access */}
-                  {isImageFile(fileValue) && fileValue.base64 && (
-                    <div className="mt-2">
-                      <img 
-                        src={fileValue.base64} 
-                        alt="Preview" 
-                        className="max-h-32 max-w-full rounded border"
-                        onError={(e) => {
-                          console.error('Error loading image preview')
-                          e.target.style.display = 'none'
-                        }}
-                      />
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange?.(null)
+                      // Reset the file input
+                      const fileInput = document.querySelector('input[type="file"]')
+                      if (fileInput) fileInput.value = ''
+                    }}
+                    className="px-3 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md border border-transparent hover:border-red-200 transition-colors"
+                  >
+                    Remove
+                  </button>
                 </div>
-              )}
-              
-              {/* Help text */}
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p>Allowed formats: JPEG, PNG, GIF, WebP, SVG, PDF</p>
-                <p>Maximum file size: 5MB</p>
-                <p className="text-blue-600">Files will be converted to base64 format</p>
-                {/* {field.validation?.multiple && (
+
+                {/* Image preview for image files - with safe access */}
+                {isImageFile(fileValue) && fileValue.base64 && (
+                  <div className="mt-2">
+                    <img
+                      src={fileValue.base64}
+                      alt="Preview"
+                      className="max-h-32 max-w-full rounded border"
+                      onError={(e) => {
+                        console.error('Error loading image preview')
+                        e.target.style.display = 'none'
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Help text */}
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>Allowed formats: JPEG, PNG, GIF, WebP, SVG, PDF</p>
+              <p>Maximum file size: 5MB</p>
+              <p className="text-blue-600">Files will be converted to base64 format</p>
+              {/* {field.validation?.multiple && (
                   <p>Multiple files allowed</p>
                 )} */}
-              </div>
-        
-              {invalid && (
-                <div className="text-xs text-red-500 font-medium">
-                  {error}
-                </div>
-              )}
             </div>
-          )
-        }
+
+            {invalid && (
+              <div className="text-xs text-red-500 font-medium">
+                {error}
+              </div>
+            )}
+          </div>
+        )
+      }
 
       case "datetime":
         return (
@@ -611,33 +1570,33 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
 
       case "location": {
         const current = value || {}
-        
+
         const handleCountry = (countryId) => {
           const country = countries.find(c => c.id === parseInt(countryId))
-          onChange?.({ 
-            country: countryId, 
+          onChange?.({
+            country: countryId,
             country_name: country?.name,
-            state: undefined, 
-            city: undefined 
+            state: undefined,
+            city: undefined
           })
           setCountryOpen(false)
         }
-        
+
         const handleState = (stateId) => {
           const state = states.find(s => s.id === parseInt(stateId))
-          onChange?.({ 
-            ...current, 
+          onChange?.({
+            ...current,
             state: stateId,
             state_name: state?.name,
-            city: undefined 
+            city: undefined
           })
           setStateOpen(false)
         }
-        
+
         const handleCity = (cityId) => {
           const city = cities.find(c => c.id === parseInt(cityId))
-          onChange?.({ 
-            ...current, 
+          onChange?.({
+            ...current,
             city: cityId,
             city_name: city?.name
           })
@@ -650,11 +1609,11 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
             if (type === "state" && !current.country) return "Select country first"
             if (type === "city" && !current.state) return "Select state first"
           }
-          
+
           if (type === "country" && countries.length === 0) return "No countries available"
           if (type === "state" && states.length === 0) return "No states available"
           if (type === "city" && cities.length === 0) return "No cities available"
-          
+
           return type === "country" ? "Select country" : type === "state" ? "Select state" : "Select city"
         }
 
@@ -670,7 +1629,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 <span>{apiError}</span>
               </div>
             )}
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* Country Select with Search */}
               <div>
@@ -678,9 +1637,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 <Popover open={countryOpen} onOpenChange={setCountryOpen}>
                   <PopoverTrigger asChild>
                     <div
-                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${
-                        invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
-                      } ${disabled || countries.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                        } ${disabled || countries.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                     >
                       <div className="flex items-center gap-2 truncate">
                         {selectedCountry ? (
@@ -701,8 +1659,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                     <Command shouldFilter={false}>
                       <div className="flex items-center border-b px-3">
                         <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                        <CommandInput 
-                          placeholder="Search countries..." 
+                        <CommandInput
+                          placeholder="Search countries..."
                           value={countrySearch}
                           onValueChange={setCountrySearch}
                         />
@@ -718,9 +1676,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                               className="cursor-pointer"
                             >
                               <Check
-                                className={`mr-2 h-4 w-4 ${
-                                  current.country === String(country.id) ? "opacity-100" : "opacity-0"
-                                }`}
+                                className={`mr-2 h-4 w-4 ${current.country === String(country.id) ? "opacity-100" : "opacity-0"
+                                  }`}
                               />
                               <span className="mr-2">{country.emoji}</span>
                               <span>{country.name}</span>
@@ -740,9 +1697,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 <Popover open={stateOpen} onOpenChange={setStateOpen}>
                   <PopoverTrigger asChild>
                     <div
-                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${
-                        invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
-                      } ${disabled || !current.country || states.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                        } ${disabled || !current.country || states.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                     >
                       <div className="truncate">
                         {selectedState ? (
@@ -760,8 +1716,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                     <Command shouldFilter={false}>
                       <div className="flex items-center border-b px-3">
                         <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                        <CommandInput 
-                          placeholder="Search states..." 
+                        <CommandInput
+                          placeholder="Search states..."
                           value={stateSearch}
                           onValueChange={setStateSearch}
                         />
@@ -779,9 +1735,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                               className="cursor-pointer"
                             >
                               <Check
-                                className={`mr-2 h-4 w-4 ${
-                                  current.state === String(state.id) ? "opacity-100" : "opacity-0"
-                                }`}
+                                className={`mr-2 h-4 w-4 ${current.state === String(state.id) ? "opacity-100" : "opacity-0"
+                                  }`}
                               />
                               {state.name}
                             </CommandItem>
@@ -799,9 +1754,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 <Popover open={cityOpen} onOpenChange={setCityOpen}>
                   <PopoverTrigger asChild>
                     <div
-                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${
-                        invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
-                      } ${disabled || !current.state || cities.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                        } ${disabled || !current.state || cities.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                     >
                       <div className="truncate">
                         {selectedCity ? (
@@ -819,8 +1773,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                     <Command shouldFilter={false}>
                       <div className="flex items-center border-b px-3">
                         <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                        <CommandInput 
-                          placeholder="Search cities..." 
+                        <CommandInput
+                          placeholder="Search cities..."
                           value={citySearch}
                           onValueChange={setCitySearch}
                         />
@@ -838,9 +1792,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                               className="cursor-pointer"
                             >
                               <Check
-                                className={`mr-2 h-4 w-4 ${
-                                  current.city === String(city.id) ? "opacity-100" : "opacity-0"
-                                }`}
+                                className={`mr-2 h-4 w-4 ${current.city === String(city.id) ? "opacity-100" : "opacity-0"
+                                  }`}
                               />
                               {city.name}
                             </CommandItem>
@@ -852,7 +1805,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 </Popover>
               </div>
             </div>
-            
+
             {/* Information message when no data available */}
             {(countries.length === 0 || states.length === 0 || cities.length === 0) && (
               <div className="flex items-center gap-2 text-blue-600 text-xs bg-blue-50 p-2 rounded-md">
@@ -864,7 +1817,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 </span>
               </div>
             )}
-            
+
             {invalid && error && !current.country && (
               <div className="text-xs text-red-500 font-medium">
                 {error}
@@ -878,33 +1831,33 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
         const current = value || {}
         const country = current.country || ""
         const number = current.number || ""
-        
+
         const handleCountry = (countryCode) => {
           const phoneCountry = phoneCountries.find(c => c.code === countryCode)
-          onChange?.({ 
-            country: countryCode, 
+          onChange?.({
+            country: countryCode,
             dial_code: phoneCountry?.dial,
-            number: number 
+            number: number
           })
           setPhoneCountryOpen(false)
         }
-        
+
         const handleNumber = (val) => {
           // Remove all non-digit characters
           const numbersOnly = val.replace(/\D/g, '')
-          onChange?.({ 
-            ...current, 
-            number: numbersOnly 
+          onChange?.({
+            ...current,
+            number: numbersOnly
           })
         }
-      
+
         const handleKeyDown = (e) => {
           // Prevent non-numeric characters
           if (!/[0-9]|Backspace|Delete|Tab|ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Home|End/.test(e.key)) {
             e.preventDefault()
           }
         }
-      
+
         const handlePaste = (e) => {
           e.preventDefault()
           const pastedText = e.clipboardData.getData('text')
@@ -914,9 +1867,9 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
           e.target.value = numbersOnly
           handleNumber(numbersOnly)
         }
-      
+
         const selectedCountry = phoneCountries.find(c => c.code === country)
-      
+
         return (
           <div className="space-y-2">
             <div className="grid grid-cols-[140px_1fr] gap-2">
@@ -926,9 +1879,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 <Popover open={phoneCountryOpen} onOpenChange={setPhoneCountryOpen}>
                   <PopoverTrigger asChild>
                     <div
-                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${
-                        invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
-                      } ${disabled || loadingPhoneCountries ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                        } ${disabled || loadingPhoneCountries ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                     >
                       <div className="flex items-center gap-2 truncate">
                         {selectedCountry ? (
@@ -949,8 +1901,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                     <Command shouldFilter={false}>
                       <div className="flex items-center border-b px-3">
                         <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                        <CommandInput 
-                          placeholder="Search countries..." 
+                        <CommandInput
+                          placeholder="Search countries..."
                           value={phoneCountrySearch}
                           onValueChange={setPhoneCountrySearch}
                         />
@@ -966,9 +1918,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                               className="cursor-pointer"
                             >
                               <Check
-                                className={`mr-2 h-4 w-4 ${
-                                  current.country === country.code ? "opacity-100" : "opacity-0"
-                                }`}
+                                className={`mr-2 h-4 w-4 ${current.country === country.code ? "opacity-100" : "opacity-0"
+                                  }`}
                               />
                               {country.emoji} {country.label} ({country.dial})
                             </CommandItem>
@@ -979,7 +1930,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                   </PopoverContent>
                 </Popover>
               </div>
-      
+
               <div>
                 <Label className="text-xs text-muted-foreground">Phone Number</Label>
                 <Input

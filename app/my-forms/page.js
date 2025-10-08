@@ -15,7 +15,7 @@ import EditFormDialog from "../component/EditForm/edit-form"
 // API configuration
 const API_BASE_URL = 'http://10.10.15.194:3000'
 const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
-const TABLE_ID = 'b9bc249f-9099-4436-bfc6-9dd74d1e8fdc'
+const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
 const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzU5MzE0ODY2LCJleHAiOjE3NTk0MDEyNjZ9.QjKz8fTFwia76o7LkkdmlGGhEKoguy8o6iFbCojMwkE'
 
 export default function MyFormsPage() {
@@ -207,7 +207,13 @@ export default function MyFormsPage() {
       setLoading(true)
       
       const response = await fetch(
-        `${API_BASE_URL}/api/forms/all/${ORGANIZATION_ID}/${TABLE_ID}`
+        `${API_BASE_URL}/api/forms/all/${ORGANIZATION_ID}/${TABLE_ID}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        }
       )
 
       if (!response.ok) {
@@ -226,7 +232,6 @@ export default function MyFormsPage() {
           // Format the created date
           created: form.created_at ? new Date(form.created_at).toLocaleDateString() : 'Unknown',
           createdDate: form.created_at ? new Date(form.created_at) : new Date(),
-          // Ensure we have a form_id
           form_id: form.form_id || form.id
         }))
         

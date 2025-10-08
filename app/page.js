@@ -7,6 +7,7 @@ import CustomFormPage from "./custom-form/page";
 import MyFormsPage from "./my-forms/page"
 import FormAnalyticsPage from "./form-analytics/page"
 import CustomTableBuilder from "./custom-table-builder/page"
+import LeadsPage from "./component/leadPage/page"
 import { cn } from "@/lib/utils";
 
 export default function Home() {
@@ -30,8 +31,11 @@ export default function Home() {
     setIsCollapsed(!isCollapsed)
   }
 
+  // UPDATE THIS renderContent FUNCTION
   const renderContent = () => {
     switch (activeTab) {
+      case "leads": // ADD THIS CASE
+        return <LeadsPage />
       case "custom-form":
         return <CustomFormPage />
       case "my-forms":
@@ -46,7 +50,7 @@ export default function Home() {
           <div className="p-8">
             <h1 className="text-3xl font-bold mb-4">Dashboard</h1>
             <p className="text-muted-foreground">
-              Welcome to your CRM dashboard. Select "Custom Form" from the sidebar to start building forms.
+              Welcome to your CRM dashboard. Select "Leads" to manage your contacts or "Custom Form" to start building forms.
             </p>
           </div>
         )

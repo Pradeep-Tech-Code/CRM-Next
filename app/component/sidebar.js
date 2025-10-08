@@ -1,17 +1,23 @@
 "use client"
 
-import { Home, Settings, HelpCircle, BookCopy, ClipboardMinus, FileChartColumnIncreasing, X, ChevronLeft, ChevronRight, ChevronDown, FormInput, BarChart3, List, Table } from "lucide-react"
+import { Home, Settings, HelpCircle, BookCopy, ClipboardMinus, FileChartColumnIncreasing, X, ChevronLeft, ChevronRight, ChevronDown, FormInput, BarChart3, List, Table, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import Image from 'next/image'
 import { useState } from "react"
 
 const menuItems = [
     { label: "Dashboard", icon: Home, href: "dashboard", active: true },
-    { 
-        label: "Forms", 
-        icon: BookCopy, 
+    // { 
+    //     label: "Leads", 
+    //     icon: Users, 
+    //     href: "leads"
+    // },
+    {
+        label: "Forms",
+        icon: BookCopy,
         href: "forms",
         submenu: [
             { label: "Custom Form", icon: FormInput, href: "custom-form" },
@@ -25,7 +31,7 @@ const menuItems = [
     { label: "Help", icon: HelpCircle, href: "help" },
 ]
 
-export default function Sidebar({activeTab, setActiveTab, isCollapsed, setIsCollapsed}) {
+export default function Sidebar({ activeTab, setActiveTab, isCollapsed, setIsCollapsed }) {
     const [isHovered, setIsHovered] = useState(false)
     const [expandedMenus, setExpandedMenus] = useState(new Set())
 
@@ -89,22 +95,29 @@ export default function Sidebar({activeTab, setActiveTab, isCollapsed, setIsColl
                             </div>
                         )}
                     </div>
-                    
+
                     {/* Desktop Collapse Button - Plain arrow beside Slash CRM */}
                     {!isCollapsed && (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setIsCollapsed(!isCollapsed)}
-                            className="hidden md:flex h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/20 flex-shrink-0"
-                        >
-                            <ChevronLeft className="size-4" />
-                        </Button>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setIsCollapsed(!isCollapsed)}
+                                    className="hidden md:flex h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/20 flex-shrink-0"
+                                >
+                                    <ChevronLeft className="size-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                                <p>Collapse sidebar</p>
+                            </TooltipContent>
+                        </Tooltip>
                     )}
 
                     {/* Mobile Close Button */}
-                    <Button 
-                        variant="ghost" 
+                    <Button
+                        variant="ghost"
                         size="icon"
                         onClick={() => setIsCollapsed(!isCollapsed)}
                         className="md:hidden h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/20 flex-shrink-0"
@@ -113,17 +126,24 @@ export default function Sidebar({activeTab, setActiveTab, isCollapsed, setIsColl
                     </Button>
                 </div>
 
-                {/* Collapse Button for collapsed state - Centered below logo */}
+                {/* Collapse Button */}
                 {isCollapsed && (
                     <div className="flex justify-center mt-2">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setIsCollapsed(!isCollapsed)}
-                            className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/20"
-                        >
-                            <ChevronRight className="size-4" />
-                        </Button>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setIsCollapsed(!isCollapsed)}
+                                    className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/20"
+                                >
+                                    <ChevronRight className="size-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                                <p>Expand sidebar</p>
+                            </TooltipContent>
+                        </Tooltip>
                     </div>
                 )}
 
@@ -140,36 +160,53 @@ export default function Sidebar({activeTab, setActiveTab, isCollapsed, setIsColl
                         {menuItems.map((item) => (
                             <li key={item.label}>
                                 <div className="space-y-1">
-                                    <Button 
-                                        variant={isParentActive(item) ? "secondary" : "ghost"} 
-                                        className={cn(
-                                            "w-full gap-2 transition-all duration-200 group",
-                                            isCollapsed 
-                                                ? "md:justify-center md:p-2 h-9" 
-                                                : "justify-start py-3 px-4",
-                                            isParentActive(item) && "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/80"
-                                        )}
-                                        onClick={() => handleMenuClick(item)}
-                                        onMouseEnter={() => setIsHovered(true)}
-                                        onMouseLeave={() => setIsHovered(false)}
-                                    >
-                                        <item.icon className={cn(
-                                            "shrink-0",
-                                            isCollapsed ? "size-4" : "size-5"
-                                        )} />
-                                        {!isCollapsed && (
-                                            <>
-                                                <span className="truncate flex-1 text-left">{item.label}</span>
-                                                {item.submenu && (
-                                                    <ChevronDown className={cn(
-                                                        "size-4 transition-transform duration-200",
-                                                        isMenuExpanded(item.label) && "rotate-180"
+                                    {isCollapsed ? (
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant={isParentActive(item) ? "secondary" : "ghost"}
+                                                    className={cn(
+                                                        "w-full gap-2 transition-all duration-200 group md:justify-center md:p-2 h-9",
+                                                        isParentActive(item) && "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/80"
+                                                    )}
+                                                    onClick={() => handleMenuClick(item)}
+                                                    onMouseEnter={() => setIsHovered(true)}
+                                                    onMouseLeave={() => setIsHovered(false)}
+                                                >
+                                                    <item.icon className={cn(
+                                                        "shrink-0",
+                                                        isCollapsed ? "size-4" : "size-5"
                                                     )} />
-                                                )}
-                                            </>
-                                        )}
-                                    </Button>
-                                    
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="right">
+                                                <p>{item.label}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    ) : (
+                                        <Button
+                                            variant={isParentActive(item) ? "secondary" : "ghost"}
+                                            className={cn(
+                                                "w-full gap-2 transition-all duration-200 group md:justify-center md:p-2 h-9",
+                                                isParentActive(item) && "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent/80"
+                                            )}
+                                            onClick={() => handleMenuClick(item)}
+                                            onMouseEnter={() => setIsHovered(true)}
+                                            onMouseLeave={() => setIsHovered(false)}
+                                        >
+                                            <item.icon className={cn(
+                                                "shrink-0 size-5"
+                                            )} />
+                                            <span className="truncate flex-1 text-left">{item.label}</span>
+                                            {item.submenu && (
+                                                <ChevronDown className={cn(
+                                                    "size-4 transition-transform duration-200",
+                                                    isMenuExpanded(item.label) && "rotate-180"
+                                                )} />
+                                            )}
+                                        </Button>
+                                    )}
+
                                     {/* Submenu */}
                                     {!isCollapsed && item.submenu && isMenuExpanded(item.label) && (
                                         <div className="ml-4 space-y-1 border-l-2 border-sidebar-border pl-2">

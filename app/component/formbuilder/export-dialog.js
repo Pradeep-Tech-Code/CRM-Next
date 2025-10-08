@@ -31,10 +31,21 @@ export function GeneratedForm() {
     defaultValues: {
 ${fields
   .map(
-    (field) =>
-      `      ${field.id}: ${
-        field.type === "checkbox" || (field.type === "select" && field.validation?.multiple) ? "[]" : '""'
-      }`,
+    (field) => {
+      if (["select", "checkbox", "radio"].includes(field.type)) {
+        if (field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)) {
+          return `      ${field.id}: { value: [], nestedField: {} }`
+        } else {
+          return `      ${field.id}: { value: "", nestedField: {} }`
+        }
+      } else if (field.type === "file") {
+        return `      ${field.id}: null`
+      } else if (field.type === "location" || field.type === "phone") {
+        return `      ${field.id}: {}`
+      } else {
+        return `      ${field.id}: ""`
+      }
+    }
   )
   .join(",\n")}
     },
