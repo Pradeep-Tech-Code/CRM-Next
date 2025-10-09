@@ -90,7 +90,7 @@ export function FormPreview({ fields }) {
     setIsGenerating(true)
     try {
       // API configuration
-      const API_BASE_URL = 'http://10.10.15.194:3000'
+      const API_BASE_URL = 'http://10.10.15.194:3001'
       const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
       const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
       const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
@@ -112,21 +112,8 @@ export function FormPreview({ fields }) {
         console.error('Error details:', error)
       }
 
-      // Prepare table column fields (from table columns) - ONLY NEW FIELDS
+      // Prepare table column fields (from table columns) - ALLOW ALL FIELDS
       const tableFields = tableColumnFields
-        .filter(field => {
-          const fieldName = field.tableColumnName || field.label
-          const alreadyExists = existingColumns.some(col =>
-            col.column_name?.toLowerCase() === fieldName?.toLowerCase()
-          )
-
-          if (alreadyExists) {
-            console.log(`⏭️ Skipping duplicate field: ${fieldName}`)
-            toast.warning(`Field "${fieldName}" already exists in the table and was skipped`)
-            return false
-          }
-          return true
-        })
         .map(field => {
           // Ensure nested fields are properly structured for table fields
           const nestedFields = field.nestedFields || {}
@@ -141,7 +128,7 @@ export function FormPreview({ fields }) {
             validations: JSON.stringify(field.validation || {}),
             options: field.options ? String(field.options) : undefined,
             nested_fields: JSON.stringify(nestedFields),
-            has_nested_fields: hasNestedFields
+            has_nested_fields: String(hasNestedFields)
             // Include nested fields for table fields as well
           }
           console.log('📊 Table Field:', fieldObj)
@@ -149,21 +136,8 @@ export function FormPreview({ fields }) {
           return fieldObj
         })
 
-      // Prepare extra fields (regular form fields) - CHECK FOR DUPLICATES
+      // Prepare extra fields (regular form fields) - ALLOW ALL FIELDS
       const extraFields = regularFormFields
-        .filter(field => {
-          const fieldName = field.label
-          const alreadyExists = existingColumns.some(col =>
-            col.column_name?.toLowerCase() === fieldName?.toLowerCase()
-          )
-
-          if (alreadyExists) {
-            console.log(`⏭️ Skipping duplicate extra field: ${fieldName}`)
-            toast.warning(`Field "${fieldName}" already exists in the table and was skipped`)
-            return false
-          }
-          return true
-        })
         .map(field => {
           // Convert options array to proper string format
           let optionsString = ""
@@ -181,11 +155,12 @@ export function FormPreview({ fields }) {
             name: field.label,
             type: field.type,
             required: String(field.required),
+            isLeadColumn: String(field.isLeadColumn || false),
             label: field.label,
             validations: JSON.stringify(field.validation || {}),
             options: optionsString,
             nested_fields: JSON.stringify(nestedFields),
-            has_nested_fields: hasNestedFields
+            has_nested_fields: String(hasNestedFields)
           }
 
           console.log('📝 Extra Field:', fieldObj)

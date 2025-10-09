@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, X, Copy, Trash2, Settings2, ChevronDown, ChevronRight } from "lucide-react"
 import { useState } from "react"
 import { TableColumnSelector } from "./table-column-selector"
@@ -271,6 +272,22 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                 })}
               />
             </div>
+
+            {/* Only show isLeadColumn checkbox for extra fields (not table columns) */}
+            {field.source !== 'table' && (
+              <div className="flex items-center justify-between">
+                <Label htmlFor="field-isleadcolumn" className="text-sm font-medium">
+                  Add to Lead Database
+                </Label>
+                <Checkbox
+                  id="field-isleadcolumn"
+                  checked={field.isLeadColumn || false}
+                  onCheckedChange={(checked) => onUpdateField(field.id, {
+                    isLeadColumn: checked
+                  })}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
 
