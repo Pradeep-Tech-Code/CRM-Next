@@ -9,24 +9,17 @@ import { CheckCircle2, Send, ArrowLeft, Building, User, Save, Edit, FileText, Tr
 import { FieldRenderer } from "../../component/formbuilder/field-renderer"
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
+import axios from "axios"
 import Link from "next/link"
 import Image from "next/image"
 import { useParams, useSearchParams } from "next/navigation"
+import { fetchPhoneCountries } from "@/lib/constants/location-api"
 
 // API configuration
 const API_BASE_URL = 'http://10.10.15.194:3000'
 const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
 const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
 const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
-
-// Phone countries constant
-const PHONE_COUNTRIES = [
-  { code: '+1', label: 'US/Canada', len: 10 },
-  { code: '+44', label: 'UK', len: 10 },
-  { code: '+91', label: 'India', len: 10 },
-  { code: '+61', label: 'Australia', len: 9 },
-  { code: '+81', label: 'Japan', len: 10 }
-]
 
 // Generate or use a proper token
 const getAuthToken = () => {
@@ -101,6 +94,7 @@ export default function PublicFormPage() {
   const [lastSubmissionId, setLastSubmissionId] = useState(null)
   const [lastSubmissionToken, setLastSubmissionToken] = useState(null)
   const [hasExistingSubmission, setHasExistingSubmission] = useState(false)
+  const [phoneCountries, setPhoneCountries] = useState([])
 
   useEffect(() => {
     if (formId) {
@@ -108,6 +102,26 @@ export default function PublicFormPage() {
       fetchFormData()
     }
   }, [formId])
+
+  // Load phone countries from API
+  useEffect(() => {
+    const loadPhoneCountries = async () => {
+      try {
+        const countries = await fetchPhoneCountries()
+        setPhoneCountries(countries)
+      } catch (error) {
+        console.error('Failed to load phone countries:', error)
+        // Fallback to a minimal set if API fails
+        setPhoneCountries([
+          { code: '+1', label: 'US/Canada', len: 10 },
+          { code: '+44', label: 'UK', len: 10 },
+          { code: '+91', label: 'India', len: 10 }
+        ])
+      }
+    }
+    
+    loadPhoneCountries()
+  }, [])
 
   useEffect(() => {
     if (token && submissionId) {
@@ -119,8 +133,6 @@ export default function PublicFormPage() {
       checkExistingSubmission()
     }
   }, [token, submissionId])
-
-  // Add this for debugging - moved after form initialization
 
   const checkExistingSubmission = () => {
     try {
@@ -208,32 +220,24 @@ export default function PublicFormPage() {
         form_id: formId
       })
 
-      // Use the exact API format from your curl request
-      const response = await fetch(
+      const response = await axios.post(
         `${API_BASE_URL}/api/submit/edit?token=${token}`,
         {
-          method: 'POST',
+          organization_id: ORGANIZATION_ID,
+          form_id: formId,
+          submission_id: submissionId
+        },
+        {
           headers: {
             'Authorization': `Bearer ${getAuthToken()}`,
             'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            organization_id: ORGANIZATION_ID,
-            form_id: formId,
-            submission_id: submissionId
-          })
+          }
         }
       )
+      const result = response.data
 
-      console.log('Submission data response status:', response.status)
+      console.log('Submission data response:', result)
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('Failed to fetch submission data:', errorText)
-        throw new Error(`Failed to fetch submission: ${response.status} ${response.statusText}`)
-      }
-
-      const result = await response.json()
       console.log('Full API response:', result)
 
       // Handle different response formats
@@ -267,41 +271,32 @@ export default function PublicFormPage() {
       console.log('🔍 Fetching form data for ID:', formId)
       console.log('🌐 API URL:', `${API_BASE_URL}/api/forms/${ORGANIZATION_ID}/${TABLE_ID}/${formId}`)
 
-      const response = await fetch(
+      const response = await axios.get(
         `${API_BASE_URL}/api/forms/${ORGANIZATION_ID}/${TABLE_ID}/${formId}`,
         {
-          method: 'GET',
           headers: {
             'Authorization': `Bearer ${getAuthToken()}`,
             'Content-Type': 'application/json',
           }
         }
       )
-
-      console.log('📡 Response status:', response.status)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('❌ API Error Response:', errorText)
-
-        if (response.status === 404) {
-          throw new Error(`Form not found (404). The form with ID "${formId}" does not exist or has been deleted.`)
-        } else if (response.status === 401) {
-          throw new Error('Authentication failed (401). Please check your authentication token.')
-        } else if (response.status === 403) {
-          throw new Error('Access forbidden (403). You do not have permission to access this form.')
-        } else {
-          throw new Error(`Failed to fetch form: ${response.status} ${response.statusText}`)
-        }
-      }
-
-      const result = await response.json()
-      console.log('✅ API Response:', result)
+      const result = response.data
+      console.log('📡 Response:', result)
 
       if (result.success && result.form) {
-        const parsedForm = parseFormData(result.form)
-        console.log('✅ Parsed form data:', parsedForm)
-        setFormData(parsedForm)
+        try {
+          const parsedForm = parseFormData(result.form)
+          console.log('✅ Parsed form data:', parsedForm)
+          setFormData(parsedForm)
+        } catch (parseError) {
+          console.error('❌ Error parsing form data:', parseError)
+          toast.error('Failed to parse form data. The form may be corrupted.')
+          setFormData({
+            form_name: 'Error Loading Form',
+            description: 'Unable to load form data',
+            fields: []
+          })
+        }
       } else {
         throw new Error('Form not found in response: ' + JSON.stringify(result))
       }
@@ -309,12 +304,34 @@ export default function PublicFormPage() {
     } catch (error) {
       console.error('❌ Error fetching form:', error)
 
-      if (error.message.includes('404') || error.message.includes('not found')) {
-        toast.error("Form not found. The form may have been deleted or the URL is incorrect.")
-      } else if (error.message.includes('network') || error.message.includes('fetch')) {
-        toast.error("Network error. Please check your connection and try again.")
+      if (error.response?.status === 404) {
+        toast.error(`Form not found. The form with ID "${formId}" does not exist or has been deleted.`)
+        setFormData({
+          form_name: 'Form Not Found',
+          description: 'The requested form could not be found.',
+          fields: []
+        })
+      } else if (error.response?.status === 401) {
+        toast.error('Authentication failed. Please check your authentication token.')
+        setFormData({
+          form_name: 'Authentication Error',
+          description: 'Unable to access this form due to authentication issues.',
+          fields: []
+        })
+      } else if (error.response?.status === 403) {
+        toast.error('Access forbidden. You do not have permission to access this form.')
+        setFormData({
+          form_name: 'Access Denied',
+          description: 'You do not have permission to access this form.',
+          fields: []
+        })
       } else {
-        toast.error("Form not found or access denied")
+        toast.error(`Failed to load form: ${error.message}`)
+        setFormData({
+          form_name: 'Error Loading Form',
+          description: 'An error occurred while loading the form.',
+          fields: []
+        })
       }
 
     } finally {
@@ -462,11 +479,7 @@ export default function PublicFormPage() {
 
     } catch (error) {
       console.error('Error parsing form data:', error)
-      return getMockFormData(formId) || {
-        form_name: 'Form',
-        description: '',
-        fields: []
-      }
+      throw new Error('Failed to parse form data: ' + error.message)
     }
   }
 
@@ -652,75 +665,6 @@ export default function PublicFormPage() {
 
     console.log('Final transformed values for form:', transformedValues)
     return transformedValues
-  }
-
-  // Mock data fallback
-  const getMockFormData = (formId) => {
-    const mockForms = {
-      "76e2ab47-e84f-4c49-ba15-23fff32cd795": {
-        form_name: "Lead Form",
-        description: "Form for new customer leads",
-        fields: [
-          {
-            id: "name",
-            type: "text",
-            label: "Full Name",
-            placeholder: "Enter your full name",
-            required: true,
-            validation: {
-              required: true,
-              multiple: false
-            }
-          },
-          {
-            id: "email",
-            type: "email",
-            label: "Email Address",
-            placeholder: "Enter your email address",
-            required: true,
-            validation: {
-              required: true,
-              multiple: false
-            }
-          },
-          {
-            id: "company",
-            type: "text",
-            label: "Company",
-            placeholder: "Enter your company name",
-            required: false,
-            validation: {
-              required: false,
-              multiple: false
-            }
-          },
-          {
-            id: "phone",
-            type: "phone",
-            label: "Phone Number",
-            placeholder: "Enter your phone number",
-            required: false,
-            validation: {
-              required: false,
-              multiple: false
-            }
-          },
-          {
-            id: "message",
-            type: "textarea",
-            label: "Message",
-            placeholder: "Tell us about your requirements",
-            required: false,
-            validation: {
-              required: false,
-              multiple: false
-            }
-          }
-        ]
-      }
-    }
-
-    return mockForms[formId]
   }
 
   const transformFormValues = (formValues, fields) => {
@@ -1061,9 +1005,9 @@ export default function PublicFormPage() {
 
         case "phone": {
           const v = value || {}
-          const phoneCountry = PHONE_COUNTRIES.find(c => c.code === v.country) || PHONE_COUNTRIES[0]
+          const phoneCountry = phoneCountries.find(c => c.code === v.country) || phoneCountries[0]
           const digits = String(v.number || "").replace(/\D/g, "")
-          const expectedLength = phoneCountry.len
+          const expectedLength = phoneCountry?.len || 10
 
           if (digits.length !== expectedLength) {
             errors.push(`Phone number must be ${expectedLength} digits for ${phoneCountry.label}`)
@@ -1135,24 +1079,16 @@ export default function PublicFormPage() {
 
           console.log('Form update data:', updateData)
 
-          const response = await fetch(`${API_BASE_URL}/api/submit/update?token=${token}`, {
-            method: 'POST',
+          const response = await axios.post(`${API_BASE_URL}/api/submit/update?token=${token}`, updateData, {
             headers: {
               'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(updateData)
+            }
           })
 
-          if (response.ok) {
-            const result = await response.json()
-            console.log('Update successful:', result)
-            toast.success("Form updated successfully!")
-            setSubmissionSuccess(true)
-          } else {
-            const errorText = await response.text()
-            console.error('Update failed:', errorText)
-            toast.error("Failed to update form. Please try again.")
-          }
+          const result = response.data
+          console.log('Update successful:', result)
+          toast.success("Form updated successfully!")
+          setSubmissionSuccess(true)
         } else {
           // Create new submission
           const submissionData = {
@@ -1163,17 +1099,14 @@ export default function PublicFormPage() {
 
           console.log('Form submission data:', submissionData)
 
-          const response = await fetch(`${API_BASE_URL}/api/submit`, {
-            method: 'POST',
+          const response = await axios.post(`${API_BASE_URL}/api/submit`, submissionData, {
             headers: {
               'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(submissionData)
+            }
           })
 
-          if (response.ok) {
-            const result = await response.json()
-            console.log('Submission successful:', result)
+          const result = response.data
+          console.log('Submission successful:', result)
 
             const newSubmissionId = result?.submission_id
             const editToken = result?.edit_token
@@ -1201,11 +1134,6 @@ export default function PublicFormPage() {
               toast.error("Submission completed but edit feature unavailable")
             }
 
-          } else {
-            const errorText = await response.text()
-            console.error('Submission failed:', errorText)
-            toast.error("Failed to submit form. Please try again.")
-          }
         }
 
       } catch (error) {

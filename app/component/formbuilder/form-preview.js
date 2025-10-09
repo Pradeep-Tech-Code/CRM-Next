@@ -8,10 +8,10 @@ import { Separator } from "@/components/ui/separator"
 import { AlertCircle, CheckCircle2, Send, Copy, ExternalLink, Settings } from "lucide-react"
 import { FieldRenderer } from "./field-renderer"
 import { useState } from "react"
+import axios from "axios"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import axios from "axios"
 
 export function FormPreview({ fields }) {
   const [generatedLink, setGeneratedLink] = useState(null)
@@ -99,21 +99,17 @@ export function FormPreview({ fields }) {
       // Get existing table columns to avoid duplicates
       let existingColumns = []
       try {
-        const columnsResponse = await fetch(`${API_BASE_URL}/api/datatables/${TABLE_ID}/columns`, {
-          method: 'GET',
+        const response = await axios.get(`${API_BASE_URL}/api/datatables/${TABLE_ID}/columns`, {
           headers: {
             'Authorization': `Bearer ${AUTH_TOKEN}`,
             'Content-Type': 'application/json',
           },
         })
-
-        if (columnsResponse.ok) {
-          const columnsData = await columnsResponse.json()
-          existingColumns = Array.isArray(columnsData) ? columnsData : []
-          console.log('📊 Existing table columns:', existingColumns.map(col => col.column_name))
-        }
+        existingColumns = Array.isArray(response.data) ? response.data : []
+        console.log('📊 Existing table columns:', existingColumns.map(col => col.column_name))
       } catch (error) {
         console.log('⚠️ Could not fetch existing columns, continuing anyway...')
+        console.error('Error details:', error)
       }
 
       // Prepare table column fields (from table columns) - ONLY NEW FIELDS
@@ -233,35 +229,15 @@ export function FormPreview({ fields }) {
       const endpoint = `${API_BASE_URL}/api/forms`
       console.log(`🔄 Using endpoint: ${endpoint}`)
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${AUTH_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('API Error Response:', errorText)
-
-        // Handle specific error cases
-        if (response.status === 409) {
-          // Field already exists error
-          const errorData = JSON.parse(errorText)
-          throw new Error(`Field already exists: ${errorData.error}`)
-        } else if (response.status === 500) {
-          // Invalid data format error
-          const errorData = JSON.parse(errorText)
-          throw new Error(`Invalid data format: ${errorData.error}`)
-        }
-
-        throw new Error(`Failed to create form: ${response.status} - ${errorText}`)
-      }
-
-      const result = await response.json()
-      console.log('✅ API Success Response:', result)
+      try {
+        const response = await axios.post(`${API_BASE_URL}/api/forms`, formData, {
+          headers: {
+            'Authorization': `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        })
+        const result = response.data
+        console.log('✅ API Success Response:', result)
 
       if (result.success && result.form) {
         // Generate the public URL using the form_id from API response
@@ -292,21 +268,24 @@ export function FormPreview({ fields }) {
 
         localStorage.setItem(`form-${result.form.form_id}`, JSON.stringify(completeFormData))
         toast.success("Form link generated successfully!")
+        return result
       } else {
         throw new Error('Invalid response from server: ' + JSON.stringify(result))
       }
 
     } catch (error) {
-      console.error('Error generating form link:', error)
-
-      // Show specific error messages based on error type
-      if (error.message.includes('already exists')) {
-        toast.error(error.message)
-      } else if (error.message.includes('Invalid data format')) {
-        toast.error(error.message)
+      console.error('❌ Form creation failed:', error)
+      
+      // Handle specific error cases
+      if (error.response?.status === 409) {
+        throw new Error(`Field already exists: ${error.response.data?.error || 'Unknown error'}`)
+      } else if (error.response?.status === 500) {
+        throw new Error(`Invalid data format: ${error.response.data?.error || 'Unknown error'}`)
       } else {
-        toast.error(`Failed to generate form: ${error.message}`)
+        throw new Error(error.message || 'Failed to create form')
       }
+    }
+
     } finally {
       setIsGenerating(false)
     }

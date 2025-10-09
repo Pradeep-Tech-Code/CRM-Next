@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Database, Loader2, Search, Check } from "lucide-react"
+import axios from "axios"
 import { toast } from "sonner"
 
 export function TableColumnSelector({ field, onUpdateField }) {
@@ -25,19 +26,13 @@ export function TableColumnSelector({ field, onUpdateField }) {
   const fetchTableColumns = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/datatables/${TABLE_ID}/columns`, {
-        method: 'GET',
+      const response = await axios.get(`${API_BASE_URL}/api/datatables/${TABLE_ID}/columns`, {
         headers: {
           'Authorization': `Bearer ${AUTH_TOKEN}`,
           'Content-Type': 'application/json',
         },
       })
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch columns: ${response.status}`)
-      }
-
-      const result = await response.json()
+      const result = response.data
       console.log('📊 API Response:', result)
       
       // Handle array response directly
@@ -55,8 +50,9 @@ export function TableColumnSelector({ field, onUpdateField }) {
         throw new Error('Unexpected API response format')
       }
     } catch (error) {
-      console.error('Error fetching table columns:', error)
-      toast.error('Failed to load table columns')
+      console.error('❌ Failed to fetch table columns:', error)
+      toast.error(`Failed to fetch columns: ${error.message}`)
+      setTableColumns([])
     } finally {
       setLoading(false)
     }

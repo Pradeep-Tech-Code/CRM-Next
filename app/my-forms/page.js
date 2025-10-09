@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Eye, Copy, BarChart3, Calendar, Users, ExternalLink, Loader2, Edit, Trash2, RotateCcw, Search, ArrowUpDown } from "lucide-react"
 import { toast } from "sonner"
+import axios from "axios"
 import EditFormDialog from "../component/EditForm/edit-form"
 
 // API configuration
@@ -145,7 +146,7 @@ export default function MyFormsPage() {
   // Function to get form details for editing
   const getFormDetails = async (formId) => {
     try {
-      const response = await fetch(
+      const response = await axios.get(
         `${API_BASE_URL}/api/forms/${ORGANIZATION_ID}/${TABLE_ID}/${formId}`,
         {
           headers: {
@@ -154,12 +155,7 @@ export default function MyFormsPage() {
           }
         }
       )
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch form details: ${response.status}`)
-      }
-
-      const result = await response.json()
+      const result = response.data
       
       if (result.success && result.form) {
         return result.form
@@ -168,6 +164,7 @@ export default function MyFormsPage() {
       }
     } catch (error) {
       console.error('Error fetching form details:', error)
+      toast.error(`Failed to fetch form details: ${error.message}`)
       throw error
     }
   }
@@ -175,21 +172,13 @@ export default function MyFormsPage() {
   // Function to update form
   const updateForm = async (formData) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/forms/update`, {
-        method: 'POST',
+      const response = await axios.post(`${API_BASE_URL}/api/forms/update`, formData, {
         headers: {
           'Authorization': `Bearer ${AUTH_TOKEN}`,
           'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
+        }
       })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Failed to update form: ${response.status} - ${errorText}`)
-      }
-
-      const result = await response.json()
+      const result = response.data
       
       if (result.success) {
         return result
@@ -198,6 +187,7 @@ export default function MyFormsPage() {
       }
     } catch (error) {
       console.error('Error updating form:', error)
+      toast.error(`Failed to update form: ${error.message}`)
       throw error
     }
   }
@@ -206,7 +196,7 @@ export default function MyFormsPage() {
     try {
       setLoading(true)
       
-      const response = await fetch(
+      const response = await axios.get(
         `${API_BASE_URL}/api/forms/all/${ORGANIZATION_ID}/${TABLE_ID}`,
         {
           headers: {
@@ -215,12 +205,7 @@ export default function MyFormsPage() {
           }
         }
       )
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch forms: ${response.status} ${response.statusText}`)
-      }
-
-      const result = await response.json()
+      const result = response.data
       console.log('API Forms Response:', result)
       
       if (result.success && Array.isArray(result.form)) {
@@ -242,7 +227,7 @@ export default function MyFormsPage() {
       
     } catch (error) {
       console.error('Error fetching forms:', error)
-      toast.error("Failed to load forms from server")
+      toast.error(`Failed to load forms: ${error.message}`)
       
       // Fallback to empty array
       setForms([])

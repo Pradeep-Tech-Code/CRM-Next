@@ -51,26 +51,26 @@ export function FieldConfigPanel({ field, onUpdateField }) {
     console.log('🔍 addNestedFieldOption called with:', { optionIndex, nestedFieldIndex })
     const nestedFieldKey = `${optionIndex}-${nestedFieldIndex}`
     const newOptionValue = nestedFieldNewOptions[nestedFieldKey] || ""
-    
+
     console.log('🔍 Current newOptionValue:', newOptionValue)
     console.log('🔍 nestedFieldNewOptions state:', nestedFieldNewOptions)
-    
+
     if (!newOptionValue.trim()) {
       console.log('❌ No option value to add')
       return
     }
-    
+
     const currentNestedFields = field.nestedFields || {}
     const optionNestedFields = currentNestedFields[optionIndex] || []
     const nestedField = optionNestedFields[nestedFieldIndex]
-    
+
     console.log('🔍 Nested field found:', nestedField)
-    
+
     if (nestedField) {
       const newOptions = [...(nestedField.options || []), newOptionValue.trim()]
       console.log('✅ Adding new options:', newOptions)
       updateNestedField(optionIndex, nestedFieldIndex, { options: newOptions })
-      
+
       // Clear the input
       setNestedFieldNewOptions(prev => ({
         ...prev,
@@ -134,12 +134,12 @@ export function FieldConfigPanel({ field, onUpdateField }) {
     const updatedNestedFields = optionNestedFields.map((field, index) => {
       if (index === nestedFieldIndex) {
         const updatedField = { ...field, ...updates }
-        
+
         // If the type is changed to checkbox, radio, or select, initialize options if not present
         if (updates.type && ["checkbox", "radio", "select"].includes(updates.type) && !updatedField.options) {
           updatedField.options = ["Option 1", "Option 2", "Option 3"]
         }
-        
+
         return updatedField
       }
       return field
@@ -177,16 +177,6 @@ export function FieldConfigPanel({ field, onUpdateField }) {
     })
   }
 
-  const duplicateField = () => {
-    // This would need to be implemented in the parent component
-    console.log("Duplicate field:", field.id)
-  }
-
-  const deleteField = () => {
-    // This would need to be implemented in the parent component
-    console.log("Delete field:", field.id)
-  }
-
   const needsOptions = ["select", "checkbox", "radio"].includes(field.type)
   const supportsValidation = ["text", "email", "number", "textarea", "file", "datetime", "location"].includes(
     field.type,
@@ -196,11 +186,12 @@ export function FieldConfigPanel({ field, onUpdateField }) {
     <div className="h-full overflow-y-auto">
       {/* Field Header */}
       <div className="p-4 border-b border-border bg-card/50">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-3 mb-2">
+          <h3 className="font-medium text-sm truncate">{field.label}</h3>
           <Badge variant="secondary" className="text-xs font-mono">
             {field.type}
           </Badge>
-          <div className="flex gap-1">
+          {/* <div className="flex gap-1">
             <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={duplicateField}>
               <Copy className="h-3 w-3" />
             </Button>
@@ -209,13 +200,12 @@ export function FieldConfigPanel({ field, onUpdateField }) {
               variant="ghost"
               className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
               onClick={deleteField}
-            >
+              >
               <Trash2 className="h-3 w-3" />
-            </Button>
-          </div>
+              </Button>
+              </div> */}
         </div>
-        <h3 className="font-medium text-sm truncate">{field.label}</h3>
-        <p className="text-xs text-muted-foreground">ID: {field.id}</p>
+        {/* <p className="text-xs text-muted-foreground">ID: {field.id}</p> */}
         <div className="flex gap-1 mt-1">
           {field.required && (
             <Badge variant="destructive" className="text-xs">
@@ -573,29 +563,29 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                                             e.preventDefault()
                                             e.stopPropagation()
                                             console.log('🔍 Plus button clicked for:', { index, nestedIndex })
-                                            
+
                                             // Get the input value directly from the DOM as a fallback
                                             const inputElement = e.target.parentElement.querySelector('input[placeholder="Add option"]')
                                             const inputValue = inputElement ? inputElement.value : ''
                                             console.log('🔍 Input value from DOM:', inputValue)
-                                            
+
                                             // Try to add the option using the DOM value if state value is empty
                                             const nestedFieldKey = `${index}-${nestedIndex}`
                                             const stateValue = nestedFieldNewOptions[nestedFieldKey] || ""
                                             const valueToUse = stateValue || inputValue
-                                            
+
                                             console.log('🔍 Value to use:', valueToUse)
-                                            
+
                                             if (valueToUse.trim()) {
                                               const currentNestedFields = field.nestedFields || {}
                                               const optionNestedFields = currentNestedFields[index] || []
                                               const nestedField = optionNestedFields[nestedIndex]
-                                              
+
                                               if (nestedField) {
                                                 const newOptions = [...(nestedField.options || []), valueToUse.trim()]
                                                 console.log('✅ Adding new options:', newOptions)
                                                 updateNestedField(index, nestedIndex, { options: newOptions })
-                                                
+
                                                 // Clear both state and DOM input
                                                 setNestedFieldNewOptions(prev => ({
                                                   ...prev,

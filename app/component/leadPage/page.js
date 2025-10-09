@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
+import axios from "axios"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 // API Configuration
@@ -45,34 +46,23 @@ export default function LeadsPage() {
     setError(null)
     
     try {
-      const columnsPromise = fetch(`${API_BASE_URL}/api/datatables/${LEADS_TABLE_ID}/columns`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${AUTH_TOKEN}`,
-          'Content-Type': 'application/json',
-        }
-      })
+      const [columnsResponse, recordsResponse] = await Promise.all([
+        axios.get(`${API_BASE_URL}/api/datatables/${LEADS_TABLE_ID}/columns`, {
+          headers: {
+            'Authorization': `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json',
+          }
+        }),
+        axios.get(`${API_BASE_URL}/api/records/${LEADS_TABLE_ID}`, {
+          headers: {
+            'Authorization': `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json',
+          }
+        })
+      ])
 
-      const recordsPromise = fetch(`${API_BASE_URL}/api/records/${LEADS_TABLE_ID}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${AUTH_TOKEN}`,
-          'Content-Type': 'application/json',
-        }
-      })
-
-      const [columnsResponse, recordsResponse] = await Promise.all([columnsPromise, recordsPromise])
-
-      if (!columnsResponse.ok) {
-        throw new Error(`Failed to fetch columns: ${columnsResponse.status}`)
-      }
-
-      if (!recordsResponse.ok) {
-        throw new Error(`Failed to fetch records: ${recordsResponse.status}`)
-      }
-
-      const columnsData = await columnsResponse.json()
-      const recordsData = await recordsResponse.json()
+      const columnsData = columnsResponse.data
+      const recordsData = recordsResponse.data
       
       // Transform API response to our column format
       const transformedColumns = Array.isArray(columnsData) ? columnsData.map(col => ({
@@ -102,7 +92,7 @@ export default function LeadsPage() {
       toast.success(`Loaded ${transformedRecords.length} leads successfully!`)
       
     } catch (err) {
-       const errorMsg = "Failed to fetch data: " + err.message
+      const errorMsg = `Failed to fetch data: ${err.message}`
       setError(errorMsg)
       toast.error(errorMsg)
       console.error("Error fetching data:", err)
@@ -127,26 +117,17 @@ export default function LeadsPage() {
     const toastId = toast.loading("Adding new lead...")
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/records/${LEADS_TABLE_ID}`, {
-        method: 'POST',
+      const response = await axios.post(`${API_BASE_URL}/api/records/${LEADS_TABLE_ID}`, {
+        ...newRecord,
+        created_at: new Date().toISOString(),
+        status: 'new'
+      }, {
         headers: {
           'Authorization': `Bearer ${AUTH_TOKEN}`,
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...newRecord,
-          created_at: new Date().toISOString(),
-          status: 'new'
-        })
+        }
       })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Failed to add record: ${response.status} - ${errorText}`)
-      }
-
-      const result = await response.json()
-      
       toast.success("Lead added successfully!", { id: toastId })
       setIsAddDialogOpen(false)
       setNewRecord({})
@@ -155,7 +136,7 @@ export default function LeadsPage() {
       fetchColumnsAndRecords()
       
     } catch (err) {
-      toast.error("Failed to add lead: " + err.message, { id: toastId })
+      toast.error(`Failed to add lead: ${err.message}`, { id: toastId })
       console.error("Error adding record:", err)
     } finally {
       setLoading(false)
@@ -169,21 +150,12 @@ export default function LeadsPage() {
     const toastId = toast.loading("Updating lead...")
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/records/${LEADS_TABLE_ID}/${recordId}`, {
-        method: 'PUT',
+      const response = await axios.put(`${API_BASE_URL}/api/records/${LEADS_TABLE_ID}/${recordId}`, updates, {
         headers: {
           'Authorization': `Bearer ${AUTH_TOKEN}`,
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updates)
+        }
       })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Failed to update record: ${response.status} - ${errorText}`)
-      }
-
-      const result = await response.json()
       
       toast.success("Lead updated successfully!", { id: toastId })
       
@@ -191,7 +163,7 @@ export default function LeadsPage() {
       fetchColumnsAndRecords()
       
     } catch (err) {
-      toast.error("Failed to update lead: " + err.message, { id: toastId })
+      toast.error(`Failed to update lead: ${err.message}`, { id: toastId })
       console.error("Error updating record:", err)
     } finally {
       setLoading(false)
@@ -246,18 +218,12 @@ export default function LeadsPage() {
     const toastId = toast.loading("Deleting lead...")
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/records/${LEADS_TABLE_ID}/${recordId}`, {
-        method: 'DELETE',
+      const response = await axios.delete(`${API_BASE_URL}/api/records/${LEADS_TABLE_ID}/${recordId}`, {
         headers: {
           'Authorization': `Bearer ${AUTH_TOKEN}`,
           'Content-Type': 'application/json',
         }
       })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Failed to delete record: ${response.status} - ${errorText}`)
-      }
 
       toast.success("Lead deleted successfully!", { id: toastId })
       
@@ -265,7 +231,7 @@ export default function LeadsPage() {
       fetchColumnsAndRecords()
       
     } catch (err) {
-      toast.error("Failed to delete lead: " + err.message, { id: toastId })
+      toast.error(`Failed to delete lead: ${err.message}`, { id: toastId })
       console.error("Error deleting record:", err)
     } finally {
       setLoading(false)
@@ -284,24 +250,18 @@ export default function LeadsPage() {
     const toastId = toast.loading(`Updating status to ${statusLabels[newStatus]}...`)
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/records/${LEADS_TABLE_ID}/${recordId}`, {
-        method: 'PUT',
+      const response = await axios.put(`${API_BASE_URL}/api/records/${LEADS_TABLE_ID}/${recordId}`, { status: newStatus }, {
         headers: {
           'Authorization': `Bearer ${AUTH_TOKEN}`,
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus })
+        }
       })
-
-      if (!response.ok) {
-        throw new Error(`Failed to update status: ${response.status}`)
-      }
 
       toast.success(`Lead marked as ${statusLabels[newStatus]}!`, { id: toastId })
       fetchColumnsAndRecords()
       
     } catch (err) {
-      toast.error("Failed to update status: " + err.message, { id: toastId })
+      toast.error(`Failed to update status: ${err.message}`, { id: toastId })
     }
   }
 
