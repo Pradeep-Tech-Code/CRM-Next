@@ -1390,7 +1390,7 @@ export default function PublicFormPage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-transparent flex items-center justify-center">
                 {/* <Building className="h-6 w-6 text-primary-foreground" /> */}
                 <Image
                   src="/SlashLogo.png"

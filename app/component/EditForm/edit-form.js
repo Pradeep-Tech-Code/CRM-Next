@@ -266,10 +266,10 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
         if (isFileField && form.values) {
           // Check multiple possible locations for file data
           const possibleFileValues = [
-            form.values[field.id], // Direct field value
-            form.values[field.name], // By field name
-            field.value, // Field value property
-            field.fileData // File data property
+            form.values[field.id],
+            form.values[field.name],
+            field.value,
+            field.fileData 
           ]
           
           const fileValue = possibleFileValues.find(val => val && isBase64File(val))

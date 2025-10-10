@@ -1197,9 +1197,19 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                                   } else {
                                     newValues = [...selectedValues, option]
                                   }
+                                  
+                                  // Only keep nested fields for currently selected options
+                                  const newNestedFields = {}
+                                  newValues.forEach(selectedOption => {
+                                    const optionIndex = field.options?.indexOf(selectedOption)
+                                    if (optionIndex !== -1 && field.nestedFields && field.nestedFields[optionIndex]) {
+                                      newNestedFields[optionIndex] = value?.nestedFields?.[optionIndex] || {}
+                                    }
+                                  })
+                                  
                                   safeOnChange({
                                     value: newValues,
-                                    nestedFields: value?.nestedFields || {}
+                                    nestedFields: newNestedFields
                                   })
                                 }}
                                 className="cursor-pointer"
@@ -1224,9 +1234,18 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
           return (
             <div className="space-y-3">
               <Select value={value?.value || ""} onValueChange={(selectedValue) => {
+                // Clear nested fields when switching options
+                const newNestedFields = {}
+                
+                // Only keep nested fields for the currently selected option
+                const selectedOptionIndex = field.options?.indexOf(selectedValue)
+                if (selectedOptionIndex !== -1 && field.nestedFields && field.nestedFields[selectedOptionIndex]) {
+                  newNestedFields[selectedOptionIndex] = value?.nestedFields?.[selectedOptionIndex] || {}
+                }
+                
                 safeOnChange({
                   value: selectedValue,
-                  nestedFields: value?.nestedFields || {}
+                  nestedFields: newNestedFields
                 })
               }} disabled={disabled}>
                 <SelectTrigger className={`bg-input ${invalid ? "border-red-500 text-red-500" : ""}`}>
@@ -1322,9 +1341,18 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
               <RadioGroup 
                 value={value?.value || ""} 
                 onValueChange={(selectedValue) => {
+                  // Clear nested fields when switching options
+                  const newNestedFields = {}
+                  
+                  // Only keep nested fields for the currently selected option
+                  const selectedOptionIndex = field.options?.indexOf(selectedValue)
+                  if (selectedOptionIndex !== -1 && field.nestedFields && field.nestedFields[selectedOptionIndex]) {
+                    newNestedFields[selectedOptionIndex] = value?.nestedFields?.[selectedOptionIndex] || {}
+                  }
+                  
                   safeOnChange({
                     value: selectedValue,
-                    nestedFields: value?.nestedFields || {}
+                    nestedFields: newNestedFields
                   })
                 }}
                 disabled={disabled}
