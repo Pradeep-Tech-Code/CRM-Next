@@ -16,38 +16,96 @@ import { Database } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 const renderNestedFields = (field, selectedOptions, onChange, parentValue, disabled, invalid, locationData, depth = 0) => {
-  if (!field.nestedFields || Object.keys(field.nestedFields).length === 0) {
-    return null
-  }
-
+  console.log('🔍 renderNestedFields called:', {
+    fieldId: field.id,
+    fieldLabel: field.label,
+    selectedOptions,
+    fieldOptions: field.options,
+    fieldNestedFields: field.nestedFields,
+    depth
+  })
+  
   const nestedFieldsToShow = []
+
+  // Helper function to find option by value
+  const findOptionByValue = (value) => {
+    return field.options?.find(option => {
+      const optionValue = typeof option === 'string' ? option : option.value
+      return optionValue === value
+    })
+  }
 
   // For multiple select/checkbox, show nested fields for all selected options
   if (Array.isArray(selectedOptions)) {
-    selectedOptions.forEach(option => {
-      const optionIndex = field.options?.indexOf(option)
-      if (optionIndex !== -1 && field.nestedFields[optionIndex]) {
-        nestedFieldsToShow.push(...field.nestedFields[optionIndex].map(nestedField => ({
+    selectedOptions.forEach(selectedValue => {
+      console.log('🔍 Processing selected value:', selectedValue)
+      const option = findOptionByValue(selectedValue)
+      console.log('🔍 Found option:', option)
+      if (option && typeof option === 'object' && option.nestedFields && option.nestedFields.length > 0) {
+        console.log('🔍 Option has nested fields:', option.nestedFields)
+        const optionIndex = field.options?.findIndex(opt => {
+          const optValue = typeof opt === 'string' ? opt : opt.value
+          return optValue === selectedValue
+        })
+        nestedFieldsToShow.push(...option.nestedFields.map(nestedField => ({
           ...nestedField,
           optionIndex,
-          optionValue: option
+          optionValue: selectedValue
         })))
+      }
+      // Fallback to old structure for backward compatibility
+      else if (field.nestedFields) {
+        const optionIndex = field.options?.findIndex(opt => {
+          const optValue = typeof opt === 'string' ? opt : opt.value
+          return optValue === selectedValue
+        })
+        if (optionIndex !== -1 && field.nestedFields[optionIndex]) {
+          nestedFieldsToShow.push(...field.nestedFields[optionIndex].map(nestedField => ({
+            ...nestedField,
+            optionIndex,
+            optionValue: selectedValue
+          })))
+        }
       }
     })
   }
   // For single select/radio, show nested fields for the selected option
   else if (selectedOptions && typeof selectedOptions === 'string') {
-    const optionIndex = field.options?.indexOf(selectedOptions)
-    if (optionIndex !== -1 && field.nestedFields[optionIndex]) {
-      nestedFieldsToShow.push(...field.nestedFields[optionIndex].map(nestedField => ({
+    console.log('🔍 Processing single selected value:', selectedOptions)
+    const option = findOptionByValue(selectedOptions)
+    console.log('🔍 Found option:', option)
+    if (option && typeof option === 'object' && option.nestedFields && option.nestedFields.length > 0) {
+      console.log('🔍 Option has nested fields:', option.nestedFields)
+      const optionIndex = field.options?.findIndex(opt => {
+        const optValue = typeof opt === 'string' ? opt : opt.value
+        return optValue === selectedOptions
+      })
+      nestedFieldsToShow.push(...option.nestedFields.map(nestedField => ({
         ...nestedField,
         optionIndex,
         optionValue: selectedOptions
       })))
     }
+    // Fallback to old structure for backward compatibility
+    else if (field.nestedFields) {
+      const optionIndex = field.options?.findIndex(opt => {
+        const optValue = typeof opt === 'string' ? opt : opt.value
+        return optValue === selectedOptions
+      })
+      if (optionIndex !== -1 && field.nestedFields[optionIndex]) {
+        nestedFieldsToShow.push(...field.nestedFields[optionIndex].map(nestedField => ({
+          ...nestedField,
+          optionIndex,
+          optionValue: selectedOptions
+        })))
+      }
+    }
   }
 
+  console.log('🔍 Final nestedFieldsToShow:', nestedFieldsToShow)
+  
   if (nestedFieldsToShow.length === 0) {
+    console.log('🔍 No nested fields to show, returning null')
     return null
   }
 
@@ -321,26 +379,35 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
                   <CommandList>
                     <CommandGroup>
                       {nestedField.options
-                        ?.filter((option) => option && option.trim() !== "")
+                        ?.filter((option) => {
+                          if (typeof option === 'string') {
+                            return option && option.trim() !== ""
+                          } else if (typeof option === 'object' && option !== null) {
+                            return option.value && option.value.trim() !== ""
+                          }
+                          return false
+                        })
                         .map((option, index) => {
-                          const checked = selectedValues.includes(option)
+                          const optionValue = typeof option === 'string' ? option : option.value
+                          const optionLabel = typeof option === 'string' ? option : option.label
+                          const checked = selectedValues.includes(optionValue)
                           return (
                             <CommandItem
                               key={`${nestedField.id}-${index}`}
-                              value={option}
+                              value={optionValue}
                               onSelect={() => {
                                 if (!onChange) return
                                 let newValues
                                 let newNestedFields = { ...currentNestedFields }
                                 
                                 if (checked) {
-                                  newValues = selectedValues.filter((v) => v !== option)
+                                  newValues = selectedValues.filter((v) => v !== optionValue)
                                   // Remove nested fields for this option if they exist
                                   if (newNestedFields[index]) {
                                     delete newNestedFields[index]
                                   }
                                 } else {
-                                  newValues = [...selectedValues, option]
+                                  newValues = [...selectedValues, optionValue]
                                   // Initialize nested fields for this option if they exist
                                   if (nestedField.nestedFields && nestedField.nestedFields[index]) {
                                     newNestedFields[index] = {}
@@ -356,7 +423,7 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
                               <span className="mr-2 flex h-4 w-4 items-center justify-center border rounded-sm bg-background">
                                 {checked && <Check className="h-3 w-3" />}
                               </span>
-                              {option}
+                              {optionLabel}
                             </CommandItem>
                           )
                         })}
@@ -428,11 +495,15 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
                 <SelectValue placeholder={nestedField.placeholder || "Select an option"} />
               </SelectTrigger>
               <SelectContent>
-                {nestedField.options?.map((option, index) => (
-                  <SelectItem key={index} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
+                {nestedField.options?.map((option, index) => {
+                  const optionValue = typeof option === 'string' ? option : option.value
+                  const optionLabel = typeof option === 'string' ? option : option.label
+                  return (
+                    <SelectItem key={index} value={optionValue}>
+                      {optionLabel}
+                    </SelectItem>
+                  )
+                })}
               </SelectContent>
             </Select>
             
@@ -476,25 +547,28 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
 
       return (
         <div className="space-y-2">
-          {nestedField.options && nestedField.options.length > 0 ? nestedField.options.map((option, index) => (
-            <div key={index} className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id={`${nestedField.id}-${index}`}
-                  checked={selectedValues.includes(option)}
+          {nestedField.options && nestedField.options.length > 0 ? nestedField.options.map((option, index) => {
+            const optionValue = typeof option === 'string' ? option : option.value
+            const optionLabel = typeof option === 'string' ? option : option.label
+            return (
+              <div key={index} className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`${nestedField.id}-${index}`}
+                    checked={selectedValues.includes(optionValue)}
                   onCheckedChange={(checked) => {
                     if (!onChange) return
                     let newValues
                     let newNestedFields = { ...currentNestedFieldsCheckbox }
 
                     if (checked) {
-                      newValues = [...selectedValues, option]
+                      newValues = [...selectedValues, optionValue]
                       // Initialize nested fields for this option if they exist
                       if (nestedField.nestedFields && nestedField.nestedFields[index]) {
                         newNestedFields[index] = newNestedFields[index] || {}
                       }
                     } else {
-                      newValues = selectedValues.filter((v) => v !== option)
+                      newValues = selectedValues.filter((v) => v !== optionValue)
                       // Remove nested fields for this option if they exist
                       if (newNestedFields[index]) {
                         delete newNestedFields[index]
@@ -510,14 +584,14 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
                   className={invalid ? "border-red-500" : ""}
                 />
                 <Label htmlFor={`${nestedField.id}-${index}`} className="text-sm font-normal cursor-pointer">
-                  {option}
+                  {optionLabel}
                 </Label>
               </div>
               
               {/* Render nested fields for this option if it's selected */}
-              {selectedValues.includes(option) && nestedField.nestedFields && nestedField.nestedFields[index] && (
+              {selectedValues.includes(optionValue) && nestedField.nestedFields && nestedField.nestedFields[index] && (
                 <div className="ml-6 space-y-3">
-                  {renderNestedFields(nestedField, [option], onChange, value, disabled, invalid, {
+                  {renderNestedFields(nestedField, [optionValue], onChange, value, disabled, invalid, {
                     countries,
                     states,
                     cities,
@@ -550,7 +624,8 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
                 </div>
               )}
             </div>
-          )) : (
+            )
+          }) : (
             <div className="text-sm text-muted-foreground p-2 border border-dashed rounded text-center">
               No options available
             </div>
@@ -585,19 +660,22 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
                 disabled={disabled}
                 className={invalid ? "text-red-500" : ""}
               >
-                {nestedField.options.map((option, index) => (
-                  <div key={index} className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value={option} id={`${nestedField.id}-${index}`} className={invalid ? "border-red-500" : ""} />
-                      <Label htmlFor={`${nestedField.id}-${index}`} className="text-sm font-normal cursor-pointer">
-                        {option}
+                {nestedField.options.map((option, index) => {
+                  const optionValue = typeof option === 'string' ? option : option.value
+                  const optionLabel = typeof option === 'string' ? option : option.label
+                  return (
+                    <div key={index} className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value={optionValue} id={`${nestedField.id}-${index}`} className={invalid ? "border-red-500" : ""} />
+                        <Label htmlFor={`${nestedField.id}-${index}`} className="text-sm font-normal cursor-pointer">
+                          {optionLabel}
                       </Label>
                     </div>
                     
                     {/* Render nested fields for this option if it's selected */}
-                    {selectedValue === option && nestedField.nestedFields && nestedField.nestedFields[index] && (
+                    {selectedValue === optionValue && nestedField.nestedFields && nestedField.nestedFields[index] && (
                       <div className="ml-6 space-y-3">
-                        {renderNestedFields(nestedField, option, onChange, value, disabled, invalid, {
+                        {renderNestedFields(nestedField, optionValue, onChange, value, disabled, invalid, {
                           countries,
                           states,
                           cities,
@@ -630,7 +708,8 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
                       </div>
                     )}
                   </div>
-                ))}
+                  )
+                })}
               </RadioGroup>
             </div>
           ) : (
@@ -1479,26 +1558,38 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                     <CommandList>
                       <CommandGroup>
                         {field.options
-                          ?.filter((option) => option && option.trim() !== "")
+                          ?.filter((option) => {
+                            if (typeof option === 'string') {
+                              return option && option.trim() !== ""
+                            } else if (typeof option === 'object' && option !== null) {
+                              return option.value && option.value.trim() !== ""
+                            }
+                            return false
+                          })
                           .map((option, index) => {
-                            const checked = selectedValues.includes(option)
+                            const optionValue = typeof option === 'string' ? option : option.value
+                            const optionLabel = typeof option === 'string' ? option : option.label
+                            const checked = selectedValues.includes(optionValue)
                             return (
                               <CommandItem
                                 key={`${field.id}-${index}`}
-                                value={option}
+                                value={optionValue}
                                 onSelect={() => {
                                   if (!onChange) return
                                   let newValues
                                   if (checked) {
-                                    newValues = selectedValues.filter((v) => v !== option)
+                                    newValues = selectedValues.filter((v) => v !== optionValue)
                                   } else {
-                                    newValues = [...selectedValues, option]
+                                    newValues = [...selectedValues, optionValue]
                                   }
                                   
                                   // Only keep nested fields for currently selected options
                                   const newNestedFields = {}
                                   newValues.forEach(selectedOption => {
-                                    const optionIndex = field.options?.indexOf(selectedOption)
+                                    const optionIndex = field.options?.findIndex(opt => {
+                                      const optValue = typeof opt === 'string' ? opt : opt.value
+                                      return optValue === selectedOption
+                                    })
                                     if (optionIndex !== -1 && field.nestedFields && field.nestedFields[optionIndex]) {
                                       newNestedFields[optionIndex] = value?.nestedFields?.[optionIndex] || {}
                                     }
@@ -1514,7 +1605,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                                 <span className="mr-2 flex h-4 w-4 items-center justify-center border rounded-sm bg-background">
                                   {checked && <Check className="h-3 w-3" />}
                                 </span>
-                                {option}
+                                {optionLabel}
                               </CommandItem>
                             )
                           })}
@@ -1579,16 +1670,27 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 </SelectTrigger>
                 <SelectContent className="bg-background text-foreground border border-border shadow-md z-50">
                   {field.options
-                    ?.filter((option) => option && option.trim() !== "")
-                    .map((option, index) => (
-                      <SelectItem
-                        key={index}
-                        value={option || `option-${index}`}
-                        className="hover:bg-accent hover:text-accent-foreground cursor-pointer"
-                      >
-                        {option}
-                      </SelectItem>
-                    ))}
+                    ?.filter((option) => {
+                      if (typeof option === 'string') {
+                        return option && option.trim() !== ""
+                      } else if (typeof option === 'object' && option !== null) {
+                        return option.value && option.value.trim() !== ""
+                      }
+                      return false
+                    })
+                    .map((option, index) => {
+                      const optionValue = typeof option === 'string' ? option : option.value
+                      const optionLabel = typeof option === 'string' ? option : option.label
+                      return (
+                        <SelectItem
+                          key={index}
+                          value={optionValue || `option-${index}`}
+                          className="hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                        >
+                          {optionLabel}
+                        </SelectItem>
+                      )
+                    })}
                 </SelectContent>
               </Select>
 
@@ -1629,12 +1731,15 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
       case "checkbox":
         return (
           <div className="space-y-3">
-            {field.options && field.options.length > 0 ? field.options.map((option, index) => (
-              <div key={index} className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`${field.id}-${index}`}
-                    checked={Array.isArray(value?.value) ? value.value.includes(option) : false}
+            {field.options && field.options.length > 0 ? field.options.map((option, index) => {
+              const optionValue = typeof option === 'string' ? option : option.value
+              const optionLabel = typeof option === 'string' ? option : option.label
+              return (
+                <div key={index} className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`${field.id}-${index}`}
+                      checked={Array.isArray(value?.value) ? value.value.includes(optionValue) : false}
                     onCheckedChange={(checked) => {
                       if (!onChange) return
                       const currentValue = Array.isArray(value?.value) ? value.value : []
@@ -1642,9 +1747,9 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
 
                       let newValue
                       if (checked) {
-                        newValue = [...currentValue, option]
+                        newValue = [...currentValue, optionValue]
                       } else {
-                        newValue = currentValue.filter((v) => v !== option)
+                        newValue = currentValue.filter((v) => v !== optionValue)
                         
                         // Remove nested fields for this option if they exist
                         if (field.nestedFields && field.nestedFields[index]) {
@@ -1666,13 +1771,13 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                     className={invalid ? "border-red-500" : ""}
                   />
                   <Label htmlFor={`${field.id}-${index}`} className={`text-sm font-normal cursor-pointer ${invalid ? "text-red-500" : ""}`}>
-                    {option}
+                    {optionLabel}
                   </Label>
                 </div>
 
-                {Array.isArray(value?.value) && value.value?.includes(option) && field.nestedFields && field.nestedFields[index] && (
+                {Array.isArray(value?.value) && value.value?.includes(optionValue) && field.nestedFields && field.nestedFields[index] && (
                   <div className="ml-6 space-y-3">
-                    {renderNestedFields(field, [option], onChange, value, disabled, invalid, {
+                    {renderNestedFields(field, [optionValue], onChange, value, disabled, invalid, {
                       countries,
                       states,
                       cities,
@@ -1705,7 +1810,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                   </div>
                 )}
               </div>
-            )) : (
+              )
+            }) : (
               <div className="text-sm text-muted-foreground p-3 border border-dashed rounded-lg text-center">
                 No options available. Add options in the field configuration panel.
               </div>
@@ -1742,18 +1848,21 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 disabled={disabled}
                 className={invalid ? "text-red-500" : ""}
               >
-                {field.options.map((option, index) => (
-                  <div key={index} className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value={option} id={`${field.id}-${index}`} className={invalid ? "border-red-500" : ""} />
-                      <Label htmlFor={`${field.id}-${index}`} className="text-sm font-normal cursor-pointer">
-                        {option}
-                      </Label>
-                    </div>
+                {field.options.map((option, index) => {
+                  const optionValue = typeof option === 'string' ? option : option.value
+                  const optionLabel = typeof option === 'string' ? option : option.label
+                  return (
+                    <div key={index} className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value={optionValue} id={`${field.id}-${index}`} className={invalid ? "border-red-500" : ""} />
+                        <Label htmlFor={`${field.id}-${index}`} className="text-sm font-normal cursor-pointer">
+                          {optionLabel}
+                        </Label>
+                      </div>
 
-                    {value?.value === option && field.nestedFields && field.nestedFields[index] && (
-                      <div className="ml-6 space-y-3">
-                        {renderNestedFields(field, option, onChange, value, disabled, invalid, {
+                      {value?.value === optionValue && field.nestedFields && field.nestedFields[index] && (
+                        <div className="ml-6 space-y-3">
+                          {renderNestedFields(field, optionValue, onChange, value, disabled, invalid, {
                           countries,
                           states,
                           cities,
@@ -1786,7 +1895,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                       </div>
                     )}
                   </div>
-                ))}
+                  )
+                })}
               </RadioGroup>
             ) : (
               <div className="text-sm text-muted-foreground p-3 border border-dashed rounded-lg text-center">

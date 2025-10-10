@@ -339,6 +339,51 @@ export default function PublicFormPage() {
     }
   }
 
+  // Helper function to recursively process nested fields
+  const processNestedField = (nestedField) => {
+    const processedField = {
+      id: nestedField.id,
+      type: nestedField.type,
+      label: nestedField.label,
+      placeholder: nestedField.placeholder || '',
+      required: nestedField.required || false,
+      validation: nestedField.validations || {},
+      options: [],
+      nestedFields: {}
+    }
+
+    // Process options if they exist
+    if (nestedField.options && Array.isArray(nestedField.options)) {
+      processedField.options = nestedField.options.map(option => {
+        if (typeof option === 'object' && option !== null) {
+          return {
+            value: option.value,
+            label: option.label,
+            nestedFields: option.nestedFields || []
+          }
+        } else {
+          // Convert string options to objects for consistency
+          return {
+            value: option,
+            label: option,
+            nestedFields: []
+          }
+        }
+      })
+
+      // Process nested fields for each option
+      nestedField.options.forEach((option, optionIndex) => {
+        if (option.nestedFields && option.nestedFields.length > 0) {
+          processedField.nestedFields[optionIndex] = option.nestedFields.map(deepNestedField => 
+            processNestedField(deepNestedField)
+          )
+        }
+      })
+    }
+
+    return processedField
+  }
+
   // Helper function to parse form data from API
   const parseFormData = (apiForm) => {
     try {
@@ -406,21 +451,29 @@ export default function PublicFormPage() {
               try {
                 const parsedOptions = JSON.parse(fieldData.options)
                 if (Array.isArray(parsedOptions)) {
-                  // New nested structure: options contain nestedFields
-                  options = parsedOptions.map(option => option.value || option)
+                  // New nested structure: preserve full option objects with nestedFields
+                  options = parsedOptions.map(option => {
+                    if (typeof option === 'object' && option !== null) {
+                      // This is a proper option object with nestedFields
+                      const processedOption = {
+                        value: option.value,
+                        label: option.label,
+                        nestedFields: option.nestedFields || []
+                      }
+                      console.log('🔍 Processed option:', processedOption)
+                      return processedOption
+                    } else {
+                      // This is a simple string option
+                      return option
+                    }
+                  })
                   
-                  // Extract nested fields from options
+                  // Extract nested fields from options for backward compatibility
                   parsedOptions.forEach((option, index) => {
                     if (option.nestedFields && option.nestedFields.length > 0) {
-                      nestedFields[index] = option.nestedFields.map(nestedField => ({
-                        id: nestedField.id,
-                        type: nestedField.type,
-                        label: nestedField.label,
-                        placeholder: nestedField.placeholder || '',
-                        required: nestedField.required || false,
-                        options: nestedField.options || [],
-                        validation: nestedField.validations || {}
-                      }))
+                      nestedFields[index] = option.nestedFields.map(nestedField => 
+                        processNestedField(nestedField)
+                      )
                     }
                   })
                 } else if (typeof parsedOptions === 'string') {

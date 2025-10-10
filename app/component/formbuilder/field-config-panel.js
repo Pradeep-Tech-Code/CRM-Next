@@ -113,7 +113,7 @@ export function FieldConfigPanel({ field, onUpdateField }) {
       placeholder: "",
       required: false
     }
-    
+
     if (path.length === 0) {
       // Adding to root level
       if (!cloned[optionIndex]) cloned[optionIndex] = []
@@ -297,60 +297,60 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                   
                   return (
                     <div key={optionIndex} className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Input
-                          value={option}
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={option}
                           onChange={(e) => updateOption(optionIndex, e.target.value)}
                           placeholder={`Option ${optionIndex + 1}`}
-                          className="h-7 text-xs flex-1"
-                        />
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        className="h-7 text-xs flex-1"
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                           onClick={() => removeOptionAtIndex(optionIndex)}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    
                       {/* Add nested fields controls */}
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs"
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
                           onClick={() => toggleNestedFields(optionKey)}
-                        >
+                      >
                           {expandedNestedFields[optionKey] ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                          Nested Fields
+                        Nested Fields
                           {hasNestedFields && (
                             <Badge variant="secondary" className="ml-1 text-xs">
                               {nestedField.nestedFields[optionIndex].length}
                             </Badge>
                           )}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs"
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
                           onClick={() => handleAddNestedField(optionIndex)}
-                        >
-                          <Plus className="h-3 w-3" />
-                          Add Field
-                        </Button>
-                      </div>
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add Field
+                      </Button>
+                    </div>
 
                       {/* Render nested fields recursively */}
                       {expandedNestedFields[optionKey] && (
-                        <div className="ml-4 space-y-3">
+                      <div className="ml-4 space-y-3">
                           {nestedField.nestedFields?.[optionIndex]?.map((childField, childIndex) => (
-                            <NestedFieldConfig
+                          <NestedFieldConfig
                               key={childField.id}
                               nestedField={childField}
                               path={[...path, optionIndex, childIndex]}
-                            />
-                          ))}
+                          />
+                        ))}
                           {!hasNestedFields && (
                             <div className="text-center py-4 text-muted-foreground text-xs border-2 border-dashed rounded-lg bg-muted/20">
                               <div className="flex flex-col items-center gap-1">
@@ -359,9 +359,9 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                               </div>
                             </div>
                           )}
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
+                  </div>
                   )
                 })}
                 <Button
@@ -491,56 +491,56 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                   const hasNestedFields = field.nestedFields?.[index]?.length > 0
                   
                   return (
-                    <div key={index} className="space-y-3 border rounded-lg p-3 bg-muted/20">
-                      <div className="flex items-center justify-between">
-                        <div className="w-6 h-6 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground flex-shrink-0">
-                          {index + 1}
-                        </div>
-                        <Input
-                          value={option}
-                          onChange={(e) => {
-                            const newOptions = [...(field.options || [])]
-                            newOptions[index] = e.target.value
-                            onUpdateField(field.id, { options: newOptions })
-                          }}
-                          className="bg-input flex-1 min-w-0"
-                          placeholder={`Option ${index + 1}`}
-                        />
+                  <div key={index} className="space-y-3 border rounded-lg p-3 bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <div className="w-6 h-6 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground flex-shrink-0">
+                        {index + 1}
+                      </div>
+                      <Input
+                        value={option}
+                        onChange={(e) => {
+                          const newOptions = [...(field.options || [])]
+                          newOptions[index] = e.target.value
+                          onUpdateField(field.id, { options: newOptions })
+                        }}
+                        className="bg-input flex-1 min-w-0"
+                        placeholder={`Option ${index + 1}`}
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
+                        onClick={() => removeOption(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    {/* Nested Fields Section */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                            onClick={() => toggleNestedFields(rootKey)}
+                          className="text-xs gap-1 h-7 hover:bg-accent/50 flex-shrink-0"
+                        >
+                            {expandedNestedFields[rootKey] ? (
+                            <ChevronDown className="h-3 w-3" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3" />
+                          )}
+                          Additional Fields
+                            {hasNestedFields && (
+                            <Badge variant="secondary" className="ml-1 text-xs">
+                              {field.nestedFields[index].length}
+                            </Badge>
+                          )}
+                        </Button>
+
                         <Button
                           size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
-                          onClick={() => removeOption(index)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-
-                      {/* Nested Fields Section */}
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => toggleNestedFields(rootKey)}
-                            className="text-xs gap-1 h-7 hover:bg-accent/50 flex-shrink-0"
-                          >
-                            {expandedNestedFields[rootKey] ? (
-                              <ChevronDown className="h-3 w-3" />
-                            ) : (
-                              <ChevronRight className="h-3 w-3" />
-                            )}
-                            Additional Fields
-                            {hasNestedFields && (
-                              <Badge variant="secondary" className="ml-1 text-xs">
-                                {field.nestedFields[index].length}
-                              </Badge>
-                            )}
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant="outline"
+                          variant="outline"
                             onClick={() => {
                               const updatedNestedFields = addNestedFieldAtPath(
                                 field.nestedFields || {},
@@ -549,36 +549,36 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                               )
                               onUpdateField(field.id, { nestedFields: updatedNestedFields })
                             }}
-                            className="h-7 text-xs gap-1 hover:bg-accent/50 flex-shrink-0"
-                          >
-                            <Plus className="h-3 w-3" />
-                            Add Field
-                          </Button>
-                        </div>
+                          className="h-7 text-xs gap-1 hover:bg-accent/50 flex-shrink-0"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Add Field
+                        </Button>
+                      </div>
 
                         {expandedNestedFields[rootKey] && (
-                          <div className="space-y-3">
-                            {field.nestedFields?.[index]?.map((nestedField, nestedIndex) => (
-                              <NestedFieldConfig
-                                key={nestedField.id}
-                                nestedField={nestedField}
+                        <div className="space-y-3">
+                          {field.nestedFields?.[index]?.map((nestedField, nestedIndex) => (
+                            <NestedFieldConfig
+                              key={nestedField.id}
+                              nestedField={nestedField}
                                 path={[index, nestedIndex]}
-                              />
-                            ))}
+                            />
+                          ))}
 
                             {!hasNestedFields && (
-                              <div className="text-center py-6 text-muted-foreground text-sm border-2 border-dashed rounded-lg bg-muted/20">
-                                <div className="flex flex-col items-center gap-2">
-                                  <Settings2 className="h-4 w-4" />
-                                  <span>No additional fields for this option</span>
-                                  <span className="text-xs">Click "Add Field" to create conditional fields</span>
-                                </div>
+                            <div className="text-center py-6 text-muted-foreground text-sm border-2 border-dashed rounded-lg bg-muted/20">
+                              <div className="flex flex-col items-center gap-2">
+                                <Settings2 className="h-4 w-4" />
+                                <span>No additional fields for this option</span>
+                                <span className="text-xs">Click "Add Field" to create conditional fields</span>
                               </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
+                  </div>
                   )
                 })}
               </div>
