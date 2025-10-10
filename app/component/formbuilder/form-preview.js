@@ -128,16 +128,50 @@ export function FormPreview({ fields }) {
               
               // Add nested fields for this option if they exist
               if (field.nestedFields && field.nestedFields[index]) {
-                optionObj.nestedFields = field.nestedFields[index].map(nestedField => ({
-                  id: nestedField.id,
-                  name: nestedField.label.toLowerCase().replace(/\s+/g, '_'),
-                  label: nestedField.label,
-                  type: nestedField.type,
-                  required: nestedField.required || false,
-                  validations: nestedField.validation || {},
-                  hasNested: false,
-                  options: nestedField.options || []
-                }))
+                optionObj.nestedFields = field.nestedFields[index].map(nestedField => {
+                  const processedNestedField = {
+                    id: nestedField.id,
+                    name: nestedField.label.toLowerCase().replace(/\s+/g, '_'),
+                    label: nestedField.label,
+                    type: nestedField.type,
+                    required: nestedField.required || false,
+                    validations: nestedField.validation || {},
+                    hasNested: false,
+                    options: []
+                  }
+
+                  // Process nested field options if it's a select, checkbox, or radio
+                  if (["select", "checkbox", "radio"].includes(nestedField.type) && nestedField.options) {
+                    processedNestedField.options = nestedField.options.map((nestedOption, nestedOptionIndex) => {
+                      const nestedOptionObj = {
+                        value: nestedOption,
+                        label: nestedOption,
+                        nestedFields: []
+                      }
+
+                      // Recursively process nested fields within nested fields
+                      if (nestedField.nestedFields && nestedField.nestedFields[nestedOptionIndex]) {
+                        nestedOptionObj.nestedFields = nestedField.nestedFields[nestedOptionIndex].map(deepNestedField => ({
+                          id: deepNestedField.id,
+                          name: deepNestedField.label.toLowerCase().replace(/\s+/g, '_'),
+                          label: deepNestedField.label,
+                          type: deepNestedField.type,
+                          required: deepNestedField.required || false,
+                          validations: deepNestedField.validation || {},
+                          hasNested: false,
+                          options: deepNestedField.options || []
+                        }))
+                      }
+
+                      return nestedOptionObj
+                    })
+
+                    // Check if this nested field has nested fields
+                    processedNestedField.hasNested = processedNestedField.options.some(option => option.nestedFields.length > 0)
+                  }
+
+                  return processedNestedField
+                })
               }
               
               return optionObj
@@ -178,16 +212,50 @@ export function FormPreview({ fields }) {
               
               // Add nested fields for this option if they exist
               if (field.nestedFields && field.nestedFields[index]) {
-                optionObj.nestedFields = field.nestedFields[index].map(nestedField => ({
-                  id: nestedField.id,
-                  name: nestedField.label.toLowerCase().replace(/\s+/g, '_'),
-                  label: nestedField.label,
-                  type: nestedField.type,
-                  required: nestedField.required || false,
-                  validations: nestedField.validation || {},
-                  hasNested: false,
-                  options: nestedField.options || []
-                }))
+                optionObj.nestedFields = field.nestedFields[index].map(nestedField => {
+                  const processedNestedField = {
+                    id: nestedField.id,
+                    name: nestedField.label.toLowerCase().replace(/\s+/g, '_'),
+                    label: nestedField.label,
+                    type: nestedField.type,
+                    required: nestedField.required || false,
+                    validations: nestedField.validation || {},
+                    hasNested: false,
+                    options: []
+                  }
+
+                  // Process nested field options if it's a select, checkbox, or radio
+                  if (["select", "checkbox", "radio"].includes(nestedField.type) && nestedField.options) {
+                    processedNestedField.options = nestedField.options.map((nestedOption, nestedOptionIndex) => {
+                      const nestedOptionObj = {
+                        value: nestedOption,
+                        label: nestedOption,
+                        nestedFields: []
+                      }
+
+                      // Recursively process nested fields within nested fields
+                      if (nestedField.nestedFields && nestedField.nestedFields[nestedOptionIndex]) {
+                        nestedOptionObj.nestedFields = nestedField.nestedFields[nestedOptionIndex].map(deepNestedField => ({
+                          id: deepNestedField.id,
+                          name: deepNestedField.label.toLowerCase().replace(/\s+/g, '_'),
+                          label: deepNestedField.label,
+                          type: deepNestedField.type,
+                          required: deepNestedField.required || false,
+                          validations: deepNestedField.validation || {},
+                          hasNested: false,
+                          options: deepNestedField.options || []
+                        }))
+                      }
+
+                      return nestedOptionObj
+                    })
+
+                    // Check if this nested field has nested fields
+                    processedNestedField.hasNested = processedNestedField.options.some(option => option.nestedFields.length > 0)
+                  }
+
+                  return processedNestedField
+                })
               }
               
               return optionObj

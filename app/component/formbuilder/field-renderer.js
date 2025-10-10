@@ -15,7 +15,7 @@ import { useState, useEffect } from "react"
 import { Database } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
-const renderNestedFields = (field, selectedOptions, onChange, parentValue, disabled, invalid, locationData) => {
+const renderNestedFields = (field, selectedOptions, onChange, parentValue, disabled, invalid, locationData, depth = 0) => {
   if (!field.nestedFields || Object.keys(field.nestedFields).length === 0) {
     return null
   }
@@ -51,11 +51,14 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
     return null
   }
 
+  const borderColor = depth === 0 ? 'border-primary/20' : depth === 1 ? 'border-blue-300/30' : 'border-green-300/30'
+  const dotColor = depth === 0 ? 'bg-primary' : depth === 1 ? 'bg-blue-500' : 'bg-green-500'
+
   return (
-    <div className="mt-4 pl-4 border-l-2 border-primary/20 space-y-4">
+    <div className="mt-4 pl-4 border-l-2 space-y-4" style={{ borderColor: borderColor.replace('border-', '').replace('/20', '').replace('/30', '') }}>
       <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-        <div className="w-2 h-2 bg-primary rounded-full"></div>
-        Additional Information
+        <div className={`w-2 h-2 rounded-full ${dotColor}`}></div>
+        Additional Information {depth > 0 && `(Level ${depth + 1})`}
         <Badge variant="secondary" className="text-xs">
           {nestedFieldsToShow.length} field{nestedFieldsToShow.length !== 1 ? 's' : ''}
         </Badge>
@@ -94,7 +97,72 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
                   {nestedField.type}
                 </Badge>
               </div>
-              {renderNestedFieldInput(nestedField, nestedValue, handleNestedChange, disabled, invalid, locationData)}
+              {renderNestedFieldInput(nestedField, nestedValue, handleNestedChange, disabled, invalid, {
+                countries: locationData?.countries || [],
+                states: locationData?.states || [],
+                cities: locationData?.cities || [],
+                phoneCountries: locationData?.phoneCountries || [],
+                loadingStates: locationData?.loadingStates || false,
+                loadingCities: locationData?.loadingCities || false,
+                loadingPhoneCountries: locationData?.loadingPhoneCountries || false,
+                apiError: locationData?.apiError || null,
+                countrySearch: locationData?.countrySearch || "",
+                stateSearch: locationData?.stateSearch || "",
+                citySearch: locationData?.citySearch || "",
+                phoneCountrySearch: locationData?.phoneCountrySearch || "",
+                countryOpen: locationData?.countryOpen || false,
+                stateOpen: locationData?.stateOpen || false,
+                cityOpen: locationData?.cityOpen || false,
+                phoneCountryOpen: locationData?.phoneCountryOpen || false,
+                setCountrySearch: locationData?.setCountrySearch || (() => {}),
+                setStateSearch: locationData?.setStateSearch || (() => {}),
+                setCitySearch: locationData?.setCitySearch || (() => {}),
+                setPhoneCountrySearch: locationData?.setPhoneCountrySearch || (() => {}),
+                setCountryOpen: locationData?.setCountryOpen || (() => {}),
+                setStateOpen: locationData?.setStateOpen || (() => {}),
+                setCityOpen: locationData?.setCityOpen || (() => {}),
+                setPhoneCountryOpen: locationData?.setPhoneCountryOpen || (() => {}),
+                filteredCountries: locationData?.filteredCountries || [],
+                filteredStates: locationData?.filteredStates || [],
+                filteredCities: locationData?.filteredCities || [],
+                filteredPhoneCountries: locationData?.filteredPhoneCountries || []
+              })}
+              
+              {/* Recursively render nested fields if this field has nested fields */}
+              {nestedField.nestedFields && Object.keys(nestedField.nestedFields).length > 0 && (
+                <div className="mt-3">
+                  {renderNestedFields(nestedField, nestedValue?.value || nestedValue, handleNestedChange, nestedValue, disabled, invalid, {
+                    countries: locationData?.countries || [],
+                    states: locationData?.states || [],
+                    cities: locationData?.cities || [],
+                    phoneCountries: locationData?.phoneCountries || [],
+                    loadingStates: locationData?.loadingStates || false,
+                    loadingCities: locationData?.loadingCities || false,
+                    loadingPhoneCountries: locationData?.loadingPhoneCountries || false,
+                    apiError: locationData?.apiError || null,
+                    countrySearch: locationData?.countrySearch || "",
+                    stateSearch: locationData?.stateSearch || "",
+                    citySearch: locationData?.citySearch || "",
+                    phoneCountrySearch: locationData?.phoneCountrySearch || "",
+                    countryOpen: locationData?.countryOpen || false,
+                    stateOpen: locationData?.stateOpen || false,
+                    cityOpen: locationData?.cityOpen || false,
+                    phoneCountryOpen: locationData?.phoneCountryOpen || false,
+                    setCountrySearch: locationData?.setCountrySearch || (() => {}),
+                    setStateSearch: locationData?.setStateSearch || (() => {}),
+                    setCitySearch: locationData?.setCitySearch || (() => {}),
+                    setPhoneCountrySearch: locationData?.setPhoneCountrySearch || (() => {}),
+                    setCountryOpen: locationData?.setCountryOpen || (() => {}),
+                    setStateOpen: locationData?.setStateOpen || (() => {}),
+                    setCityOpen: locationData?.setCityOpen || (() => {}),
+                    setPhoneCountryOpen: locationData?.setPhoneCountryOpen || (() => {}),
+                    filteredCountries: locationData?.filteredCountries || [],
+                    filteredStates: locationData?.filteredStates || [],
+                    filteredCities: locationData?.filteredCities || [],
+                    filteredPhoneCountries: locationData?.filteredPhoneCountries || []
+                  }, depth + 1)}
+                </div>
+              )}
             </div>
           )
         })}
@@ -175,7 +243,8 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
       )
     case "select":
       if (nestedField.validation?.multiple) {
-        const selectedValues = Array.isArray(value) ? value : []
+        const selectedValues = Array.isArray(value?.value) ? value.value : []
+        const currentNestedFields = value?.nestedFields || {}
 
         return (
           <div className="space-y-3">
@@ -202,7 +271,16 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
                               e.stopPropagation()
                               if (!onChange) return
                               const newValues = selectedValues.filter((v) => v !== selectedValue)
-                              onChange(newValues)
+                              const newNestedFields = { ...currentNestedFields }
+                              // Remove nested fields for this option if they exist
+                              const optionIndex = nestedField.options?.indexOf(selectedValue)
+                              if (optionIndex !== -1 && newNestedFields[optionIndex]) {
+                                delete newNestedFields[optionIndex]
+                              }
+                              onChange({
+                                value: newValues,
+                                nestedFields: newNestedFields
+                              })
                             }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
@@ -210,7 +288,16 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
                                 e.stopPropagation()
                                 if (!onChange) return
                                 const newValues = selectedValues.filter((v) => v !== selectedValue)
-                                onChange(newValues)
+                                const newNestedFields = { ...currentNestedFields }
+                                // Remove nested fields for this option if they exist
+                                const optionIndex = nestedField.options?.indexOf(selectedValue)
+                                if (optionIndex !== -1 && newNestedFields[optionIndex]) {
+                                  delete newNestedFields[optionIndex]
+                                }
+                                onChange({
+                                  value: newValues,
+                                  nestedFields: newNestedFields
+                                })
                               }
                             }}
                             className="hover:bg-primary/20 rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold cursor-pointer"
@@ -244,12 +331,25 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
                               onSelect={() => {
                                 if (!onChange) return
                                 let newValues
+                                let newNestedFields = { ...currentNestedFields }
+                                
                                 if (checked) {
                                   newValues = selectedValues.filter((v) => v !== option)
+                                  // Remove nested fields for this option if they exist
+                                  if (newNestedFields[index]) {
+                                    delete newNestedFields[index]
+                                  }
                                 } else {
                                   newValues = [...selectedValues, option]
+                                  // Initialize nested fields for this option if they exist
+                                  if (nestedField.nestedFields && nestedField.nestedFields[index]) {
+                                    newNestedFields[index] = {}
+                                  }
                                 }
-                                onChange(newValues)
+                                onChange({
+                                  value: newValues,
+                                  nestedFields: newNestedFields
+                                })
                               }}
                               className="cursor-pointer"
                             >
@@ -265,50 +365,190 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
                 </Command>
               </PopoverContent>
             </Popover>
+            
+            {/* Render nested fields for selected options */}
+            {renderNestedFields(nestedField, selectedValues, onChange, value, disabled, invalid, {
+              countries,
+              states,
+              cities,
+              phoneCountries,
+              loadingStates,
+              loadingCities,
+              loadingPhoneCountries,
+              apiError,
+              countrySearch,
+              stateSearch,
+              citySearch,
+              phoneCountrySearch,
+              countryOpen,
+              stateOpen,
+              cityOpen,
+              phoneCountryOpen,
+              setCountrySearch,
+              setStateSearch,
+              setCitySearch,
+              setPhoneCountrySearch,
+              setCountryOpen,
+              setStateOpen,
+              setCityOpen,
+              setPhoneCountryOpen,
+              filteredCountries,
+              filteredStates,
+              filteredCities,
+              filteredPhoneCountries
+            })}
           </div>
         )
       } else {
+        const selectedValue = value?.value || ""
+        const currentNestedFields = value?.nestedFields || {}
+
         return (
-          <Select
-            value={value || ""}
-            onValueChange={onChange}
-            disabled={disabled}
-          >
-            <SelectTrigger className={invalid ? "border-red-500" : ""}>
-              <SelectValue placeholder={nestedField.placeholder || "Select an option"} />
-            </SelectTrigger>
-            <SelectContent>
-              {nestedField.options?.map((option, index) => (
-                <SelectItem key={index} value={option}>
-                  {option}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="space-y-3">
+            <Select
+              value={selectedValue}
+              onValueChange={(selectedOption) => {
+                if (!onChange) return
+                const newNestedFields = {}
+                
+                // Only keep nested fields for the currently selected option
+                const selectedOptionIndex = nestedField.options?.indexOf(selectedOption)
+                if (selectedOptionIndex !== -1 && nestedField.nestedFields && nestedField.nestedFields[selectedOptionIndex]) {
+                  newNestedFields[selectedOptionIndex] = currentNestedFields[selectedOptionIndex] || {}
+                }
+                
+                onChange({
+                  value: selectedOption,
+                  nestedFields: newNestedFields
+                })
+              }}
+              disabled={disabled}
+            >
+              <SelectTrigger className={invalid ? "border-red-500" : ""}>
+                <SelectValue placeholder={nestedField.placeholder || "Select an option"} />
+              </SelectTrigger>
+              <SelectContent>
+                {nestedField.options?.map((option, index) => (
+                  <SelectItem key={index} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            {/* Render nested fields for selected option */}
+            {renderNestedFields(nestedField, selectedValue, onChange, value, disabled, invalid, {
+              countries,
+              states,
+              cities,
+              phoneCountries,
+              loadingStates,
+              loadingCities,
+              loadingPhoneCountries,
+              apiError,
+              countrySearch,
+              stateSearch,
+              citySearch,
+              phoneCountrySearch,
+              countryOpen,
+              stateOpen,
+              cityOpen,
+              phoneCountryOpen,
+              setCountrySearch,
+              setStateSearch,
+              setCitySearch,
+              setPhoneCountrySearch,
+              setCountryOpen,
+              setStateOpen,
+              setCityOpen,
+              setPhoneCountryOpen,
+              filteredCountries,
+              filteredStates,
+              filteredCities,
+              filteredPhoneCountries
+            })}
+          </div>
         )
       }
     case "checkbox":
+      const selectedValues = Array.isArray(value?.value) ? value.value : []
+      const currentNestedFieldsCheckbox = value?.nestedFields || {}
+
       return (
         <div className="space-y-2">
           {nestedField.options && nestedField.options.length > 0 ? nestedField.options.map((option, index) => (
-            <div key={index} className="flex items-center space-x-2">
-              <Checkbox
-                id={`${nestedField.id}-${index}`}
-                checked={Array.isArray(value) ? value.includes(option) : false}
-                onCheckedChange={(checked) => {
-                  const currentValue = Array.isArray(value) ? value : []
-                  if (checked) {
-                    onChange([...currentValue, option])
-                  } else {
-                    onChange(currentValue.filter((v) => v !== option))
-                  }
-                }}
-                disabled={disabled}
-                className={invalid ? "border-red-500" : ""}
-              />
-              <Label htmlFor={`${nestedField.id}-${index}`} className="text-sm font-normal cursor-pointer">
-                {option}
-              </Label>
+            <div key={index} className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id={`${nestedField.id}-${index}`}
+                  checked={selectedValues.includes(option)}
+                  onCheckedChange={(checked) => {
+                    if (!onChange) return
+                    let newValues
+                    let newNestedFields = { ...currentNestedFieldsCheckbox }
+
+                    if (checked) {
+                      newValues = [...selectedValues, option]
+                      // Initialize nested fields for this option if they exist
+                      if (nestedField.nestedFields && nestedField.nestedFields[index]) {
+                        newNestedFields[index] = newNestedFields[index] || {}
+                      }
+                    } else {
+                      newValues = selectedValues.filter((v) => v !== option)
+                      // Remove nested fields for this option if they exist
+                      if (newNestedFields[index]) {
+                        delete newNestedFields[index]
+                      }
+                    }
+
+                    onChange({
+                      value: newValues,
+                      nestedFields: newNestedFields
+                    })
+                  }}
+                  disabled={disabled}
+                  className={invalid ? "border-red-500" : ""}
+                />
+                <Label htmlFor={`${nestedField.id}-${index}`} className="text-sm font-normal cursor-pointer">
+                  {option}
+                </Label>
+              </div>
+              
+              {/* Render nested fields for this option if it's selected */}
+              {selectedValues.includes(option) && nestedField.nestedFields && nestedField.nestedFields[index] && (
+                <div className="ml-6 space-y-3">
+                  {renderNestedFields(nestedField, [option], onChange, value, disabled, invalid, {
+                    countries,
+                    states,
+                    cities,
+                    phoneCountries,
+                    loadingStates,
+                    loadingCities,
+                    loadingPhoneCountries,
+                    apiError,
+                    countrySearch,
+                    stateSearch,
+                    citySearch,
+                    phoneCountrySearch,
+                    countryOpen,
+                    stateOpen,
+                    cityOpen,
+                    phoneCountryOpen,
+                    setCountrySearch,
+                    setStateSearch,
+                    setCitySearch,
+                    setPhoneCountrySearch,
+                    setCountryOpen,
+                    setStateOpen,
+                    setCityOpen,
+                    setPhoneCountryOpen,
+                    filteredCountries,
+                    filteredStates,
+                    filteredCities,
+                    filteredPhoneCountries
+                  })}
+                </div>
+              )}
             </div>
           )) : (
             <div className="text-sm text-muted-foreground p-2 border border-dashed rounded text-center">
@@ -318,24 +558,81 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
         </div>
       )
     case "radio":
+      const selectedValue = value?.value || ""
+      const currentNestedFieldsRadio = value?.nestedFields || {}
+
       return (
         <div className="space-y-2">
           {nestedField.options && nestedField.options.length > 0 ? (
-            <RadioGroup
-              value={value || ""}
-              onValueChange={onChange}
-              disabled={disabled}
-              className={invalid ? "text-red-500" : ""}
-            >
-              {nestedField.options.map((option, index) => (
-                <div key={index} className="flex items-center space-x-2">
-                  <RadioGroupItem value={option} id={`${nestedField.id}-${index}`} className={invalid ? "border-red-500" : ""} />
-                  <Label htmlFor={`${nestedField.id}-${index}`} className="text-sm font-normal cursor-pointer">
-                    {option}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
+            <div className="space-y-2">
+              <RadioGroup
+                value={selectedValue}
+                onValueChange={(selectedOption) => {
+                  if (!onChange) return
+                  const newNestedFields = {}
+                  
+                  // Only keep nested fields for the currently selected option
+                  const selectedOptionIndex = nestedField.options?.indexOf(selectedOption)
+                  if (selectedOptionIndex !== -1 && nestedField.nestedFields && nestedField.nestedFields[selectedOptionIndex]) {
+                    newNestedFields[selectedOptionIndex] = currentNestedFieldsRadio[selectedOptionIndex] || {}
+                  }
+                  
+                  onChange({
+                    value: selectedOption,
+                    nestedFields: newNestedFields
+                  })
+                }}
+                disabled={disabled}
+                className={invalid ? "text-red-500" : ""}
+              >
+                {nestedField.options.map((option, index) => (
+                  <div key={index} className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value={option} id={`${nestedField.id}-${index}`} className={invalid ? "border-red-500" : ""} />
+                      <Label htmlFor={`${nestedField.id}-${index}`} className="text-sm font-normal cursor-pointer">
+                        {option}
+                      </Label>
+                    </div>
+                    
+                    {/* Render nested fields for this option if it's selected */}
+                    {selectedValue === option && nestedField.nestedFields && nestedField.nestedFields[index] && (
+                      <div className="ml-6 space-y-3">
+                        {renderNestedFields(nestedField, option, onChange, value, disabled, invalid, {
+                          countries,
+                          states,
+                          cities,
+                          phoneCountries,
+                          loadingStates,
+                          loadingCities,
+                          loadingPhoneCountries,
+                          apiError,
+                          countrySearch,
+                          stateSearch,
+                          citySearch,
+                          phoneCountrySearch,
+                          countryOpen,
+                          stateOpen,
+                          cityOpen,
+                          phoneCountryOpen,
+                          setCountrySearch,
+                          setStateSearch,
+                          setCitySearch,
+                          setPhoneCountrySearch,
+                          setCountryOpen,
+                          setStateOpen,
+                          setCityOpen,
+                          setPhoneCountryOpen,
+                          filteredCountries,
+                          filteredStates,
+                          filteredCities,
+                          filteredPhoneCountries
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </RadioGroup>
+            </div>
           ) : (
             <div className="text-sm text-muted-foreground p-2 border border-dashed rounded text-center">
               No options available
@@ -1227,7 +1524,36 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 </PopoverContent>
               </Popover>
 
-              {renderNestedFields(field, selectedValues, onChange, value, disabled, invalid, locationData)}
+              {renderNestedFields(field, selectedValues, onChange, value, disabled, invalid, {
+                countries,
+                states,
+                cities,
+                phoneCountries,
+                loadingStates,
+                loadingCities,
+                loadingPhoneCountries,
+                apiError,
+                countrySearch,
+                stateSearch,
+                citySearch,
+                phoneCountrySearch,
+                countryOpen,
+                stateOpen,
+                cityOpen,
+                phoneCountryOpen,
+                setCountrySearch,
+                setStateSearch,
+                setCitySearch,
+                setPhoneCountrySearch,
+                setCountryOpen,
+                setStateOpen,
+                setCityOpen,
+                setPhoneCountryOpen,
+                filteredCountries,
+                filteredStates,
+                filteredCities,
+                filteredPhoneCountries
+              })}
             </div>
           )
         } else {
@@ -1266,7 +1592,36 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 </SelectContent>
               </Select>
 
-              {renderNestedFields(field, value?.value, onChange, value, disabled, invalid, locationData)}
+              {renderNestedFields(field, value?.value, onChange, value, disabled, invalid, {
+                countries,
+                states,
+                cities,
+                phoneCountries,
+                loadingStates,
+                loadingCities,
+                loadingPhoneCountries,
+                apiError,
+                countrySearch,
+                stateSearch,
+                citySearch,
+                phoneCountrySearch,
+                countryOpen,
+                stateOpen,
+                cityOpen,
+                phoneCountryOpen,
+                setCountrySearch,
+                setStateSearch,
+                setCitySearch,
+                setPhoneCountrySearch,
+                setCountryOpen,
+                setStateOpen,
+                setCityOpen,
+                setPhoneCountryOpen,
+                filteredCountries,
+                filteredStates,
+                filteredCities,
+                filteredPhoneCountries
+              })}
             </div>
           )
         }
@@ -1317,7 +1672,36 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
 
                 {Array.isArray(value?.value) && value.value?.includes(option) && field.nestedFields && field.nestedFields[index] && (
                   <div className="ml-6 space-y-3">
-                    {renderNestedFields(field, [option], onChange, value, disabled, invalid, locationData)}
+                    {renderNestedFields(field, [option], onChange, value, disabled, invalid, {
+                      countries,
+                      states,
+                      cities,
+                      phoneCountries,
+                      loadingStates,
+                      loadingCities,
+                      loadingPhoneCountries,
+                      apiError,
+                      countrySearch,
+                      stateSearch,
+                      citySearch,
+                      phoneCountrySearch,
+                      countryOpen,
+                      stateOpen,
+                      cityOpen,
+                      phoneCountryOpen,
+                      setCountrySearch,
+                      setStateSearch,
+                      setCitySearch,
+                      setPhoneCountrySearch,
+                      setCountryOpen,
+                      setStateOpen,
+                      setCityOpen,
+                      setPhoneCountryOpen,
+                      filteredCountries,
+                      filteredStates,
+                      filteredCities,
+                      filteredPhoneCountries
+                    })}
                   </div>
                 )}
               </div>
@@ -1369,7 +1753,36 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
 
                     {value?.value === option && field.nestedFields && field.nestedFields[index] && (
                       <div className="ml-6 space-y-3">
-                        {renderNestedFields(field, option, onChange, value, disabled, invalid, locationData)}
+                        {renderNestedFields(field, option, onChange, value, disabled, invalid, {
+                          countries,
+                          states,
+                          cities,
+                          phoneCountries,
+                          loadingStates,
+                          loadingCities,
+                          loadingPhoneCountries,
+                          apiError,
+                          countrySearch,
+                          stateSearch,
+                          citySearch,
+                          phoneCountrySearch,
+                          countryOpen,
+                          stateOpen,
+                          cityOpen,
+                          phoneCountryOpen,
+                          setCountrySearch,
+                          setStateSearch,
+                          setCitySearch,
+                          setPhoneCountrySearch,
+                          setCountryOpen,
+                          setStateOpen,
+                          setCityOpen,
+                          setPhoneCountryOpen,
+                          filteredCountries,
+                          filteredStates,
+                          filteredCities,
+                          filteredPhoneCountries
+                        })}
                       </div>
                     )}
                   </div>

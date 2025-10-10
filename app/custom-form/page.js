@@ -190,12 +190,6 @@ export default function CustomFormPage() {
     setFieldPaletteCollapsed(!fieldPaletteCollapsed)
   }
 
-  // Debug: Log fields whenever they change
-  useEffect(() => {
-    console.log('📋 Current fields state:', fields)
-  }, [fields])
-
-  // Count fields by source for statistics
   const regularFieldsCount = fields.filter(f => f.source !== 'table').length
   const tableFieldsCount = fields.filter(f => f.source === 'table').length
 
