@@ -397,11 +397,40 @@ export default function PublicFormPage() {
 
             // Handle options - convert string to array if needed
             let options = []
+            let nestedFields = {}
+            
             if (Array.isArray(fieldData.options)) {
               options = fieldData.options
             } else if (typeof fieldData.options === 'string') {
-              // Split comma-separated string into array
-              options = fieldData.options.split(',').map(opt => opt.trim()).filter(opt => opt)
+              // First try to parse as JSON string (for new nested structure)
+              try {
+                const parsedOptions = JSON.parse(fieldData.options)
+                if (Array.isArray(parsedOptions)) {
+                  // New nested structure: options contain nestedFields
+                  options = parsedOptions.map(option => option.value || option)
+                  
+                  // Extract nested fields from options
+                  parsedOptions.forEach((option, index) => {
+                    if (option.nestedFields && option.nestedFields.length > 0) {
+                      nestedFields[index] = option.nestedFields.map(nestedField => ({
+                        id: nestedField.id,
+                        type: nestedField.type,
+                        label: nestedField.label,
+                        placeholder: nestedField.placeholder || '',
+                        required: nestedField.required || false,
+                        options: nestedField.options || [],
+                        validation: nestedField.validations || {}
+                      }))
+                    }
+                  })
+                } else if (typeof parsedOptions === 'string') {
+                  // If it's a JSON string containing a comma-separated string, split it
+                  options = parsedOptions.split(',').map(opt => opt.trim()).filter(opt => opt)
+                }
+              } catch (e) {
+                // If JSON parsing fails, treat as comma-separated string
+                options = fieldData.options.split(',').map(opt => opt.trim()).filter(opt => opt)
+              }
             }
 
             // Parse validation - ensure it's an object
@@ -416,14 +445,17 @@ export default function PublicFormPage() {
               validation = fieldData.validation
             }
 
-            let nestedFields = []
-            if (typeof fieldData.nested_fields === 'string') {
+            // Handle old nested_fields structure (fallback)
+            if (Object.keys(nestedFields).length === 0 && typeof fieldData.nested_fields === 'string') {
               try {
-                nestedFields = JSON.parse(fieldData.nested_fields)
+                const oldNestedFields = JSON.parse(fieldData.nested_fields)
+                if (typeof oldNestedFields === 'object') {
+                  nestedFields = oldNestedFields
+                }
               } catch (e) {
                 console.warn('Failed to parse nested_fields as JSON:', fieldData.nested_fields)
               }
-            } else if (typeof fieldData.nested_fields === 'object') {
+            } else if (Object.keys(nestedFields).length === 0 && typeof fieldData.nested_fields === 'object') {
               nestedFields = fieldData.nested_fields
             }
 
@@ -716,50 +748,74 @@ export default function PublicFormPage() {
       // Handle different field types according to your API format
       switch (field.type) {
         case "checkbox":
-
+          // Handle checkbox with nested values
           if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.value !== undefined) {
-            transformedValues[fieldId] = Array.isArray(fieldValue.value) ? fieldValue.value : []
+            const checkboxData = {
+              value: Array.isArray(fieldValue.value) ? fieldValue.value : []
+            }
+            
+            // Add nested values if they exist
+            if (fieldValue.nestedFields) {
+              checkboxData.nestedValues = fieldValue.nestedFields
+            }
+            
+            transformedValues[fieldId] = checkboxData
           } else {
             transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
           }
-
-          if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.nestedFields) {
-            transformedValues[fieldId] = fieldValue.nestedFields
-          }
-
           break
 
         case "select":
           if (field.validation?.multiple) {
+            // Multiple select with nested values
             if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.value !== undefined) {
-              transformedValues[fieldId] = Array.isArray(fieldValue.value) ? fieldValue.value : []
+              const selectData = {
+                value: Array.isArray(fieldValue.value) ? fieldValue.value : []
+              }
+              
+              // Add nested values if they exist
+              if (fieldValue.nestedFields) {
+                selectData.nestedValues = fieldValue.nestedFields
+              }
+              
+              transformedValues[fieldId] = selectData
             } else {
               transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
             }
           } else {
-            // Single select returns string
+            // Single select with nested values
             if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.value !== undefined) {
-              transformedValues[fieldId] = fieldValue.value || ""
+              const selectData = {
+                value: fieldValue.value || ""
+              }
+              
+              // Add nested values if they exist
+              if (fieldValue.nestedFields) {
+                selectData.nestedValues = fieldValue.nestedFields
+              }
+              
+              transformedValues[fieldId] = selectData
             } else {
               transformedValues[fieldId] = fieldValue || ""
-            }
-
-            if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.nestedFields) {
-              transformedValues[fieldId] = fieldValue.nestedFields
             }
           }
           break
 
         case "radio":
-          // Radio returns single string value
+          // Radio with nested values
           if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.value !== undefined) {
-            transformedValues[fieldId] = fieldValue.value || ""
+            const radioData = {
+              value: fieldValue.value || ""
+            }
+            
+            // Add nested values if they exist
+            if (fieldValue.nestedFields) {
+              radioData.nestedValues = fieldValue.nestedFields
+            }
+            
+            transformedValues[fieldId] = radioData
           } else {
             transformedValues[fieldId] = fieldValue || ""
-          }
-
-          if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.nestedFields) {
-            transformedValues[fieldId] = fieldValue.nestedFields
           }
           break
 
