@@ -10,11 +10,11 @@ import { useState } from "react"
 
 const menuItems = [
     { label: "Dashboard", icon: Home, href: "dashboard", active: true },
-    // { 
-    //     label: "Leads", 
-    //     icon: Users, 
-    //     href: "leads"
-    // },
+    { 
+        label: "Leads", 
+        icon: Users, 
+        href: "leads"
+    },
     {
         label: "Forms",
         icon: BookCopy,
