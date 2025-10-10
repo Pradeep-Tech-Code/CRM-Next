@@ -462,7 +462,7 @@ export default function PublicFormPage() {
             // Ensure required is properly set in both field and validation
             const isRequired = fieldData.required === true || fieldData.required === 'true' || false
 
-            return {
+            const parsedField = {
               id: fieldData.id || fieldData.name || `field-${index}-${Date.now()}`,
               type: fieldData.type || 'text',
               label: fieldData.label || fieldData.name || 'Field',
@@ -480,6 +480,20 @@ export default function PublicFormPage() {
                 ...validation
               }
             }
+            
+            // Debug logging for checkbox fields
+            if (parsedField.type === 'checkbox') {
+              console.log(`🔧 Parsed checkbox field ${parsedField.id}:`, {
+                fieldId: parsedField.id,
+                fieldType: parsedField.type,
+                fieldValidation: parsedField.validation,
+                isMultiple: parsedField.validation.multiple,
+                options: parsedField.options,
+                nestedFields: parsedField.nestedFields
+              })
+            }
+            
+            return parsedField
           }
 
           // Default fallback if all parsing attempts failed
@@ -587,54 +601,116 @@ export default function PublicFormPage() {
       }
 
       if (fieldValue !== undefined && fieldValue !== null) {
+        // First, try to parse JSON strings for fields that might have nested values
+        let parsedValue = fieldValue
+        if (typeof fieldValue === 'string' && (fieldValue.startsWith('{') || fieldValue.startsWith('['))) {
+          try {
+            parsedValue = JSON.parse(fieldValue)
+            console.log(`📝 Parsed JSON for field ${fieldId}:`, parsedValue)
+          } catch (e) {
+            console.log(`⚠️ Failed to parse JSON for field ${fieldId}:`, fieldValue)
+            parsedValue = fieldValue
+          }
+        }
+
         // Handle different field types
         switch (field.type) {
           case "checkbox":
-            if (field.validation?.multiple) {
-              // Multiple checkbox - ensure array format
-              if (Array.isArray(fieldValue)) {
-                transformedValues[fieldId] = fieldValue
-              } else if (typeof fieldValue === 'string') {
-                // Try to parse string as array
-                try {
-                  const parsed = JSON.parse(fieldValue)
-                  transformedValues[fieldId] = Array.isArray(parsed) ? parsed : [parsed]
-                } catch {
-                  transformedValues[fieldId] = [fieldValue]
+            console.log(`🔍 Processing checkbox field ${fieldId}:`, {
+              fieldValidation: field.validation,
+              isMultiple: field.validation?.multiple,
+              hasOptions: field.options && field.options.length > 0,
+              parsedValue,
+              fieldValue
+            })
+            
+            // For checkbox fields, if they have options, treat them as multiple by default
+            const isMultipleCheckbox = field.validation?.multiple || (field.options && field.options.length > 0)
+            
+            if (isMultipleCheckbox) {
+              // Multiple checkbox with nested values
+              if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
+                // Handle structured format: {value: [], nestedValues: {}}
+                const result = {
+                  value: Array.isArray(parsedValue.value) ? parsedValue.value : [],
+                  nestedFields: parsedValue.nestedValues || parsedValue.nestedFields || {}
                 }
+                console.log(`✅ Checkbox multiple structured result for ${fieldId}:`, result)
+                transformedValues[fieldId] = result
+              } else if (Array.isArray(parsedValue)) {
+                const result = {
+                  value: parsedValue,
+                  nestedFields: {}
+                }
+                console.log(`✅ Checkbox multiple array result for ${fieldId}:`, result)
+                transformedValues[fieldId] = result
               } else {
-                transformedValues[fieldId] = [fieldValue]
+                const result = {
+                  value: [parsedValue],
+                  nestedFields: {}
+                }
+                console.log(`✅ Checkbox multiple single value result for ${fieldId}:`, result)
+                transformedValues[fieldId] = result
               }
             } else {
               // Single checkbox - convert to boolean
-              transformedValues[fieldId] = Boolean(fieldValue)
+              const result = Boolean(parsedValue)
+              console.log(`✅ Checkbox single result for ${fieldId}:`, result)
+              transformedValues[fieldId] = result
             }
             break
 
           case "select":
             if (field.validation?.multiple) {
-              // Multiple select - ensure array format
-              if (Array.isArray(fieldValue)) {
-                transformedValues[fieldId] = fieldValue
-              } else if (typeof fieldValue === 'string') {
-                try {
-                  const parsed = JSON.parse(fieldValue)
-                  transformedValues[fieldId] = Array.isArray(parsed) ? parsed : [parsed]
-                } catch {
-                  transformedValues[fieldId] = [fieldValue]
+              // Multiple select with nested values
+              if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
+                // Handle structured format: {value: [], nestedValues: {}}
+                transformedValues[fieldId] = {
+                  value: Array.isArray(parsedValue.value) ? parsedValue.value : [],
+                  nestedFields: parsedValue.nestedValues || parsedValue.nestedFields || {}
+                }
+              } else if (Array.isArray(parsedValue)) {
+                transformedValues[fieldId] = {
+                  value: parsedValue,
+                  nestedFields: {}
                 }
               } else {
-                transformedValues[fieldId] = [fieldValue]
+                transformedValues[fieldId] = {
+                  value: [parsedValue],
+                  nestedFields: {}
+                }
               }
             } else {
-              // Single select
-              transformedValues[fieldId] = fieldValue
+              // Single select with nested values
+              if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
+                // Handle structured format: {value: "Option 1", nestedValues: {}}
+                transformedValues[fieldId] = {
+                  value: parsedValue.value || "",
+                  nestedFields: parsedValue.nestedValues || parsedValue.nestedFields || {}
+                }
+              } else {
+                transformedValues[fieldId] = {
+                  value: parsedValue || "",
+                  nestedFields: {}
+                }
+              }
             }
             break
 
           case "radio":
-            // Radio returns single value
-            transformedValues[fieldId] = fieldValue
+            // Radio with nested values
+            if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
+              // Handle structured format: {value: "Option 1", nestedValues: {}}
+              transformedValues[fieldId] = {
+                value: parsedValue.value || "",
+                nestedFields: parsedValue.nestedValues || parsedValue.nestedFields || {}
+              }
+            } else {
+              transformedValues[fieldId] = {
+                value: parsedValue || "",
+                nestedFields: {}
+              }
+            }
             break
 
           case "file":
@@ -897,7 +973,7 @@ export default function PublicFormPage() {
         formFields: formData.fields.map(f => ({ id: f.id, name: f.name, label: f.label, type: f.type }))
       })
 
-      const values = transformSubmissionValues(submissionData.values || submissionData, formData.fields)
+      const values = transformSubmissionValues(submissionData.values, formData.fields)
       console.log('✅ Transformed submission values for form:', values)
       return values
     }
@@ -910,12 +986,12 @@ export default function PublicFormPage() {
         if (field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)) {
           acc[fieldId] = {
             value: [],
-            nestedField: {}
+            nestedFields: {}
           }
         } else {
           acc[fieldId] = {
             value: "",
-            nestedField: {}
+            nestedFields: {}
           }
         }
       } else if (field.type === "file") {
@@ -983,15 +1059,27 @@ export default function PublicFormPage() {
 
     return formData.fields.reduce((acc, field) => {
       const fieldId = field.id
-      acc[fieldId] = field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)
-        ? []
-        : field.type === "file"
-          ? null
-          : field.type === "location"
-            ? {}
-            : field.type === "phone"
-              ? {}
-              : ""
+      
+      if (["select", "checkbox", "radio"].includes(field.type)) {
+        if (field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)) {
+          acc[fieldId] = {
+            value: [],
+            nestedFields: {}
+          }
+        } else {
+          acc[fieldId] = {
+            value: "",
+            nestedFields: {}
+          }
+        }
+      } else if (field.type === "file") {
+        acc[fieldId] = null
+      } else if (field.type === "location" || field.type === "phone") {
+        acc[fieldId] = {}
+      } else {
+        acc[fieldId] = ""
+      }
+      
       return acc
     }, {})
   }
@@ -1164,6 +1252,37 @@ export default function PublicFormPage() {
           const result = response.data
           console.log('Submission successful:', result)
 
+          if (result.success && result.data) {
+            const newSubmissionId = result.data
+            console.log('Submission ID from data field:', newSubmissionId)
+
+            const editToken = newSubmissionId
+            
+            console.log('Generated edit token:', editToken)
+
+            if (newSubmissionId) {
+              saveSubmissionToStorage(newSubmissionId, editToken)
+
+              setLastSubmissionId(newSubmissionId)
+              setLastSubmissionToken(editToken)
+              setSubmissionSuccess(true)
+              setHasExistingSubmission(true)
+
+              console.log('Edit token generated:', editToken)
+              console.log('Submission ID:', newSubmissionId)
+              console.log('Saved to localStorage:', {
+                submissionId: newSubmissionId,
+                editToken: editToken,
+                formId: formId
+              })
+
+              toast.success("Thank you for your response!")
+            } else {
+              console.error("Response missing submission ID in data field", result);
+              toast.error("Submission completed but edit feature unavailable")
+            }
+          } else {
+            // Fallback to old format handling for backward compatibility
             const newSubmissionId = result?.submission_id
             const editToken = result?.edit_token
             console.log('Submission editToken:', editToken)
@@ -1189,6 +1308,7 @@ export default function PublicFormPage() {
               console.error("Response missing submission_id or edit_token", result);
               toast.error("Submission completed but edit feature unavailable")
             }
+          }
 
         }
 
@@ -1201,23 +1321,34 @@ export default function PublicFormPage() {
     },
   })
 
-  // Initialize form with empty values when form data is loaded (for new submissions)
+  // Initialize form values based on mode
   useEffect(() => {
-    if (formData && !isEditMode) {
-      const defaultValues = getDefaultValues()
-      console.log('🔄 Initializing form with empty values for new submission:', defaultValues)
-      form.reset(defaultValues)
+    if (formData) {
+      if (isEditMode && submissionData) {
+        const defaultValues = getDefaultValues()
+        console.log('🔄 Resetting form with submission data for edit mode:', defaultValues)
+        console.log('🔄 Form values before reset:', form.state.values)
+        
+        // Only reset if the values are actually different
+        const currentValues = form.state.values
+        const hasChanges = Object.keys(defaultValues).some(key => 
+          JSON.stringify(currentValues[key]) !== JSON.stringify(defaultValues[key])
+        )
+        
+        if (hasChanges || Object.keys(currentValues).length === 0) {
+          form.reset(defaultValues)
+          console.log('🔄 Form values after reset:', form.state.values)
+        } else {
+          console.log('🔄 Form values already match, skipping reset')
+        }
+      } else if (!isEditMode && !submissionData) {
+        // New submission mode: load empty values (only if not in edit mode and no submission data)
+        const defaultValues = getDefaultValues()
+        console.log('🔄 Initializing form with empty values for new submission:', defaultValues)
+        form.reset(defaultValues)
+      }
     }
-  }, [formData, isEditMode])
-
-  // Update form values when submission data is loaded (for edit mode)
-  useEffect(() => {
-    if (isEditMode && submissionData && formData) {
-      const defaultValues = getDefaultValues()
-      console.log('🔄 Resetting form with submission data for edit mode:', defaultValues)
-      form.reset(defaultValues)
-    }
-  }, [submissionData, isEditMode, formData])
+  }, [formData, isEditMode, submissionData])
 
   // Add this for debugging - after form initialization
   useEffect(() => {
@@ -1472,17 +1603,34 @@ export default function PublicFormPage() {
                         },
                       }}
                     >
-                      {(fieldApi) => (
-                        <div className="space-y-2">
-                          <FieldRenderer
-                            field={field}
-                            value={fieldApi.state.value}
-                            onChange={fieldApi.handleChange}
-                            invalid={fieldApi.state.meta.errors.length > 0}
-                            error={fieldApi.state.meta.errors.length > 0 ? fieldApi.state.meta.errors[0] : undefined}
-                          />
-                        </div>
-                      )}
+                      {(fieldApi) => {
+                        // Debug logging for checkbox fields
+                        if (field.type === 'checkbox') {
+                          const isMultipleCheckbox = field.validation?.multiple || (field.options && field.options.length > 0)
+                          console.log(`🎯 FieldRenderer for checkbox ${field.id}:`, {
+                            fieldId: field.id,
+                            fieldType: field.type,
+                            fieldValidation: field.validation,
+                            isMultipleCheckbox,
+                            hasOptions: field.options && field.options.length > 0,
+                            fieldApiValue: fieldApi.state.value,
+                            fieldApiValueType: typeof fieldApi.state.value,
+                            fieldApiValueStructure: fieldApi.state.value ? Object.keys(fieldApi.state.value) : 'no value'
+                          })
+                        }
+                        
+                        return (
+                          <div className="space-y-2">
+                            <FieldRenderer
+                              field={field}
+                              value={fieldApi.state.value}
+                              onChange={fieldApi.handleChange}
+                              invalid={fieldApi.state.meta.errors.length > 0}
+                              error={fieldApi.state.meta.errors.length > 0 ? fieldApi.state.meta.errors[0] : undefined}
+                            />
+                          </div>
+                        )
+                      }}
                     </form.Field>
                   )
                 })}
