@@ -25,8 +25,8 @@ import { toast } from "sonner"
 import axios from "axios"
 
 // API Configuration
-const API_BASE_URL = 'http://10.10.15.194:3000'
-const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwMDE2MDQ4LCJleHAiOjE3NjAxMDI0NDh9.LxRKpKcaPn5zZO6Pij0gwQ39YJuUo1BrUF2iYKFZriM'
+const API_BASE_URL = 'http://10.10.15.194:3001'
+const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwMzI4OTY4LCJleHAiOjE3NjA0MTUzNjh9.Vcw2oXyTme3VSXjaLojFRCDWOICxhIFO2GNkADJaUps'
 
 export default function TableDataView({ table, onBack }) {
   const [columns, setColumns] = useState([])
@@ -36,6 +36,8 @@ export default function TableDataView({ table, onBack }) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [recordToDelete, setRecordToDelete] = useState(null)
   const [searchTerm, setSearchTerm] = useState("")
+  const [isNestedModalOpen, setIsNestedModalOpen] = useState(false)
+  const [nestedData, setNestedData] = useState(null)
 
   // Fetch columns and records on component mount
   useEffect(() => {
@@ -125,13 +127,134 @@ export default function TableDataView({ table, onBack }) {
   // Helper function to get field value for a column
   const getFieldValue = (record, columnId) => {
     if (!record.field_values) return null
+    
     return record.field_values[columnId] || null
   }
 
+  // Helper function to check if column has nested data
+  const hasNestedData = (column) => {
+    if (!column.optional_values || column.optional_values.length === 0) {
+      console.log(`Column ${column.column_name}: No optional_values`)
+      return false
+    }
+    try {
+      const options = JSON.parse(column.optional_values[0])
+      const hasNested = options.some(option => option.nestedFields && option.nestedFields.length > 0)
+      console.log(`Column ${column.column_name}: hasNestedData = ${hasNested}`)
+      return hasNested
+    } catch (error) {
+      console.log(`Column ${column.column_name}: Error parsing optional_values:`, error)
+      return false
+    }
+  }
+
+  // Helper function to parse nested field values
+  const parseNestedData = (fieldValue, column) => {
+    try {
+      const parsed = JSON.parse(fieldValue)
+      const options = JSON.parse(column.optional_values[0])
+      
+      const result = {
+        columnName: column.column_name,
+        selectedValues: parsed.value,
+        nestedValues: {}
+      }
+
+      // Parse nested values
+      if (parsed.nestedValues) {
+        Object.entries(parsed.nestedValues).forEach(([optionIndex, nestedData]) => {
+          const option = options[parseInt(optionIndex)]
+          if (option && option.nestedFields) {
+            result.nestedValues[option.label] = {}
+            option.nestedFields.forEach(nestedField => {
+              if (nestedData[nestedField.id]) {
+                result.nestedValues[option.label][nestedField.label] = nestedData[nestedField.id]
+              }
+            })
+          }
+        })
+      }
+
+      return result
+    } catch (error) {
+      console.error('Error parsing nested data:', error)
+      return null
+    }
+  }
+
+  // Function to open nested data modal
+  const openNestedModal = (fieldValue, column) => {
+    const nestedData = parseNestedData(fieldValue, column)
+    if (nestedData) {
+      setNestedData(nestedData)
+      setIsNestedModalOpen(true)
+    }
+  }
+
   // Helper function to format field value based on data type
-  const formatFieldValue = (value, dataType) => {
+  const formatFieldValue = (value, dataType, column = null) => {
+
+    console.log('formatFieldValue ::', value, column)
     if (value === null || value === undefined || value === "") {
       return <span className="text-muted-foreground italic">-</span>
+    }
+
+    // Check if this is nested data that should open a modal
+    if (dataType === 'text' && typeof value === 'string' && value.trim().startsWith('{')) {
+      console.log(`Processing JSON value for column ${column?.column_name}:`, value)
+      try {
+        const parsed = JSON.parse(value)
+        console.log(`Parsed JSON:`, parsed)
+        // Only show modal if this looks like nested data AND column has nested capability
+        if (parsed.value && parsed.nestedValues && column && hasNestedData(column)) {
+          console.log(`Column ${column.column_name} has nested data capability`)
+          if (Object.keys(parsed.nestedValues).length > 0) {
+            console.log(`Showing modal for ${column.column_name}`)
+            return (
+              <button
+                onClick={() => {
+                  console.log('Button clicked for', column.column_name)
+                  console.log('Opening modal with value:', value)
+                  console.log('Opening modal with column:', column)
+                  const nestedData = parseNestedData(value, column)
+                  console.log('Parsed nested data:', nestedData)
+                  if (nestedData) {
+                    console.log('Setting nested data and opening modal')
+                    setNestedData(nestedData)
+                    setIsNestedModalOpen(true)
+                    console.log('Modal should be open now')
+                  } else {
+                    console.log('Failed to parse nested data')
+                  }
+                }}
+                className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer px-2 py-1 rounded border border-blue-300 text-sm font-medium"
+                title="Click to view nested data"
+              >
+                {Array.isArray(parsed.value) ? parsed.value.join(' → ') : parsed.value}
+                <span className="ml-1 text-xs"></span>
+              </button>
+            )
+          } else {
+            console.log(`Empty nestedValues for ${column.column_name}, showing normal text`)
+            // If nestedValues is empty, render normally without modal
+            return (
+              <span className="truncate max-w-[200px]">
+                {Array.isArray(parsed.value) ? parsed.value.join(' → ') : parsed.value}
+              </span>
+            )
+          }
+        } else {
+          console.log(`Not showing modal for ${column?.column_name}:`, {
+            hasValue: !!parsed.value,
+            hasNestedValues: !!parsed.nestedValues,
+            hasColumn: !!column,
+            hasNestedCapability: column ? hasNestedData(column) : false
+          })
+        }
+      } catch (error) {
+        console.log(`Error parsing JSON for ${column?.column_name}:`, error)
+        // If parsing fails, fall through to default handling
+      }
     }
 
     switch (dataType) {
@@ -223,7 +346,7 @@ export default function TableDataView({ table, onBack }) {
   // Create dynamic columns based on API response
   const createDynamicColumns = () => {
     if (!columns.length) return []
-
+  
     const dynamicColumns = columns.map((column) => ({
       accessorKey: column.column_id,
       header: column.column_name,
@@ -233,7 +356,7 @@ export default function TableDataView({ table, onBack }) {
         const fieldValue = getFieldValue(record, column.column_id)
         
         // Format field value using helper function
-        return formatFieldValue(fieldValue, column.data_type)
+        return formatFieldValue(fieldValue, column.data_type, column)
       },
     }))
 
@@ -548,6 +671,78 @@ export default function TableDataView({ table, onBack }) {
               disabled={loading}
             >
               {loading ? "Deleting..." : "Delete Record"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Nested Data Modal */}
+      <Dialog open={isNestedModalOpen} onOpenChange={setIsNestedModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nested Data - {nestedData?.columnName}</DialogTitle>
+            <DialogDescription>
+              Detailed view of nested field values for this column
+            </DialogDescription>
+          </DialogHeader>
+          
+          {nestedData && (
+            <div className="space-y-6">
+              {/* Selected Values */}
+              <div>
+                <h4 className="font-semibold text-sm text-muted-foreground mb-2">Selected Values</h4>
+                <div className="flex flex-wrap gap-2">
+                  {Array.isArray(nestedData.selectedValues) ? (
+                    nestedData.selectedValues.map((value, index) => (
+                      <Badge key={index} variant="default" className="text-sm">
+                        {value}
+                      </Badge>
+                    ))
+                  ) : (
+                    <Badge variant="default" className="text-sm">
+                      {nestedData.selectedValues}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              {/* Nested Values */}
+              {Object.keys(nestedData.nestedValues).length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-sm text-muted-foreground mb-3">Nested Field Values</h4>
+                  <div className="space-y-4">
+                    {Object.entries(nestedData.nestedValues).map(([optionLabel, fields]) => (
+                      <Card key={optionLabel} className="p-4">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base font-medium text-primary">
+                            {optionLabel}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-0">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {Object.entries(fields).map(([fieldLabel, fieldValue]) => (
+                              <div key={fieldLabel} className="space-y-1">
+                                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  {fieldLabel}
+                                </div>
+                                <div className="text-sm font-medium">
+                                  {fieldValue || <span className="text-muted-foreground italic">No value</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsNestedModalOpen(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
