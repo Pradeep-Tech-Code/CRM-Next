@@ -108,6 +108,7 @@ export function FieldConfigPanel({ field, onUpdateField }) {
     
     const newField = {
       id: `nested-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: nestedFields.name,
       type: "text",
       label: "Additional Field",
       placeholder: "",

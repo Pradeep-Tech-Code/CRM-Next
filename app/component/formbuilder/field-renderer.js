@@ -15,26 +15,320 @@ import { useState, useEffect } from "react"
 import { Database } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
+// const renderNestedFields = (field, selectedOptions, onChange, parentValue, disabled, invalid, locationData, depth = 0, processedIds = new Set()) => {
+//   console.log('🔍 renderNestedFields called:', {
+//     fieldId: field.id,
+//     fieldLabel: field.label,
+//     selectedOptions,
+//     fieldOptions: field.options,
+//     fieldNestedFields: field.nestedFields,
+//     depth,
+//     processedIds: Array.from(processedIds)
+//   })
+  
+//   const fieldKey = field.id || `field-${field.label}-${depth}-${Date.now()}`
+
+
+//   // Prevent infinite recursion by tracking processed field IDs
+//   if (processedIds.has(fieldKey)) {
+//     console.log('🔄 Skipping already processed field:', fieldKey)
+//     return null
+//   }
+  
+//   // Create a new Set for this recursion level to avoid mutation issues
+//   const currentProcessedIds = new Set(processedIds)
+//   currentProcessedIds.add(fieldKey)
+
+//   const nestedFieldsToShow = []
+
+//   // Helper function to find option by value
+//   const findOptionByValue = (value) => {
+//     console.log(`🔍 findOptionByValue called with value:`, value)
+//     return field.options?.find(option => {
+//       const optionValue = typeof option === 'string' ? option : option.value
+//       return optionValue === value
+//     })
+//   }
+
+//   // For multiple select/checkbox, show nested fields for all selected options
+//   if (Array.isArray(selectedOptions)) {
+//     selectedOptions.forEach(selectedValue => {
+//       console.log('🔍 Processing selected value:', selectedValue)
+//       const option = findOptionByValue(selectedValue)
+//       console.log('🔍 Found option:', option)
+      
+//       if (option && typeof option === 'object' && option.nestedFields && option.nestedFields.length > 0) {
+//         console.log('🔍 Option has nested fields:', option.nestedFields)
+//         const optionIndex = field.options?.findIndex(opt => {
+//           const optValue = typeof opt === 'string' ? opt : opt.value
+//           return optValue === selectedValue
+//         })
+        
+//         // Add unique nested fields only
+//         option.nestedFields.forEach((nestedField, nestedIndex) => {
+//           const nestedFieldId = nestedField.id || `nested-${nestedField.label}-${optionIndex}-${nestedIndex}`
+//           const nestedFieldKey = `${fieldKey}_${optionIndex}_${nestedFieldId}`
+//           if (!currentProcessedIds.has(nestedFieldKey)) {
+//             nestedFieldsToShow.push({
+//               ...nestedField,
+//               id: nestedFieldId,
+//               optionIndex,
+//               optionValue: selectedValue,
+//               uniqueKey: nestedFieldKey
+//             })
+//             currentProcessedIds.add(nestedFieldKey)
+//           }
+//         })
+//       }
+//       // Fallback to old structure for backward compatibility
+//       else if (field.nestedFields) {
+//         const optionIndex = field.options?.findIndex(opt => {
+//           const optValue = typeof opt === 'string' ? opt : opt.value
+//           return optValue === selectedValue
+//         })
+//         if (optionIndex !== -1 && field.nestedFields[optionIndex]) {
+//           // Add unique nested fields only
+//           field.nestedFields[optionIndex].forEach((nestedField, nestedIndex) => {
+//             const nestedFieldKey = `${field.id}_${optionIndex}_${nestedField.id}`
+//             if (!currentProcessedIds.has(nestedFieldKey)) {
+//               nestedFieldsToShow.push({
+//                 ...nestedField,
+//                 optionIndex,
+//                 optionValue: selectedValue,
+//                 uniqueKey: nestedFieldKey
+//               })
+//               currentProcessedIds.add(nestedFieldKey)
+//             }
+//           })
+//         }
+//       }
+//     })
+//   }
+//   // For single select/radio, show nested fields for the selected option
+//   else if (selectedOptions && typeof selectedOptions === 'string') {
+//     console.log('🔍 Processing single selected value:', selectedOptions)
+//     const option = findOptionByValue(selectedOptions)
+//     console.log('🔍 Found option:', option)
+    
+//     if (option && typeof option === 'object' && option.nestedFields && option.nestedFields.length > 0) {
+//       console.log('🔍 Option has nested fields:', option.nestedFields)
+//       const optionIndex = field.options?.findIndex(opt => {
+//         const optValue = typeof opt === 'string' ? opt : opt.value
+//         return optValue === selectedOptions
+//       })
+      
+//       // Add unique nested fields only
+//       option.nestedFields.forEach((nestedField, nestedIndex) => {
+//         const nestedFieldKey = `${field.id}_${optionIndex}_${nestedField.id}`
+//         if (!currentProcessedIds.has(nestedFieldKey)) {
+//           nestedFieldsToShow.push({
+//             ...nestedField,
+//             optionIndex,
+//             optionValue: selectedOptions,
+//             uniqueKey: nestedFieldKey
+//           })
+//           currentProcessedIds.add(nestedFieldKey)
+//         }
+//       })
+//     }
+//     // Fallback to old structure for backward compatibility
+//     else if (field.nestedFields) {
+//       const optionIndex = field.options?.findIndex(opt => {
+//         const optValue = typeof opt === 'string' ? opt : opt.value
+//         return optValue === selectedOptions
+//       })
+//       if (optionIndex !== -1 && field.nestedFields[optionIndex]) {
+//         // Add unique nested fields only
+//         field.nestedFields[optionIndex].forEach((nestedField, nestedIndex) => {
+//           const nestedFieldKey = `${field.id}_${optionIndex}_${nestedField.id}`
+//           if (!currentProcessedIds.has(nestedFieldKey)) {
+//             nestedFieldsToShow.push({
+//               ...nestedField,
+//               optionIndex,
+//               optionValue: selectedOptions,
+//               uniqueKey: nestedFieldKey
+//             })
+//             currentProcessedIds.add(nestedFieldKey)
+//           }
+//         })
+//       }
+//     }
+//   }
+
+//   console.log('🔍 Final nestedFieldsToShow:', nestedFieldsToShow)
+  
+//   if (nestedFieldsToShow.length === 0) {
+//     console.log('🔍 No nested fields to show, returning null')
+//     return null
+//   }
+
+//   const borderColor = depth === 0 ? 'border-primary/20' : depth === 1 ? 'border-blue-300/30' : 'border-green-300/30'
+//   const dotColor = depth === 0 ? 'bg-primary' : depth === 1 ? 'bg-blue-500' : 'bg-green-500'
+
+//   return (
+//     <div className="mt-4 pl-4 border-l-2 space-y-4" style={{ borderColor: borderColor.replace('border-', '').replace('/20', '').replace('/30', '') }}>
+//       <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+//         <div className={`w-2 h-2 rounded-full ${dotColor}`}></div>
+//         Additional Information {depth > 0 && `(Level ${depth + 1})`}
+//         <Badge variant="secondary" className="text-xs">
+//           {nestedFieldsToShow.length} field{nestedFieldsToShow.length !== 1 ? 's' : ''}
+//         </Badge>
+//       </div>
+//       <div className="space-y-4">
+//         {nestedFieldsToShow.map((nestedField) => {
+//           const nestedFieldId = nestedField.uniqueKey || `${field.id}_${nestedField.optionIndex}_${nestedField.id}`
+          
+//           // Get the nested value from parentValue - handle both old and new structures
+//           let nestedValue = ""
+//           if (parentValue?.nestedFields?.[nestedField.optionIndex]?.[nestedField.id] !== undefined) {
+//             nestedValue = parentValue.nestedFields[nestedField.optionIndex][nestedField.id]
+//           } else if (parentValue?.nestedFields?.[nestedField.id] !== undefined) {
+//             nestedValue = parentValue.nestedFields[nestedField.id]
+//           } else if (parentValue?.[nestedField.id] !== undefined) {
+//             nestedValue = parentValue[nestedField.id]
+//           }
+
+//           console.log(`🔍 Nested field ${nestedField.label} value:`, nestedValue)
+//           console.log(`🎯 Rendering nested field: ${nestedField.label}`, {
+//             nestedFieldId,
+//             nestedValue,
+//             nestedFieldType: nestedField.type,
+//             hasOptions: nestedField.options?.length > 0,
+//             options: nestedField.options
+//           })
+
+//           const handleNestedChange = (value) => {
+//             const currentNestedFields = parentValue?.nestedFields || {}
+//             const optionNestedFields = currentNestedFields[nestedField.optionIndex] || {}
+
+//             const updatedNestedFields = {
+//               ...currentNestedFields,
+//               [nestedField.optionIndex]: {
+//                 ...optionNestedFields,
+//                 [nestedField.id]: value
+//               }
+//             }
+
+//             onChange({
+//               ...parentValue,
+//               nestedFields: updatedNestedFields
+//             })
+//           }
+
+//           return (
+//             <div key={nestedFieldId} className="p-3 bg-muted/30 rounded-lg space-y-2">
+//               <div className="flex items-center justify-between">
+//                 <Label className="text-sm font-medium">
+//                   {nestedField.label}
+//                   {nestedField.required && <span className="text-red-500 ml-1">*</span>}
+//                 </Label>
+//                 <Badge variant="outline" className="text-xs">
+//                   {nestedField.type}
+//                 </Badge>
+//               </div>
+              
+//               {/* Render the nested field input */}
+//               {renderNestedFieldInput(nestedField, nestedValue, handleNestedChange, disabled, invalid, {
+//                 countries: locationData?.countries || [],
+//                 states: locationData?.states || [],
+//                 cities: locationData?.cities || [],
+//                 phoneCountries: locationData?.phoneCountries || [],
+//                 loadingStates: locationData?.loadingStates || false,
+//                 loadingCities: locationData?.loadingCities || false,
+//                 loadingPhoneCountries: locationData?.loadingPhoneCountries || false,
+//                 apiError: locationData?.apiError || null,
+//                 countrySearch: locationData?.countrySearch || "",
+//                 stateSearch: locationData?.stateSearch || "",
+//                 citySearch: locationData?.citySearch || "",
+//                 phoneCountrySearch: locationData?.phoneCountrySearch || "",
+//                 countryOpen: locationData?.countryOpen || false,
+//                 stateOpen: locationData?.stateOpen || false,
+//                 cityOpen: locationData?.cityOpen || false,
+//                 phoneCountryOpen: locationData?.phoneCountryOpen || false,
+//                 setCountrySearch: locationData?.setCountrySearch || (() => {}),
+//                 setStateSearch: locationData?.setStateSearch || (() => {}),
+//                 setCitySearch: locationData?.setCitySearch || (() => {}),
+//                 setPhoneCountrySearch: locationData?.setPhoneCountrySearch || (() => {}),
+//                 setCountryOpen: locationData?.setCountryOpen || (() => {}),
+//                 setStateOpen: locationData?.setStateOpen || (() => {}),
+//                 setCityOpen: locationData?.setCityOpen || (() => {}),
+//                 setPhoneCountryOpen: locationData?.setPhoneCountryOpen || (() => {}),
+//                 filteredCountries: locationData?.filteredCountries || [],
+//                 filteredStates: locationData?.filteredStates || [],
+//                 filteredCities: locationData?.filteredCities || [],
+//                 filteredPhoneCountries: locationData?.filteredPhoneCountries || []
+//               })}
+              
+//               {/* Recursively render nested fields if this field has nested fields */}
+//               {/* Check if this nested field itself has nested fields in its options */}
+//               {nestedField.options && nestedField.options.some(option => 
+//                 option.nestedFields && option.nestedFields.length > 0
+//               ) && (
+//                 <div className="mt-3">
+//                   {renderNestedFields(
+//                     nestedField, 
+//                     nestedValue?.value || nestedValue, 
+//                     handleNestedChange, 
+//                     nestedValue, 
+//                     disabled, 
+//                     invalid, 
+//                     {
+//                       countries: locationData?.countries || [],
+//                       states: locationData?.states || [],
+//                       cities: locationData?.cities || [],
+//                       phoneCountries: locationData?.phoneCountries || [],
+//                       loadingStates: locationData?.loadingStates || false,
+//                       loadingCities: locationData?.loadingCities || false,
+//                       loadingPhoneCountries: locationData?.loadingPhoneCountries || false,
+//                       apiError: locationData?.apiError || null,
+//                       countrySearch: locationData?.countrySearch || "",
+//                       stateSearch: locationData?.stateSearch || "",
+//                       citySearch: locationData?.citySearch || "",
+//                       phoneCountrySearch: locationData?.phoneCountrySearch || "",
+//                       countryOpen: locationData?.countryOpen || false,
+//                       stateOpen: locationData?.stateOpen || false,
+//                       cityOpen: locationData?.cityOpen || false,
+//                       phoneCountryOpen: locationData?.phoneCountryOpen || false,
+//                       setCountrySearch: locationData?.setCountrySearch || (() => {}),
+//                       setStateSearch: locationData?.setStateSearch || (() => {}),
+//                       setCitySearch: locationData?.setCitySearch || (() => {}),
+//                       setPhoneCountrySearch: locationData?.setPhoneCountrySearch || (() => {}),
+//                       setCountryOpen: locationData?.setCountryOpen || (() => {}),
+//                       setStateOpen: locationData?.setStateOpen || (() => {}),
+//                       setCityOpen: locationData?.setCityOpen || (() => {}),
+//                       setPhoneCountryOpen: locationData?.setPhoneCountryOpen || (() => {}),
+//                       filteredCountries: locationData?.filteredCountries || [],
+//                       filteredStates: locationData?.filteredStates || [],
+//                       filteredCities: locationData?.filteredCities || [],
+//                       filteredPhoneCountries: locationData?.filteredPhoneCountries || []
+//                     }, 
+//                     depth + 1, 
+//                     new Set(currentProcessedIds)
+//                   )}
+//                 </div>
+//               )}
+//             </div>
+//           )
+//         })}
+//       </div>
+//     </div>
+//   )
+// }
+
 const renderNestedFields = (field, selectedOptions, onChange, parentValue, disabled, invalid, locationData, depth = 0, processedIds = new Set()) => {
-  console.log('🔍 renderNestedFields called:', {
-    fieldId: field.id,
-    fieldLabel: field.label,
-    selectedOptions,
-    fieldOptions: field.options,
-    fieldNestedFields: field.nestedFields,
-    depth,
-    processedIds: Array.from(processedIds)
-  })
+  
+  // Generate a unique key for this field if id is undefined
+  const fieldKey = field.id || `field-${field.label}-${depth}-${Date.now()}`
   
   // Prevent infinite recursion by tracking processed field IDs
-  if (processedIds.has(field.id)) {
-    console.log('🔄 Skipping already processed field:', field.id)
+  if (processedIds.has(fieldKey)) {
+    console.log('🔄 Skipping already processed field:', fieldKey)
     return null
   }
   
   // Create a new Set for this recursion level to avoid mutation issues
   const currentProcessedIds = new Set(processedIds)
-  currentProcessedIds.add(field.id)
+  currentProcessedIds.add(fieldKey)
 
   const nestedFieldsToShow = []
 
@@ -63,10 +357,15 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
         
         // Add unique nested fields only
         option.nestedFields.forEach((nestedField, nestedIndex) => {
-          const nestedFieldKey = `${field.id}_${optionIndex}_${nestedField.id}`
+          // Generate unique key for nested field if id is undefined
+          const nestedFieldId = nestedField.id || `nested-${nestedField.label}-${optionIndex}-${nestedIndex}`
+          const nestedFieldKey = `${fieldKey}_${optionIndex}_${nestedFieldId}`
+          
           if (!currentProcessedIds.has(nestedFieldKey)) {
             nestedFieldsToShow.push({
               ...nestedField,
+              id: nestedFieldId,
+              name: nestedField.name,
               optionIndex,
               optionValue: selectedValue,
               uniqueKey: nestedFieldKey
@@ -84,10 +383,15 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
         if (optionIndex !== -1 && field.nestedFields[optionIndex]) {
           // Add unique nested fields only
           field.nestedFields[optionIndex].forEach((nestedField, nestedIndex) => {
-            const nestedFieldKey = `${field.id}_${optionIndex}_${nestedField.id}`
+            // Generate unique key for nested field if id is undefined
+            const nestedFieldId = nestedField.id || `nested-${nestedField.label}-${optionIndex}-${nestedIndex}`
+            const nestedFieldKey = `${fieldKey}_${optionIndex}_${nestedFieldId}`
+            
             if (!currentProcessedIds.has(nestedFieldKey)) {
               nestedFieldsToShow.push({
                 ...nestedField,
+                id: nestedFieldId,
+                name: nestedField.name,
                 optionIndex,
                 optionValue: selectedValue,
                 uniqueKey: nestedFieldKey
@@ -114,10 +418,15 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
       
       // Add unique nested fields only
       option.nestedFields.forEach((nestedField, nestedIndex) => {
-        const nestedFieldKey = `${field.id}_${optionIndex}_${nestedField.id}`
+        // Generate unique key for nested field if id is undefined
+        const nestedFieldId = nestedField.id || `nested-${nestedField.label}-${optionIndex}-${nestedIndex}`
+        const nestedFieldKey = `${fieldKey}_${optionIndex}_${nestedFieldId}`
+        
         if (!currentProcessedIds.has(nestedFieldKey)) {
           nestedFieldsToShow.push({
             ...nestedField,
+            id: nestedFieldId,
+            name: nestedField.name,
             optionIndex,
             optionValue: selectedOptions,
             uniqueKey: nestedFieldKey
@@ -135,10 +444,15 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
       if (optionIndex !== -1 && field.nestedFields[optionIndex]) {
         // Add unique nested fields only
         field.nestedFields[optionIndex].forEach((nestedField, nestedIndex) => {
-          const nestedFieldKey = `${field.id}_${optionIndex}_${nestedField.id}`
+          // Generate unique key for nested field if id is undefined
+          const nestedFieldId = nestedField.id || `nested-${nestedField.label}-${optionIndex}-${nestedIndex}`
+          const nestedFieldKey = `${fieldKey}_${optionIndex}_${nestedFieldId}`
+          
           if (!currentProcessedIds.has(nestedFieldKey)) {
             nestedFieldsToShow.push({
               ...nestedField,
+              id: nestedFieldId,
+              name: nestedField.name,
               optionIndex,
               optionValue: selectedOptions,
               uniqueKey: nestedFieldKey
@@ -171,7 +485,7 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
       </div>
       <div className="space-y-4">
         {nestedFieldsToShow.map((nestedField) => {
-          const nestedFieldId = nestedField.uniqueKey || `${field.id}_${nestedField.optionIndex}_${nestedField.id}`
+          const nestedFieldId = nestedField.uniqueKey || `${fieldKey}_${nestedField.optionIndex}_${nestedField.id}`
           
           // Get the nested value from parentValue - handle both old and new structures
           let nestedValue = ""
@@ -184,13 +498,6 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
           }
 
           console.log(`🔍 Nested field ${nestedField.label} value:`, nestedValue)
-          console.log(`🎯 Rendering nested field: ${nestedField.label}`, {
-            nestedFieldId,
-            nestedValue,
-            nestedFieldType: nestedField.type,
-            hasOptions: nestedField.options?.length > 0,
-            options: nestedField.options
-          })
 
           const handleNestedChange = (value) => {
             const currentNestedFields = parentValue?.nestedFields || {}

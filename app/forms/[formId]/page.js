@@ -246,6 +246,7 @@ export default function PublicFormPage() {
         {
           organization_id: ORGANIZATION_ID,
           form_id: formId,
+          reference_id: USER_ID,
           submission_id: submissionId
         },
         {
@@ -285,6 +286,15 @@ export default function PublicFormPage() {
       console.error('Error fetching submission data:', error)
       toast.error(`Unable to load submission data: ${error.message}`)
     }
+  }
+
+  const getFieldName = (field) => {
+    // Always use field.name if available
+    if (field.name) {
+      return field.name
+    }
+    // Only use label as fallback if name is not available
+    return field.label?.toLowerCase().replace(/\s+/g, '_') || field.id
   }
 
   // Helper function to recursively parse nested fields
@@ -454,6 +464,7 @@ export default function PublicFormPage() {
               if (option.nestedFields && option.nestedFields.length > 0) {
                 nestedFields[optionIndex] = option.nestedFields.map(nestedField => ({
                   id: nestedField.id,
+                  name: nestedField.name,
                   type: nestedField.type,
                   label: nestedField.label,
                   placeholder: nestedField.placeholder || '',
@@ -466,7 +477,8 @@ export default function PublicFormPage() {
             })
 
             const parsedField = {
-              id: fieldData.id || fieldData.name || `field-${index}-${Date.now()}`,
+              id: fieldData.name || fieldData.id || `field-${index}-${Date.now()}`,
+              name: fieldData.name,
               type: fieldData.type || 'text',
               label: fieldData.label || fieldData.name || 'Field',
               placeholder: fieldData.placeholder || '',
@@ -604,14 +616,991 @@ export default function PublicFormPage() {
   }
 
   // Transform submission values to match form field structure
+  // const transformSubmissionValues = (submissionValues, fields) => {
+  //   const transformedValues = {}
+
+  //   if (!submissionValues || typeof submissionValues !== 'object') {
+  //     console.log('No submission values to transform')
+  //     return transformedValues
+  //   }
+
+  //   console.log('🔄 Raw submission values from API:', submissionValues)
+  //   console.log('📋 Form fields:', fields.map(f => ({
+  //     id: f.id,
+  //     name: f.name,
+  //     label: f.label,
+  //     type: f.type
+  //   })))
+  //   console.log('🔍 Available submission keys:', Object.keys(submissionValues))
+
+  //   fields.forEach(field => {
+  //     const fieldId = field.id
+  //     const fieldName = field.name || fieldId
+  //     const fieldLabel = field.label
+  //     let fieldValue = submissionValues[fieldId]
+
+  //     // Try multiple possible keys for the field value
+  //     const possibleKeys = [
+  //       fieldId,
+  //       fieldName,
+  //       fieldLabel,
+  //       // Try exact matches from submission values
+  //       ...Object.keys(submissionValues).filter(key =>
+  //         key === fieldId ||
+  //         key === fieldName ||
+  //         key === fieldLabel ||
+  //         key.toLowerCase() === fieldId?.toLowerCase() ||
+  //         key.toLowerCase() === fieldName?.toLowerCase() ||
+  //         key.toLowerCase() === fieldLabel?.toLowerCase() ||
+  //         // Handle cases where field label might have extra spaces
+  //         key.trim() === fieldLabel?.trim() ||
+  //         key.trim() === fieldName?.trim()
+  //       )
+  //     ]
+
+  //     // let fieldValue = undefined
+  //     let matchedKey = null
+
+  //     for (const key of possibleKeys) {
+  //       if (submissionValues[key] !== undefined && submissionValues[key] !== null) {
+  //         fieldValue = submissionValues[key]
+  //         matchedKey = key
+  //         console.log(`✅ Found value for field ${fieldId} (${fieldLabel}) using key: "${key}"`, fieldValue)
+  //         break
+  //       }
+  //     }
+
+  //     if (!matchedKey) {
+  //       console.log(`❌ No value found for field ${fieldId} (${fieldLabel}) - tried keys:`, possibleKeys)
+  //       console.log(`Available submission keys:`, Object.keys(submissionValues))
+
+  //       // Last resort: try to find a match by comparing field labels with submission keys
+  //       const submissionKeys = Object.keys(submissionValues)
+  //       for (const subKey of submissionKeys) {
+  //         if (fieldLabel && subKey.toLowerCase().includes(fieldLabel.toLowerCase())) {
+  //           fieldValue = submissionValues[subKey]
+  //           matchedKey = subKey
+  //           console.log(`🔄 Fallback match found for field ${fieldId} (${fieldLabel}) using key: "${subKey}"`, fieldValue)
+  //           break
+  //         }
+  //       }
+  //     }
+
+  //     if (fieldValue !== undefined && fieldValue !== null) {
+  //       // First, try to parse JSON strings for fields that might have nested values
+  //       let parsedValue = fieldValue
+  //       if (typeof fieldValue === 'string' && (fieldValue.startsWith('{') || fieldValue.startsWith('['))) {
+  //         try {
+  //           parsedValue = JSON.parse(fieldValue)
+  //           console.log(`📝 Parsed JSON for field ${fieldId}:`, parsedValue)
+  //         } catch (e) {
+  //           console.log(`⚠️ Failed to parse JSON for field ${fieldId}:`, fieldValue)
+  //           parsedValue = fieldValue
+  //         }
+  //       }
+
+  //       // Handle different field types
+  //       switch (field.type) {
+  //         case "checkbox":
+  //           console.log(`🔍 Processing checkbox field ${fieldId}:`, {
+  //             fieldValidation: field.validation,
+  //             isMultiple: field.validation?.multiple,
+  //             hasOptions: field.options && field.options.length > 0,
+  //             parsedValue,
+  //             fieldValue
+  //           })
+
+  //           // For checkbox fields, if they have options, treat them as multiple by default
+  //           const isMultipleCheckbox = field.validation?.multiple || (field.options && field.options.length > 0)
+
+  //           if (isMultipleCheckbox) {
+  //             // Multiple checkbox with nested values
+  //             if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
+  //               // Handle structured format: {value: [], nestedValues: {}}
+  //               const result = {
+  //                 value: Array.isArray(parsedValue.value) ? parsedValue.value : [],
+  //                 nestedFields: parsedValue.nestedValues || parsedValue.nestedFields || {}
+  //               }
+  //               console.log(`✅ Checkbox multiple structured result for ${fieldId}:`, result)
+  //               transformedValues[fieldId] = result
+  //             } else if (Array.isArray(parsedValue)) {
+  //               const result = {
+  //                 value: parsedValue,
+  //                 nestedFields: {}
+  //               }
+  //               console.log(`✅ Checkbox multiple array result for ${fieldId}:`, result)
+  //               transformedValues[fieldId] = result
+  //             } else {
+  //               const result = {
+  //                 value: [parsedValue],
+  //                 nestedFields: {}
+  //               }
+  //               console.log(`✅ Checkbox multiple single value result for ${fieldId}:`, result)
+  //               transformedValues[fieldId] = result
+  //             }
+  //           } else {
+  //             // Single checkbox - convert to boolean
+  //             const result = Boolean(parsedValue)
+  //             console.log(`✅ Checkbox single result for ${fieldId}:`, result)
+  //             transformedValues[fieldId] = result
+  //           }
+  //           break
+
+  //         case "select":
+  //           if (field.validation?.multiple) {
+  //             // Multiple select with nested values
+  //             if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
+  //               // Handle structured format: {value: [], nestedValues: {}}
+  //               transformedValues[fieldId] = {
+  //                 value: Array.isArray(parsedValue.value) ? parsedValue.value : [],
+  //                 nestedFields: parsedValue.nestedValues || parsedValue.nestedFields || {}
+  //               }
+  //             } else if (Array.isArray(parsedValue)) {
+  //               transformedValues[fieldId] = {
+  //                 value: parsedValue,
+  //                 nestedFields: {}
+  //               }
+  //             } else {
+  //               transformedValues[fieldId] = {
+  //                 value: [parsedValue],
+  //                 nestedFields: {}
+  //               }
+  //             }
+  //           } else {
+  //             // Single select with nested values
+  //             if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
+  //               // Handle structured format: {value: "Option 1", nestedValues: {}}
+  //               transformedValues[fieldId] = {
+  //                 value: parsedValue.value || "",
+  //                 nestedFields: parsedValue.nestedValues || parsedValue.nestedFields || {}
+  //               }
+  //             } else {
+  //               transformedValues[fieldId] = {
+  //                 value: parsedValue || "",
+  //                 nestedFields: {}
+  //               }
+  //             }
+  //           }
+  //           break
+
+  //         case "radio":
+  //           // Radio with nested values
+  //           if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
+  //             // Handle structured format: {value: "Option 1", nestedValues: {}}
+  //             transformedValues[fieldId] = {
+  //               value: parsedValue.value || "",
+  //               nestedFields: parsedValue.nestedValues || parsedValue.nestedFields || {}
+  //             }
+  //           } else {
+  //             transformedValues[fieldId] = {
+  //               value: parsedValue || "",
+  //               nestedFields: {}
+  //             }
+  //           }
+  //           break
+
+  //         case "file":
+  //           // Handle file fields - convert base64 string to file object
+  //           if (typeof fieldValue === 'string' && isBase64File(fieldValue)) {
+  //             const fileObject = createFileFromBase64(fieldValue, field.label || field.name || 'file')
+  //             if (fileObject) {
+  //               transformedValues[fieldId] = fileObject
+  //               console.log(`Created file object for ${fieldId}:`, fileObject.name)
+  //             } else {
+  //               transformedValues[fieldId] = null
+  //             }
+  //           } else if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //             // Already a file object
+  //             transformedValues[fieldId] = fieldValue
+  //           } else {
+  //             transformedValues[fieldId] = null
+  //           }
+  //           break
+
+  //         case "location":
+  //         case "phone":
+  //           // These should be objects
+  //           if (typeof fieldValue === 'object') {
+  //             transformedValues[fieldId] = fieldValue
+  //           } else if (typeof fieldValue === 'string') {
+  //             // Try to parse string as JSON
+  //             try {
+  //               transformedValues[fieldId] = JSON.parse(fieldValue)
+  //             } catch {
+  //               // If parsing fails, check if it's a simple string value
+  //               if (fieldValue.trim() !== '') {
+  //                 transformedValues[fieldId] = { value: fieldValue }
+  //               } else {
+  //                 transformedValues[fieldId] = {}
+  //               }
+  //             }
+  //           } else {
+  //             transformedValues[fieldId] = {}
+  //           }
+  //           break
+
+  //         default:
+  //           // Text, email, number, textarea, etc.
+  //           transformedValues[fieldId] = fieldValue
+  //       }
+  //     } else {
+  //       // No value found, set appropriate default
+  //       transformedValues[fieldId] = field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)
+  //         ? []
+  //         : field.type === "file"
+  //           ? null
+  //           : field.type === "location" || field.type === "phone"
+  //             ? {}
+  //             : ""
+
+  //       console.log(`No value found for field ${fieldId}, using default:`, transformedValues[fieldId])
+  //     }
+  //   })
+
+  //   console.log('Final transformed values for form:', transformedValues)
+  //   return transformedValues
+  // }
+
+  // const transformFormValues = (formValues, fields) => {
+  //   const transformedValues = {}
+  
+  //   console.log('🔍 Transforming form values with field names:', formValues)
+  //   console.log('📋 Available fields:', fields.map(f => ({ id: f.id, name: f.name, label: f.label, type: f.type })))
+  
+  //   // Helper function to recursively transform nested values
+  //   const transformNestedValues = (nestedFields, currentPath = []) => {
+  //     const result = {}
+      
+  //     Object.keys(nestedFields).forEach(key => {
+  //       const value = nestedFields[key]
+        
+  //       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+  //         // Handle nested object structure
+  //         if (value.value !== undefined) {
+  //           result[key] = {
+  //             value: value.value,
+  //             ...(value.nestedFields && Object.keys(value.nestedFields).length > 0 && {
+  //               nestedValues: transformNestedValues(value.nestedFields, [...currentPath, key])
+  //             })
+  //           }
+  //         } else {
+  //           // Direct nested object
+  //           result[key] = transformNestedValues(value, [...currentPath, key])
+  //         }
+  //       } else if (Array.isArray(value)) {
+  //         // Handle array of nested values (like multiple checkboxes)
+  //         result[key] = value.map(item => {
+  //           if (typeof item === 'object' && item !== null) {
+  //             return {
+  //               value: item.value,
+  //               ...(item.nestedFields && Object.keys(item.nestedFields).length > 0 && {
+  //                 nestedValues: transformNestedValues(item.nestedFields, [...currentPath, key])
+  //               })
+  //             }
+  //           }
+  //           return { value: item }
+  //         })
+  //       } else {
+  //         // Simple value
+  //         result[key] = { value }
+  //       }
+  //     })
+      
+  //     return result
+  //   }
+  
+  //   Object.keys(formValues).forEach(fieldId => {
+  //     const fieldValue = formValues[fieldId]
+  //     const field = fields.find(f => f.id === fieldId)
+  
+  //     if (!field) return
+  
+  //     // Skip empty values for non-required fields (same logic as before)
+  //     if (!field.required && !field.validation?.required) {
+  //       let isEmpty = false
+  
+  //       if (fieldValue === null || fieldValue === undefined || fieldValue === '') {
+  //         isEmpty = true
+  //       } else if (Array.isArray(fieldValue) && fieldValue.length === 0) {
+  //         isEmpty = true
+  //       } else if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //         if (field.type === 'location') {
+  //           isEmpty = (!fieldValue.country || fieldValue.country === '') &&
+  //             (!fieldValue.state || fieldValue.state === '') &&
+  //             (!fieldValue.city || fieldValue.city === '')
+  //         } else if (field.type === 'phone') {
+  //           isEmpty = (!fieldValue.country || fieldValue.country === '') &&
+  //             (!fieldValue.number || fieldValue.number === '')
+  //         } else if (field.type === 'file') {
+  //           isEmpty = !fieldValue.name && !fieldValue.base64
+  //         } else {
+  //           isEmpty = Object.keys(fieldValue).length === 0
+  //         }
+  //       }
+  
+  //       if (isEmpty) {
+  //         return
+  //       }
+  //     }
+  
+  //     // Use field name instead of ID as the key
+  //     const fieldName = field.name || field.label?.toLowerCase().replace(/\s+/g, '_') || fieldId
+  
+  //     // Handle different field types
+  //     switch (field.type) {
+  //       case "checkbox":
+  //       case "select":
+  //       case "radio":
+  //         // Handle fields with nested values
+  //         if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //           if (fieldValue.value !== undefined || fieldValue.nestedFields) {
+  //             const fieldData = {
+  //               value: fieldValue.value || (Array.isArray(fieldValue) ? fieldValue : "")
+  //             }
+  
+  //             // Add nested values if they exist
+  //             if (fieldValue.nestedFields && Object.keys(fieldValue.nestedFields).length > 0) {
+  //               fieldData.nestedValues = transformNestedValues(fieldValue.nestedFields, [fieldName])
+  //             }
+  
+  //             transformedValues[fieldName] = fieldData
+  //           } else {
+  //             // Fallback for simple values
+  //             transformedValues[fieldName] = { value: fieldValue }
+  //           }
+  //         } else {
+  //           transformedValues[fieldName] = { value: fieldValue }
+  //         }
+  //         break
+  
+  //       case "file":
+  //         if (fieldValue && typeof fieldValue === 'object' && fieldValue.base64) {
+  //           transformedValues[fieldName] = { value: fieldValue.base64 }
+  //         } else if (fieldValue && typeof fieldValue === 'string' && fieldValue.startsWith('data:')) {
+  //           transformedValues[fieldName] = { value: fieldValue }
+  //         } else {
+  //           transformedValues[fieldName] = { value: "" }
+  //         }
+  //         break
+  
+  //       case "location":
+  //         if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //           const locationData = {
+  //             value: "location", // or you could stringify the location
+  //             nestedValues: {
+  //               country: { value: fieldValue.country || "" },
+  //               state: { value: fieldValue.state || "" },
+  //               city: { value: fieldValue.city || "" }
+  //             }
+  //           }
+  //           transformedValues[fieldName] = locationData
+  //         } else {
+  //           transformedValues[fieldName] = { value: "" }
+  //         }
+  //         break
+  
+  //       case "phone":
+  //         if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //           const phoneData = {
+  //             value: "phone", // or combine country + number
+  //             nestedValues: {
+  //               country: { value: fieldValue.country || "" },
+  //               number: { value: fieldValue.number || "" }
+  //             }
+  //           }
+  //           transformedValues[fieldName] = phoneData
+  //         } else {
+  //           transformedValues[fieldName] = { value: "" }
+  //         }
+  //         break
+  
+  //       default:
+  //         // Text, email, number, textarea
+  //         transformedValues[fieldName] = { value: fieldValue || "" }
+  //     }
+  //   })
+  
+  //   console.log('✅ Final transformed values with field names:', transformedValues)
+  //   return transformedValues
+  // }
+
+  // const transformFormValues = (formValues, fields) => {
+  //   const transformedValues = {}
+  
+  //   console.log('🔍 Transforming form values with field names:', formValues)
+  //   console.log('📋 Available fields:', fields.map(f => ({ id: f.id, name: f.name, label: f.label, type: f.type })))
+  
+  //   // Helper function to recursively transform nested values using field names
+  //   const transformNestedValues = (nestedFields, parentFieldName = '') => {
+  //     const result = {}
+      
+  //     Object.keys(nestedFields).forEach(key => {
+  //       const value = nestedFields[key]
+        
+  //       // Extract field name from the key (remove index prefix if present)
+  //       let fieldName = key
+  //       if (key.includes('-')) {
+  //         // Handle keys like "0-nested-Brand-0-0" - extract "Brand"
+  //         const parts = key.split('-')
+  //         // Find the part that contains the actual field name (not "nested", not numbers)
+  //         const namePart = parts.find(part => 
+  //           part && 
+  //           part !== 'nested' && 
+  //           isNaN(part) && 
+  //           !part.startsWith('0')
+  //         )
+  //         if (namePart) {
+  //           fieldName = namePart.toLowerCase()
+  //         }
+  //       }
+  
+  //       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+  //         // Handle nested object structure
+  //         if (value.value !== undefined) {
+  //           result[fieldName] = {
+  //             value: value.value,
+  //             ...(value.nestedFields && Object.keys(value.nestedFields).length > 0 && {
+  //               nestedValues: transformNestedValues(value.nestedFields, fieldName)
+  //             })
+  //           }
+  //         } else {
+  //           // Direct nested object - process recursively
+  //           result[fieldName] = transformNestedValues(value, fieldName)
+  //         }
+  //       } else if (Array.isArray(value)) {
+  //         // Handle array of nested values (like multiple checkboxes)
+  //         result[fieldName] = value.map(item => {
+  //           if (typeof item === 'object' && item !== null) {
+  //             return {
+  //               value: item.value,
+  //               ...(item.nestedFields && Object.keys(item.nestedFields).length > 0 && {
+  //                 nestedValues: transformNestedValues(item.nestedFields, fieldName)
+  //               })
+  //             }
+  //           }
+  //           return { value: item }
+  //         })
+  //       } else {
+  //         // Simple value
+  //         result[fieldName] = { value }
+  //       }
+  //     })
+      
+  //     return result
+  //   }
+  
+  //   // Helper function to get clean field name
+  //   const getCleanFieldName = (field) => {
+  //     return field.name || field.label?.toLowerCase().replace(/\s+/g, '_') || field.id
+  //   }
+  
+  //   Object.keys(formValues).forEach(fieldId => {
+  //     const fieldValue = formValues[fieldId]
+  //     const field = fields.find(f => f.id === fieldId)
+  
+  //     if (!field) return
+  
+  //     // Skip empty values for non-required fields
+  //     if (!field.required && !field.validation?.required) {
+  //       let isEmpty = false
+  
+  //       if (fieldValue === null || fieldValue === undefined || fieldValue === '') {
+  //         isEmpty = true
+  //       } else if (Array.isArray(fieldValue) && fieldValue.length === 0) {
+  //         isEmpty = true
+  //       } else if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //         if (field.type === 'location') {
+  //           isEmpty = (!fieldValue.country || fieldValue.country === '') &&
+  //             (!fieldValue.state || fieldValue.state === '') &&
+  //             (!fieldValue.city || fieldValue.city === '')
+  //         } else if (field.type === 'phone') {
+  //           isEmpty = (!fieldValue.country || fieldValue.country === '') &&
+  //             (!fieldValue.number || fieldValue.number === '')
+  //         } else if (field.type === 'file') {
+  //           isEmpty = !fieldValue.name && !fieldValue.base64
+  //         } else if (fieldValue.value !== undefined) {
+  //           // For nested fields, check if the value is empty
+  //           if (Array.isArray(fieldValue.value)) {
+  //             isEmpty = fieldValue.value.length === 0
+  //           } else {
+  //             isEmpty = !fieldValue.value || fieldValue.value === ''
+  //           }
+  //         } else {
+  //           isEmpty = Object.keys(fieldValue).length === 0
+  //         }
+  //       }
+  
+  //       if (isEmpty) {
+  //         return
+  //       }
+  //     }
+  
+  //     // Use field name instead of ID as the key
+  //     const fieldName = getCleanFieldName(field)
+  
+  //     // Handle different field types
+  //     switch (field.type) {
+  //       case "checkbox":
+  //       case "select":
+  //       case "radio":
+  //         // Handle fields with nested values
+  //         if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //           if (fieldValue.value !== undefined || fieldValue.nestedFields) {
+  //             const fieldData = {
+  //               value: fieldValue.value || (Array.isArray(fieldValue) ? fieldValue : "")
+  //             }
+  
+  //             // Add nested values if they exist
+  //             if (fieldValue.nestedFields && Object.keys(fieldValue.nestedFields).length > 0) {
+  //               fieldData.nestedValues = transformNestedValues(fieldValue.nestedFields, fieldName)
+  //             }
+  
+  //             transformedValues[fieldName] = fieldData
+  //           } else {
+  //             // Fallback for simple values
+  //             transformedValues[fieldName] = { value: fieldValue }
+  //           }
+  //         } else {
+  //           transformedValues[fieldName] = { value: fieldValue }
+  //         }
+  //         break
+  
+  //       case "file":
+  //         if (fieldValue && typeof fieldValue === 'object' && fieldValue.base64) {
+  //           transformedValues[fieldName] = { value: fieldValue.base64 }
+  //         } else if (fieldValue && typeof fieldValue === 'string' && fieldValue.startsWith('data:')) {
+  //           transformedValues[fieldName] = { value: fieldValue }
+  //         } else {
+  //           transformedValues[fieldName] = { value: "" }
+  //         }
+  //         break
+  
+  //       case "location":
+  //         if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //           const locationData = {
+  //             value: "location",
+  //             nestedValues: {
+  //               country: { value: fieldValue.country || "" },
+  //               state: { value: fieldValue.state || "" },
+  //               city: { value: fieldValue.city || "" }
+  //             }
+  //           }
+  //           transformedValues[fieldName] = locationData
+  //         } else {
+  //           transformedValues[fieldName] = { value: "" }
+  //         }
+  //         break
+  
+  //       case "phone":
+  //         if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //           const phoneData = {
+  //             value: "phone",
+  //             nestedValues: {
+  //               country: { value: fieldValue.country || "" },
+  //               number: { value: fieldValue.number || "" }
+  //             }
+  //           }
+  //           transformedValues[fieldName] = phoneData
+  //         } else {
+  //           transformedValues[fieldName] = { value: "" }
+  //         }
+  //         break
+  
+  //       default:
+  //         // Text, email, number, textarea
+  //         transformedValues[fieldName] = { value: fieldValue || "" }
+  //     }
+  //   })
+  
+  //   console.log('✅ Final transformed values with field names:', JSON.stringify(transformedValues, null, 2))
+  //   return transformedValues
+  // }
+
+  const transformFormValues = (formValues, fields) => {
+    const transformedValues = {}
+  
+    console.log('🔍 Transforming form values with field names:', formValues)
+    console.log('📋 Available fields:', fields.map(f => ({ id: f.id, name: f.name, label: f.label, type: f.type })))
+  
+    // Helper function to recursively transform nested values using field names
+    const transformNestedValues = (nestedFields) => {
+      const result = {}
+      
+      Object.keys(nestedFields).forEach(key => {
+        const value = nestedFields[key]
+        
+        // Extract the actual field name from the key
+        // Keys are in format like "nested-Brand-0-0" but we want "brand"
+        let fieldName = key
+        
+        // Handle complex nested field keys
+        if (key.includes('-')) {
+          const parts = key.split('-')
+          // Find the part that contains the actual field name
+          // Skip "nested" and numeric parts
+          const namePart = parts.find(part => 
+            part && 
+            part !== 'nested' && 
+            isNaN(part) && 
+            part !== '0'
+          )
+          if (namePart) {
+            fieldName = namePart.toLowerCase()
+          }
+        }
+  
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          // Handle nested object structure
+          if (value.value !== undefined) {
+            result[fieldName] = {
+              value: value.value,
+              ...(value.nestedFields && Object.keys(value.nestedFields).length > 0 && {
+                nestedValues: transformNestedValues(value.nestedFields)
+              })
+            }
+          } else {
+            // Direct nested object - process recursively
+            result[fieldName] = transformNestedValues(value)
+          }
+        } else if (Array.isArray(value)) {
+          // Handle array of nested values (like multiple checkboxes)
+          result[fieldName] = value.map(item => {
+            if (typeof item === 'object' && item !== null) {
+              return {
+                value: item.value,
+                ...(item.nestedFields && Object.keys(item.nestedFields).length > 0 && {
+                  nestedValues: transformNestedValues(item.nestedFields)
+                })
+              }
+            }
+            return { value: item }
+          })
+        } else {
+          // Simple value
+          result[fieldName] = { value }
+        }
+      })
+      
+      return result
+    }
+  
+    // Helper function to get clean field name - PRIORITIZE FIELD NAME OVER LABEL
+    const getCleanFieldName = (field) => {
+      // Use field.name if available, otherwise use a cleaned version of the label
+      if (field.name) {
+        return field.name
+      }
+      // Fallback to label only if name is not available
+      return field.label?.toLowerCase().replace(/\s+/g, '_') || field.id
+    }
+  
+    Object.keys(formValues).forEach(fieldId => {
+      const fieldValue = formValues[fieldId]
+      const field = fields.find(f => f.id === fieldId)
+  
+      if (!field) return
+  
+      // Skip empty values for non-required fields
+      if (!field.required && !field.validation?.required) {
+        let isEmpty = false
+  
+        if (fieldValue === null || fieldValue === undefined || fieldValue === '') {
+          isEmpty = true
+        } else if (Array.isArray(fieldValue) && fieldValue.length === 0) {
+          isEmpty = true
+        } else if (typeof fieldValue === 'object' && fieldValue !== null) {
+          if (field.type === 'location') {
+            isEmpty = (!fieldValue.country || fieldValue.country === '') &&
+              (!fieldValue.state || fieldValue.state === '') &&
+              (!fieldValue.city || fieldValue.city === '')
+          } else if (field.type === 'phone') {
+            isEmpty = (!fieldValue.country || fieldValue.country === '') &&
+              (!fieldValue.number || fieldValue.number === '')
+          } else if (field.type === 'file') {
+            isEmpty = !fieldValue.name && !fieldValue.base64
+          } else if (fieldValue.value !== undefined) {
+            // For nested fields, check if the value is empty
+            if (Array.isArray(fieldValue.value)) {
+              isEmpty = fieldValue.value.length === 0
+            } else {
+              isEmpty = !fieldValue.value || fieldValue.value === ''
+            }
+          } else {
+            isEmpty = Object.keys(fieldValue).length === 0
+          }
+        }
+  
+        if (isEmpty) {
+          return
+        }
+      }
+  
+      // Use field name instead of ID as the key
+      const fieldName = getCleanFieldName(field)
+  
+      // Handle different field types
+      switch (field.type) {
+        case "checkbox":
+        case "select":
+        case "radio":
+          // Handle fields with nested values
+          if (typeof fieldValue === 'object' && fieldValue !== null) {
+            if (fieldValue.value !== undefined || fieldValue.nestedFields) {
+              const fieldData = {
+                value: fieldValue.value || (Array.isArray(fieldValue) ? fieldValue : "")
+              }
+  
+              // Add nested values if they exist
+              if (fieldValue.nestedFields && Object.keys(fieldValue.nestedFields).length > 0) {
+                fieldData.nestedValues = transformNestedValues(fieldValue.nestedFields)
+              }
+  
+              transformedValues[fieldName] = fieldData
+            } else {
+              // Fallback for simple values
+              transformedValues[fieldName] = { value: fieldValue }
+            }
+          } else {
+            transformedValues[fieldName] = { value: fieldValue }
+          }
+          break
+  
+        case "file":
+          if (fieldValue && typeof fieldValue === 'object' && fieldValue.base64) {
+            transformedValues[fieldName] = { value: fieldValue.base64 }
+          } else if (fieldValue && typeof fieldValue === 'string' && fieldValue.startsWith('data:')) {
+            transformedValues[fieldName] = { value: fieldValue }
+          } else {
+            transformedValues[fieldName] = { value: "" }
+          }
+          break
+  
+        case "location":
+          if (typeof fieldValue === 'object' && fieldValue !== null) {
+            const locationData = {
+              value: "location",
+              nestedValues: {
+                country: { value: fieldValue.country || "" },
+                state: { value: fieldValue.state || "" },
+                city: { value: fieldValue.city || "" }
+              }
+            }
+            transformedValues[fieldName] = locationData
+          } else {
+            transformedValues[fieldName] = { value: "" }
+          }
+          break
+  
+        case "phone":
+          if (typeof fieldValue === 'object' && fieldValue !== null) {
+            const phoneData = {
+              value: "phone",
+              nestedValues: {
+                country: { value: fieldValue.country || "" },
+                number: { value: fieldValue.number || "" }
+              }
+            }
+            transformedValues[fieldName] = phoneData
+          } else {
+            transformedValues[fieldName] = { value: "" }
+          }
+          break
+  
+        default:
+          // Text, email, number, textarea
+          transformedValues[fieldName] = { value: fieldValue || "" }
+      }
+    })
+  
+    console.log('✅ Final transformed values with field names:',transformedValues)
+    return transformedValues
+  }
+
+  // const transformFormValues = (formValues, fields) => {
+  //   const transformedValues = {}
+
+  //   console.log('🔍 Transforming form values:', formValues)
+  //   console.log('📋 Available fields:', fields.map(f => ({ id: f.id, type: f.type, required: f.required })))
+
+  //   Object.keys(formValues).forEach(fieldId => {
+  //     const fieldValue = formValues[fieldId]
+  //     const field = fields.find(f => f.id === fieldId)
+
+  //     if (!field) return
+
+  //     // Skip empty values for non-required fields
+  //     if (!field.required && !field.validation?.required) {
+  //       // Check if the value is empty
+  //       let isEmpty = false
+
+  //       if (fieldValue === null || fieldValue === undefined || fieldValue === '') {
+  //         isEmpty = true
+  //       } else if (Array.isArray(fieldValue) && fieldValue.length === 0) {
+  //         isEmpty = true
+  //       } else if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //         // Special handling for location and phone fields
+  //         if (field.type === 'location') {
+  //           // Location is empty if all properties are empty
+  //           isEmpty = (!fieldValue.country || fieldValue.country === '') &&
+  //             (!fieldValue.state || fieldValue.state === '') &&
+  //             (!fieldValue.city || fieldValue.city === '')
+  //         } else if (field.type === 'phone') {
+  //           // Phone is empty if both country and number are empty
+  //           isEmpty = (!fieldValue.country || fieldValue.country === '') &&
+  //             (!fieldValue.number || fieldValue.number === '')
+  //         } else if (field.type === 'file') {
+  //           // File is empty if no name or base64 data
+  //           isEmpty = !fieldValue.name && !fieldValue.base64
+  //         } else {
+  //           // For other objects, check if all keys are empty
+  //           isEmpty = Object.keys(fieldValue).length === 0
+  //         }
+  //       }
+
+  //       if (isEmpty) {
+  //         return // Skip this field entirely
+  //       }
+  //     }
+
+  //     // Handle different field types according to your API format
+  //     switch (field.type) {
+  //       case "checkbox":
+  //         // Handle checkbox with nested values
+  //         if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.value !== undefined) {
+  //           const checkboxData = {
+  //             value: Array.isArray(fieldValue.value) ? fieldValue.value : []
+  //           }
+
+  //           // Add nested values if they exist
+  //           if (fieldValue.nestedFields) {
+  //             checkboxData.nestedValues = fieldValue.nestedFields
+  //           }
+
+  //           transformedValues[fieldId] = checkboxData
+  //         } else {
+  //           transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
+  //         }
+  //         break
+
+  //       case "select":
+  //         if (field.validation?.multiple) {
+  //           // Multiple select with nested values
+  //           if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.value !== undefined) {
+  //             const selectData = {
+  //               value: Array.isArray(fieldValue.value) ? fieldValue.value : []
+  //             }
+
+  //             // Add nested values if they exist
+  //             if (fieldValue.nestedFields) {
+  //               selectData.nestedValues = fieldValue.nestedFields
+  //             }
+
+  //             transformedValues[fieldId] = selectData
+  //           } else {
+  //             transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
+  //           }
+  //         } else {
+  //           // Single select with nested values
+  //           if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.value !== undefined) {
+  //             const selectData = {
+  //               value: fieldValue.value || ""
+  //             }
+
+  //             // Add nested values if they exist
+  //             if (fieldValue.nestedFields) {
+  //               selectData.nestedValues = fieldValue.nestedFields
+  //             }
+
+  //             transformedValues[fieldId] = selectData
+  //           } else {
+  //             transformedValues[fieldId] = fieldValue || ""
+  //           }
+  //         }
+  //         break
+
+  //       case "radio":
+  //         // Radio with nested values
+  //         if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.value !== undefined) {
+  //           const radioData = {
+  //             value: fieldValue.value || ""
+  //           }
+
+  //           // Add nested values if they exist
+  //           if (fieldValue.nestedFields) {
+  //             radioData.nestedValues = fieldValue.nestedFields
+  //           }
+
+  //           transformedValues[fieldId] = radioData
+  //         } else {
+  //           transformedValues[fieldId] = fieldValue || ""
+  //         }
+  //         break
+
+  //       case "file":
+  //         // File upload - send base64 data as string
+  //         if (fieldValue && typeof fieldValue === 'object' && fieldValue.base64) {
+  //           // Send base64 string directly
+  //           transformedValues[fieldId] = fieldValue.base64
+  //         } else if (fieldValue && typeof fieldValue === 'string' && fieldValue.startsWith('data:')) {
+  //           // If it's already a base64 string, use it directly
+  //           transformedValues[fieldId] = fieldValue
+  //         } else {
+  //           transformedValues[fieldId] = ""
+  //         }
+  //         break
+
+  //       case "location":
+  //         // Location returns object with country, state, city
+  //         console.log(`📍 Processing location field ${fieldId}:`, fieldValue)
+  //         if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //           const locationData = {
+  //             country: fieldValue.country || "",
+  //             state: fieldValue.state || "",
+  //             city: fieldValue.city || ""
+  //           }
+  //           transformedValues[fieldId] = locationData
+  //           console.log(`📍 Location field ${fieldId} transformed to:`, locationData)
+  //         } else {
+  //           transformedValues[fieldId] = {}
+  //           console.log(`📍 Location field ${fieldId} set to empty object`)
+  //         }
+  //         break
+
+  //       case "phone":
+  //         // Phone returns object with country and number
+  //         console.log(`📞 Processing phone field ${fieldId}:`, fieldValue)
+  //         if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //           const phoneData = {
+  //             country: fieldValue.country || "",
+  //             number: fieldValue.number || ""
+  //           }
+  //           transformedValues[fieldId] = phoneData
+  //           console.log(`📞 Phone field ${fieldId} transformed to:`, phoneData)
+  //         } else {
+  //           transformedValues[fieldId] = {}
+  //           console.log(`📞 Phone field ${fieldId} set to empty object`)
+  //         }
+  //         break
+
+  //       default:
+  //         // Text, email, number, textarea - return as string
+  //         transformedValues[fieldId] = fieldValue || ""
+  //     }
+  //   })
+
+  //   console.log('✅ Final transformed values:', transformedValues)
+  //   return transformedValues
+  // }
+
+  // Get default values for form initialization
   const transformSubmissionValues = (submissionValues, fields) => {
     const transformedValues = {}
-
+  
     if (!submissionValues || typeof submissionValues !== 'object') {
       console.log('No submission values to transform')
       return transformedValues
     }
-
+  
     console.log('🔄 Raw submission values from API:', submissionValues)
     console.log('📋 Form fields:', fields.map(f => ({
       id: f.id,
@@ -619,413 +1608,98 @@ export default function PublicFormPage() {
       label: f.label,
       type: f.type
     })))
-    console.log('🔍 Available submission keys:', Object.keys(submissionValues))
-
+  
+    // Helper function to recursively process nested API values
+    const processNestedApiValues = (nestedData) => {
+      if (!nestedData || typeof nestedData !== 'object') return {}
+  
+      const result = {}
+  
+      Object.keys(nestedData).forEach(key => {
+        const value = nestedData[key]
+        
+        if (typeof value === 'object' && value !== null) {
+          if (value.value !== undefined) {
+            result[key] = {
+              value: value.value,
+              ...(value.nestedValues && {
+                nestedFields: processNestedApiValues(value.nestedValues)
+              })
+            }
+          } else {
+            result[key] = processNestedApiValues(value)
+          }
+        } else {
+          result[key] = value
+        }
+      })
+  
+      return result
+    }
+  
     fields.forEach(field => {
       const fieldId = field.id
-      const fieldName = field.name || fieldId
-      const fieldLabel = field.label
-      let fieldValue = submissionValues[fieldId]
-
-      // Try multiple possible keys for the field value
-      const possibleKeys = [
-        fieldId,
-        fieldName,
-        fieldLabel,
-        // Try exact matches from submission values
-        ...Object.keys(submissionValues).filter(key =>
-          key === fieldId ||
-          key === fieldName ||
-          key === fieldLabel ||
-          key.toLowerCase() === fieldId?.toLowerCase() ||
-          key.toLowerCase() === fieldName?.toLowerCase() ||
-          key.toLowerCase() === fieldLabel?.toLowerCase() ||
-          // Handle cases where field label might have extra spaces
-          key.trim() === fieldLabel?.trim() ||
-          key.trim() === fieldName?.trim()
-        )
-      ]
-
-      // let fieldValue = undefined
-      let matchedKey = null
-
-      for (const key of possibleKeys) {
-        if (submissionValues[key] !== undefined && submissionValues[key] !== null) {
-          fieldValue = submissionValues[key]
-          matchedKey = key
-          console.log(`✅ Found value for field ${fieldId} (${fieldLabel}) using key: "${key}"`, fieldValue)
-          break
-        }
-      }
-
-      if (!matchedKey) {
-        console.log(`❌ No value found for field ${fieldId} (${fieldLabel}) - tried keys:`, possibleKeys)
-        console.log(`Available submission keys:`, Object.keys(submissionValues))
-
-        // Last resort: try to find a match by comparing field labels with submission keys
-        const submissionKeys = Object.keys(submissionValues)
-        for (const subKey of submissionKeys) {
-          if (fieldLabel && subKey.toLowerCase().includes(fieldLabel.toLowerCase())) {
-            fieldValue = submissionValues[subKey]
-            matchedKey = subKey
-            console.log(`🔄 Fallback match found for field ${fieldId} (${fieldLabel}) using key: "${subKey}"`, fieldValue)
+      const fieldName = field.name || field.label?.toLowerCase().replace(/\s+/g, '_') || fieldId
+      
+      let fieldValue = submissionValues[fieldName]
+  
+      // If not found by name, try other possible keys
+      if (fieldValue === undefined) {
+        const possibleKeys = [
+          fieldName,
+          fieldId,
+          field.label,
+          ...Object.keys(submissionValues).filter(key =>
+            key === fieldName ||
+            key === fieldId ||
+            key === field.label ||
+            key.toLowerCase() === fieldName?.toLowerCase() ||
+            key.toLowerCase() === field.label?.toLowerCase()
+          )
+        ]
+  
+        for (const key of possibleKeys) {
+          if (submissionValues[key] !== undefined && submissionValues[key] !== null) {
+            fieldValue = submissionValues[key]
+            console.log(`✅ Found value for field ${fieldId} (${field.label}) using key: "${key}"`, fieldValue)
             break
           }
         }
       }
-
+  
       if (fieldValue !== undefined && fieldValue !== null) {
-        // First, try to parse JSON strings for fields that might have nested values
-        let parsedValue = fieldValue
-        if (typeof fieldValue === 'string' && (fieldValue.startsWith('{') || fieldValue.startsWith('['))) {
-          try {
-            parsedValue = JSON.parse(fieldValue)
-            console.log(`📝 Parsed JSON for field ${fieldId}:`, parsedValue)
-          } catch (e) {
-            console.log(`⚠️ Failed to parse JSON for field ${fieldId}:`, fieldValue)
-            parsedValue = fieldValue
+        // Handle API nested structure
+        if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.value !== undefined) {
+          const processedValue = {
+            value: fieldValue.value
           }
-        }
-
-        // Handle different field types
-        switch (field.type) {
-          case "checkbox":
-            console.log(`🔍 Processing checkbox field ${fieldId}:`, {
-              fieldValidation: field.validation,
-              isMultiple: field.validation?.multiple,
-              hasOptions: field.options && field.options.length > 0,
-              parsedValue,
-              fieldValue
-            })
-
-            // For checkbox fields, if they have options, treat them as multiple by default
-            const isMultipleCheckbox = field.validation?.multiple || (field.options && field.options.length > 0)
-
-            if (isMultipleCheckbox) {
-              // Multiple checkbox with nested values
-              if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
-                // Handle structured format: {value: [], nestedValues: {}}
-                const result = {
-                  value: Array.isArray(parsedValue.value) ? parsedValue.value : [],
-                  nestedFields: parsedValue.nestedValues || parsedValue.nestedFields || {}
-                }
-                console.log(`✅ Checkbox multiple structured result for ${fieldId}:`, result)
-                transformedValues[fieldId] = result
-              } else if (Array.isArray(parsedValue)) {
-                const result = {
-                  value: parsedValue,
-                  nestedFields: {}
-                }
-                console.log(`✅ Checkbox multiple array result for ${fieldId}:`, result)
-                transformedValues[fieldId] = result
-              } else {
-                const result = {
-                  value: [parsedValue],
-                  nestedFields: {}
-                }
-                console.log(`✅ Checkbox multiple single value result for ${fieldId}:`, result)
-                transformedValues[fieldId] = result
-              }
-            } else {
-              // Single checkbox - convert to boolean
-              const result = Boolean(parsedValue)
-              console.log(`✅ Checkbox single result for ${fieldId}:`, result)
-              transformedValues[fieldId] = result
-            }
-            break
-
-          case "select":
-            if (field.validation?.multiple) {
-              // Multiple select with nested values
-              if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
-                // Handle structured format: {value: [], nestedValues: {}}
-                transformedValues[fieldId] = {
-                  value: Array.isArray(parsedValue.value) ? parsedValue.value : [],
-                  nestedFields: parsedValue.nestedValues || parsedValue.nestedFields || {}
-                }
-              } else if (Array.isArray(parsedValue)) {
-                transformedValues[fieldId] = {
-                  value: parsedValue,
-                  nestedFields: {}
-                }
-              } else {
-                transformedValues[fieldId] = {
-                  value: [parsedValue],
-                  nestedFields: {}
-                }
-              }
-            } else {
-              // Single select with nested values
-              if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
-                // Handle structured format: {value: "Option 1", nestedValues: {}}
-                transformedValues[fieldId] = {
-                  value: parsedValue.value || "",
-                  nestedFields: parsedValue.nestedValues || parsedValue.nestedFields || {}
-                }
-              } else {
-                transformedValues[fieldId] = {
-                  value: parsedValue || "",
-                  nestedFields: {}
-                }
-              }
-            }
-            break
-
-          case "radio":
-            // Radio with nested values
-            if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
-              // Handle structured format: {value: "Option 1", nestedValues: {}}
-              transformedValues[fieldId] = {
-                value: parsedValue.value || "",
-                nestedFields: parsedValue.nestedValues || parsedValue.nestedFields || {}
-              }
-            } else {
-              transformedValues[fieldId] = {
-                value: parsedValue || "",
-                nestedFields: {}
-              }
-            }
-            break
-
-          case "file":
-            // Handle file fields - convert base64 string to file object
-            if (typeof fieldValue === 'string' && isBase64File(fieldValue)) {
-              const fileObject = createFileFromBase64(fieldValue, field.label || field.name || 'file')
-              if (fileObject) {
-                transformedValues[fieldId] = fileObject
-                console.log(`Created file object for ${fieldId}:`, fileObject.name)
-              } else {
-                transformedValues[fieldId] = null
-              }
-            } else if (typeof fieldValue === 'object' && fieldValue !== null) {
-              // Already a file object
-              transformedValues[fieldId] = fieldValue
-            } else {
-              transformedValues[fieldId] = null
-            }
-            break
-
-          case "location":
-          case "phone":
-            // These should be objects
-            if (typeof fieldValue === 'object') {
-              transformedValues[fieldId] = fieldValue
-            } else if (typeof fieldValue === 'string') {
-              // Try to parse string as JSON
-              try {
-                transformedValues[fieldId] = JSON.parse(fieldValue)
-              } catch {
-                // If parsing fails, check if it's a simple string value
-                if (fieldValue.trim() !== '') {
-                  transformedValues[fieldId] = { value: fieldValue }
-                } else {
-                  transformedValues[fieldId] = {}
-                }
-              }
-            } else {
-              transformedValues[fieldId] = {}
-            }
-            break
-
-          default:
-            // Text, email, number, textarea, etc.
-            transformedValues[fieldId] = fieldValue
+  
+          // Process nested values from API
+          if (fieldValue.nestedValues) {
+            processedValue.nestedFields = processNestedApiValues(fieldValue.nestedValues)
+          }
+  
+          transformedValues[fieldId] = processedValue
+        } else {
+          // Simple value
+          transformedValues[fieldId] = fieldValue
         }
       } else {
-        // No value found, set appropriate default
+        // Set appropriate defaults
         transformedValues[fieldId] = field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)
-          ? []
+          ? { value: [], nestedFields: {} }
           : field.type === "file"
             ? null
             : field.type === "location" || field.type === "phone"
               ? {}
               : ""
-
-        console.log(`No value found for field ${fieldId}, using default:`, transformedValues[fieldId])
       }
     })
-
+  
     console.log('Final transformed values for form:', transformedValues)
     return transformedValues
   }
-
-  const transformFormValues = (formValues, fields) => {
-    const transformedValues = {}
-
-    console.log('🔍 Transforming form values:', formValues)
-    console.log('📋 Available fields:', fields.map(f => ({ id: f.id, type: f.type, required: f.required })))
-
-    Object.keys(formValues).forEach(fieldId => {
-      const fieldValue = formValues[fieldId]
-      const field = fields.find(f => f.id === fieldId)
-
-      if (!field) return
-
-      // Skip empty values for non-required fields
-      if (!field.required && !field.validation?.required) {
-        // Check if the value is empty
-        let isEmpty = false
-
-        if (fieldValue === null || fieldValue === undefined || fieldValue === '') {
-          isEmpty = true
-        } else if (Array.isArray(fieldValue) && fieldValue.length === 0) {
-          isEmpty = true
-        } else if (typeof fieldValue === 'object' && fieldValue !== null) {
-          // Special handling for location and phone fields
-          if (field.type === 'location') {
-            // Location is empty if all properties are empty
-            isEmpty = (!fieldValue.country || fieldValue.country === '') &&
-              (!fieldValue.state || fieldValue.state === '') &&
-              (!fieldValue.city || fieldValue.city === '')
-          } else if (field.type === 'phone') {
-            // Phone is empty if both country and number are empty
-            isEmpty = (!fieldValue.country || fieldValue.country === '') &&
-              (!fieldValue.number || fieldValue.number === '')
-          } else if (field.type === 'file') {
-            // File is empty if no name or base64 data
-            isEmpty = !fieldValue.name && !fieldValue.base64
-          } else {
-            // For other objects, check if all keys are empty
-            isEmpty = Object.keys(fieldValue).length === 0
-          }
-        }
-
-        if (isEmpty) {
-          return // Skip this field entirely
-        }
-      }
-
-      // Handle different field types according to your API format
-      switch (field.type) {
-        case "checkbox":
-          // Handle checkbox with nested values
-          if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.value !== undefined) {
-            const checkboxData = {
-              value: Array.isArray(fieldValue.value) ? fieldValue.value : []
-            }
-
-            // Add nested values if they exist
-            if (fieldValue.nestedFields) {
-              checkboxData.nestedValues = fieldValue.nestedFields
-            }
-
-            transformedValues[fieldId] = checkboxData
-          } else {
-            transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
-          }
-          break
-
-        case "select":
-          if (field.validation?.multiple) {
-            // Multiple select with nested values
-            if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.value !== undefined) {
-              const selectData = {
-                value: Array.isArray(fieldValue.value) ? fieldValue.value : []
-              }
-
-              // Add nested values if they exist
-              if (fieldValue.nestedFields) {
-                selectData.nestedValues = fieldValue.nestedFields
-              }
-
-              transformedValues[fieldId] = selectData
-            } else {
-              transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
-            }
-          } else {
-            // Single select with nested values
-            if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.value !== undefined) {
-              const selectData = {
-                value: fieldValue.value || ""
-              }
-
-              // Add nested values if they exist
-              if (fieldValue.nestedFields) {
-                selectData.nestedValues = fieldValue.nestedFields
-              }
-
-              transformedValues[fieldId] = selectData
-            } else {
-              transformedValues[fieldId] = fieldValue || ""
-            }
-          }
-          break
-
-        case "radio":
-          // Radio with nested values
-          if (typeof fieldValue === 'object' && fieldValue !== null && fieldValue.value !== undefined) {
-            const radioData = {
-              value: fieldValue.value || ""
-            }
-
-            // Add nested values if they exist
-            if (fieldValue.nestedFields) {
-              radioData.nestedValues = fieldValue.nestedFields
-            }
-
-            transformedValues[fieldId] = radioData
-          } else {
-            transformedValues[fieldId] = fieldValue || ""
-          }
-          break
-
-        case "file":
-          // File upload - send base64 data as string
-          if (fieldValue && typeof fieldValue === 'object' && fieldValue.base64) {
-            // Send base64 string directly
-            transformedValues[fieldId] = fieldValue.base64
-          } else if (fieldValue && typeof fieldValue === 'string' && fieldValue.startsWith('data:')) {
-            // If it's already a base64 string, use it directly
-            transformedValues[fieldId] = fieldValue
-          } else {
-            transformedValues[fieldId] = ""
-          }
-          break
-
-        case "location":
-          // Location returns object with country, state, city
-          console.log(`📍 Processing location field ${fieldId}:`, fieldValue)
-          if (typeof fieldValue === 'object' && fieldValue !== null) {
-            const locationData = {
-              country: fieldValue.country || "",
-              state: fieldValue.state || "",
-              city: fieldValue.city || ""
-            }
-            transformedValues[fieldId] = locationData
-            console.log(`📍 Location field ${fieldId} transformed to:`, locationData)
-          } else {
-            transformedValues[fieldId] = {}
-            console.log(`📍 Location field ${fieldId} set to empty object`)
-          }
-          break
-
-        case "phone":
-          // Phone returns object with country and number
-          console.log(`📞 Processing phone field ${fieldId}:`, fieldValue)
-          if (typeof fieldValue === 'object' && fieldValue !== null) {
-            const phoneData = {
-              country: fieldValue.country || "",
-              number: fieldValue.number || ""
-            }
-            transformedValues[fieldId] = phoneData
-            console.log(`📞 Phone field ${fieldId} transformed to:`, phoneData)
-          } else {
-            transformedValues[fieldId] = {}
-            console.log(`📞 Phone field ${fieldId} set to empty object`)
-          }
-          break
-
-        default:
-          // Text, email, number, textarea - return as string
-          transformedValues[fieldId] = fieldValue || ""
-      }
-    })
-
-    console.log('✅ Final transformed values:', transformedValues)
-    return transformedValues
-  }
-
-  // Get default values for form initialization
+ 
   const getDefaultValues = () => {
     if (!formData?.fields) {
       console.log('❌ No form data fields available')
@@ -1281,6 +1955,8 @@ export default function PublicFormPage() {
         return
       }
 
+      console.log('Form values:', value)
+
       setSubmitting(true)
       try {
         // Transform form values to match API expected format
@@ -1291,6 +1967,7 @@ export default function PublicFormPage() {
           const updateData = {
             organization_id: ORGANIZATION_ID,
             form_id: formId,
+            reference_id: USER_ID,
             submission_id: submissionId,
             values: transformedValues
           }
@@ -1311,7 +1988,9 @@ export default function PublicFormPage() {
           // Create new submission
           const submissionData = {
             organization_id: ORGANIZATION_ID,
+            reference_id: USER_ID,
             form_id: formId,
+            reference_id: USER_ID,
             values: transformedValues
           }
 
