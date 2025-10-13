@@ -71,262 +71,602 @@ export function FormPreview({ fields }) {
   })
 
   // Update the handleGenerateLink function in form-preview.js
-  const handleGenerateLink = async () => {
-    if (!formName.trim()) {
-      toast.error("Please enter a form name")
-      return
-    }
+  // const handleGenerateLink = async () => {
+  //   if (!formName.trim()) {
+  //     toast.error("Please enter a form name")
+  //     return
+  //   }
 
-    if (fields.length === 0) {
-      toast.error("Please add at least one field to the form")
-      return
-    }
+  //   if (fields.length === 0) {
+  //     toast.error("Please add at least one field to the form")
+  //     return
+  //   }
 
-    if (previewFields.length === 0) {
-      toast.error("Please add at least one field to the form")
-      return
-    }
+  //   if (previewFields.length === 0) {
+  //     toast.error("Please add at least one field to the form")
+  //     return
+  //   }
 
-    setIsGenerating(true)
-    try {
-      // API configuration
-      const API_BASE_URL = 'http://10.10.15.194:3001'
-      const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
-      const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
-      const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
-      const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwMDY5NzIyLCJleHAiOjE3NjAxNTYxMjJ9.cYySNY2VRHfLi4pP82PzCi4xBwZ3zqsGSBnQp-xG37g'
+  //   setIsGenerating(true)
+  //   try {
+  //     // API configuration
+  //     const API_BASE_URL = 'http://10.10.15.194:3001'
+  //     const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
+  //     const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
+  //     const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
+  //     const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwMzM1OTgyLCJleHAiOjE3NjA0MjIzODJ9.i8x4KfEjbRhMp454y_maUARuNDo0pTyM8dcTmutFjrY'
 
-      // Get existing table columns to avoid duplicates
-      let existingColumns = []
-      try {
-        const response = await axios.get(`${API_BASE_URL}/api/datatables/${TABLE_ID}/columns`, {
-          headers: {
-            'Authorization': `Bearer ${AUTH_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-        })
-        existingColumns = Array.isArray(response.data) ? response.data : []
-        console.log('📊 Existing table columns:', existingColumns.map(col => col.column_name))
-      } catch (error) {
-        console.log('⚠️ Could not fetch existing columns, continuing anyway...')
-        console.error('Error details:', error)
-      }
+  //     // Get existing table columns to avoid duplicates
+  //     let existingColumns = []
+  //     try {
+  //       const response = await axios.get(`${API_BASE_URL}/api/datatables/${TABLE_ID}/columns`, {
+  //         headers: {
+  //           'Authorization': `Bearer ${AUTH_TOKEN}`,
+  //           'Content-Type': 'application/json',
+  //         },
+  //       })
+  //       existingColumns = Array.isArray(response.data) ? response.data : []
+  //       console.log('📊 Existing table columns:', existingColumns.map(col => col.column_name))
+  //     } catch (error) {
+  //       console.log('⚠️ Could not fetch existing columns, continuing anyway...')
+  //       console.error('Error details:', error)
+  //     }
 
-      // Prepare table column fields (from table columns) - ALLOW ALL FIELDS
-      const tableFields = tableColumnFields
-        .map(field => {
-          // Convert options to the new nested structure for table fields
-          let optionsArray = []
-          if (field.options && Array.isArray(field.options)) {
-            // Create options array with nested fields structure
-            optionsArray = field.options.map((option, index) => {
-              const optionObj = {
-                value: option,
-                label: option,
-                nestedFields: []
-              }
+  //     // Prepare table column fields (from table columns) - ALLOW ALL FIELDS
+  //     const tableFields = tableColumnFields
+  //       .map(field => {
+  //         // Convert options to the new nested structure for table fields
+  //         let optionsArray = []
+  //         if (field.options && Array.isArray(field.options)) {
+  //           // Create options array with nested fields structure
+  //           optionsArray = field.options.map((option, index) => {
+  //             const optionObj = {
+  //               value: option,
+  //               label: option,
+  //               nestedFields: []
+  //             }
               
-              // Add nested fields for this option if they exist
-              if (field.nestedFields && field.nestedFields[index]) {
-                optionObj.nestedFields = field.nestedFields[index].map(nestedField => {
-                  const processedNestedField = {
-                    id: nestedField.id,
-                    name: nestedField.label.toLowerCase().replace(/\s+/g, '_'),
-                    label: nestedField.label,
-                    type: nestedField.type,
-                    required: nestedField.required || false,
-                    validations: nestedField.validation || {},
-                    hasNested: false,
-                    options: []
-                  }
+  //             // Add nested fields for this option if they exist
+  //             if (field.nestedFields && field.nestedFields[index]) {
+  //               optionObj.nestedFields = field.nestedFields[index].map(nestedField => {
+  //                 const processedNestedField = {
+  //                   id: nestedField.id,
+  //                   name: nestedField.label.toLowerCase().replace(/\s+/g, '_'),
+  //                   label: nestedField.label,
+  //                   type: nestedField.type,
+  //                   required: nestedField.required || false,
+  //                   validations: nestedField.validation || {},
+  //                   hasNested: false,
+  //                   options: []
+  //                 }
 
-                  // Process nested field options if it's a select, checkbox, or radio
-                  if (["select", "checkbox", "radio"].includes(nestedField.type) && nestedField.options) {
-                    processedNestedField.options = nestedField.options.map((nestedOption, nestedOptionIndex) => {
-                      const nestedOptionObj = {
-                        value: nestedOption,
-                        label: nestedOption,
-                        nestedFields: []
-                      }
+  //                 // Process nested field options if it's a select, checkbox, or radio
+  //                 if (["select", "checkbox", "radio"].includes(nestedField.type) && nestedField.options) {
+  //                   processedNestedField.options = nestedField.options.map((nestedOption, nestedOptionIndex) => {
+  //                     const nestedOptionObj = {
+  //                       value: nestedOption,
+  //                       label: nestedOption,
+  //                       nestedFields: []
+  //                     }
 
-                      // Recursively process nested fields within nested fields
-                      if (nestedField.nestedFields && nestedField.nestedFields[nestedOptionIndex]) {
-                        nestedOptionObj.nestedFields = nestedField.nestedFields[nestedOptionIndex].map(deepNestedField => ({
-                          id: deepNestedField.id,
-                          name: deepNestedField.label.toLowerCase().replace(/\s+/g, '_'),
-                          label: deepNestedField.label,
-                          type: deepNestedField.type,
-                          required: deepNestedField.required || false,
-                          validations: deepNestedField.validation || {},
-                          hasNested: false,
-                          options: deepNestedField.options || []
-                        }))
-                      }
+  //                     // Recursively process nested fields within nested fields
+  //                     if (nestedField.nestedFields && nestedField.nestedFields[nestedOptionIndex]) {
+  //                       nestedOptionObj.nestedFields = nestedField.nestedFields[nestedOptionIndex].map(deepNestedField => ({
+  //                         id: deepNestedField.id,
+  //                         name: deepNestedField.label.toLowerCase().replace(/\s+/g, '_'),
+  //                         label: deepNestedField.label,
+  //                         type: deepNestedField.type,
+  //                         required: deepNestedField.required || false,
+  //                         validations: deepNestedField.validation || {},
+  //                         hasNested: false,
+  //                         options: deepNestedField.options || []
+  //                       }))
+  //                     }
 
-                      return nestedOptionObj
-                    })
+  //                     return nestedOptionObj
+  //                   })
 
-                    // Check if this nested field has nested fields
-                    processedNestedField.hasNested = processedNestedField.options.some(option => option.nestedFields.length > 0)
-                  }
+  //                   // Check if this nested field has nested fields
+  //                   processedNestedField.hasNested = processedNestedField.options.some(option => option.nestedFields.length > 0)
+  //                 }
 
-                  return processedNestedField
-                })
-              }
+  //                 return processedNestedField
+  //               })
+  //             }
               
-              return optionObj
-            })
-          }
+  //             return optionObj
+  //           })
+  //         }
 
-          // Determine if field has nested fields
-          const hasNestedFields = optionsArray.some(option => option.nestedFields.length > 0)
+  //         // Determine if field has nested fields
+  //         const hasNestedFields = optionsArray.some(option => option.nestedFields.length > 0)
           
-          const fieldObj = {
-            id: field.tableColumnId || field.id,
-            name: field.tableColumnName || field.label.toLowerCase().replace(/\s+/g, '_'),
-            label: field.label,
-            type: field.type,
-            required: field.required || false,
-            validations: field.validation || {},
-            hasNested: hasNestedFields,
-            options: optionsArray
-          }
-          console.log('📊 Table Field (New Structure):', fieldObj)
-          console.log('🔍 Nested Fields for table field:', field.label, field.nestedFields)
-          return fieldObj
-        })
+  //         const fieldObj = {
+  //           id: field.tableColumnId || field.id,
+  //           name: field.tableColumnName || field.label.toLowerCase().replace(/\s+/g, '_'),
+  //           label: field.label,
+  //           type: field.type,
+  //           required: field.required || false,
+  //           validations: field.validation || {},
+  //           hasNested: hasNestedFields,
+  //           options: optionsArray
+  //         }
+  //         console.log('📊 Table Field (New Structure):', fieldObj)
+  //         console.log('🔍 Nested Fields for table field:', field.label, field.nestedFields)
+  //         return fieldObj
+  //       })
 
-      // Prepare extra fields (regular form fields) - ALLOW ALL FIELDS
-      const extraFields = regularFormFields
-        .map(field => {
-          // Convert options to the new nested structure
-          let optionsArray = []
-          if (field.options && Array.isArray(field.options)) {
-            // Create options array with nested fields structure
-            optionsArray = field.options.map((option, index) => {
-              const optionObj = {
-                value: option,
-                label: option,
-                nestedFields: []
-              }
+  //     // Prepare extra fields (regular form fields) - ALLOW ALL FIELDS
+  //     const extraFields = regularFormFields
+  //       .map(field => {
+  //         // Convert options to the new nested structure
+  //         let optionsArray = []
+  //         if (field.options && Array.isArray(field.options)) {
+  //           // Create options array with nested fields structure
+  //           optionsArray = field.options.map((option, index) => {
+  //             const optionObj = {
+  //               value: option,
+  //               label: option,
+  //               nestedFields: []
+  //             }
               
-              // Add nested fields for this option if they exist
-              if (field.nestedFields && field.nestedFields[index]) {
-                optionObj.nestedFields = field.nestedFields[index].map(nestedField => {
-                  const processedNestedField = {
-                    id: nestedField.id,
-                    name: nestedField.label.toLowerCase().replace(/\s+/g, '_'),
-                    label: nestedField.label,
-                    type: nestedField.type,
-                    required: nestedField.required || false,
-                    validations: nestedField.validation || {},
-                    hasNested: false,
-                    options: []
-                  }
+  //             // Add nested fields for this option if they exist
+  //             if (field.nestedFields && field.nestedFields[index]) {
+  //               optionObj.nestedFields = field.nestedFields[index].map(nestedField => {
+  //                 const processedNestedField = {
+  //                   id: nestedField.id,
+  //                   name: nestedField.label.toLowerCase().replace(/\s+/g, '_'),
+  //                   label: nestedField.label,
+  //                   type: nestedField.type,
+  //                   required: nestedField.required || false,
+  //                   validations: nestedField.validation || {},
+  //                   hasNested: false,
+  //                   options: []
+  //                 }
 
-                  // Process nested field options if it's a select, checkbox, or radio
-                  if (["select", "checkbox", "radio"].includes(nestedField.type) && nestedField.options) {
-                    processedNestedField.options = nestedField.options.map((nestedOption, nestedOptionIndex) => {
-                      const nestedOptionObj = {
-                        value: nestedOption,
-                        label: nestedOption,
-                        nestedFields: []
-                      }
+  //                 // Process nested field options if it's a select, checkbox, or radio
+  //                 if (["select", "checkbox", "radio"].includes(nestedField.type) && nestedField.options) {
+  //                   processedNestedField.options = nestedField.options.map((nestedOption, nestedOptionIndex) => {
+  //                     const nestedOptionObj = {
+  //                       value: nestedOption,
+  //                       label: nestedOption,
+  //                       nestedFields: []
+  //                     }
 
-                      // Recursively process nested fields within nested fields
-                      if (nestedField.nestedFields && nestedField.nestedFields[nestedOptionIndex]) {
-                        nestedOptionObj.nestedFields = nestedField.nestedFields[nestedOptionIndex].map(deepNestedField => ({
-                          id: deepNestedField.id,
-                          name: deepNestedField.label.toLowerCase().replace(/\s+/g, '_'),
-                          label: deepNestedField.label,
-                          type: deepNestedField.type,
-                          required: deepNestedField.required || false,
-                          validations: deepNestedField.validation || {},
-                          hasNested: false,
-                          options: deepNestedField.options || []
-                        }))
-                      }
+  //                     // Recursively process nested fields within nested fields
+  //                     if (nestedField.nestedFields && nestedField.nestedFields[nestedOptionIndex]) {
+  //                       nestedOptionObj.nestedFields = nestedField.nestedFields[nestedOptionIndex].map(deepNestedField => ({
+  //                         id: deepNestedField.id,
+  //                         name: deepNestedField.label.toLowerCase().replace(/\s+/g, '_'),
+  //                         label: deepNestedField.label,
+  //                         type: deepNestedField.type,
+  //                         required: deepNestedField.required || false,
+  //                         validations: deepNestedField.validation || {},
+  //                         hasNested: false,
+  //                         options: deepNestedField.options || []
+  //                       }))
+  //                     }
 
-                      return nestedOptionObj
-                    })
+  //                     return nestedOptionObj
+  //                   })
 
-                    // Check if this nested field has nested fields
-                    processedNestedField.hasNested = processedNestedField.options.some(option => option.nestedFields.length > 0)
-                  }
+  //                   // Check if this nested field has nested fields
+  //                   processedNestedField.hasNested = processedNestedField.options.some(option => option.nestedFields.length > 0)
+  //                 }
 
-                  return processedNestedField
-                })
-              }
+  //                 return processedNestedField
+  //               })
+  //             }
               
-              return optionObj
-            })
-          }
+  //             return optionObj
+  //           })
+  //         }
 
-          // Determine if field has nested fields
-          const hasNestedFields = optionsArray.some(option => option.nestedFields.length > 0)
+  //         // Determine if field has nested fields
+  //         const hasNestedFields = optionsArray.some(option => option.nestedFields.length > 0)
           
-          const fieldObj = {
-            id: field.id,
-            name: field.label.toLowerCase().replace(/\s+/g, '_'),
-            label: field.label,
-            type: field.type,
-            required: field.required || false,
-            validations: field.validation || {},
-            hasNested: hasNestedFields,
-            options: optionsArray
-          }
+  //         const fieldObj = {
+  //           id: field.id,
+  //           name: field.label.toLowerCase().replace(/\s+/g, '_'),
+  //           label: field.label,
+  //           type: field.type,
+  //           required: field.required || false,
+  //           validations: field.validation || {},
+  //           hasNested: hasNestedFields,
+  //           options: optionsArray
+  //         }
 
-          console.log('📝 Extra Field (New Structure):', fieldObj)
-          console.log('🔍 Nested Fields for field:', field.label, field.nestedFields)
-          return fieldObj
+  //         console.log('📝 Extra Field (New Structure):', fieldObj)
+  //         console.log('🔍 Nested Fields for field:', field.label, field.nestedFields)
+  //         return fieldObj
+  //       })
+
+  //     // Check if we have any fields to send after filtering duplicates
+  //     if (tableFields.length === 0 && extraFields.length === 0) {
+  //       toast.error("All fields already exist in the table. No new fields to add.")
+  //       setIsGenerating(false)
+  //       return
+  //     }
+
+  //     // Prepare the form data for API
+  //     const formData = {
+  //       organization_id: ORGANIZATION_ID,
+  //       table_id: TABLE_ID,
+  //       form_name: formName,
+  //       description: formDescription,
+  //       created_by: USER_ID,
+  //       fields: [...tableFields, ...extraFields].map(field => {
+  //         const processedField = {
+  //           ...field,
+  //           options: Array.isArray(field.options) ? field.options : [],
+  //           validation: typeof field.validations === 'object' ? field.validations : {},
+  //           required: field.required ? "true" : "false",
+  //         }
+
+  //         console.log(`Processed field ${field.name}:`, {
+  //           name: processedField.name,
+  //           type: processedField.type,
+  //           hasNested: processedField.hasNested,
+  //           options: processedField.options,
+  //           optionsType: typeof processedField.options
+  //         })
+
+  //         return processedField
+  //       }),
+  //       published: true
+  //     }
+
+  //     console.log('🚀 Sending form data to API:', formData)
+  //     console.log('🔍 Detailed nested fields analysis:')
+  //     formData.fields.forEach((field, index) => {
+  //       console.log(`Field ${index + 1}: ${field.name}`)
+  //       console.log(`  - Options:`, field.options)
+  //       console.log(`  - Has nested fields:`, field.hasNested)
+  //       if (field.hasNested) {
+  //         field.options.forEach((option, optIndex) => {
+  //           if (option.nestedFields.length > 0) {
+  //             console.log(`    Option ${optIndex} (${option.value}):`, option.nestedFields)
+  //           }
+  //         })
+  //       }
+  //     })
+
+  //     // Use only the correct endpoint
+  //     const endpoint = `${API_BASE_URL}/api/forms`
+  //     console.log(`🔄 Using endpoint: ${endpoint}`)
+
+  //     try {
+  //       const response = await axios.post(`${API_BASE_URL}/api/forms`, formData, {
+  //         headers: {
+  //           'Authorization': `Bearer ${AUTH_TOKEN}`,
+  //           'Content-Type': 'application/json',
+  //         },
+  //       })
+  //       const result = response.data
+  //       console.log('✅ API Success Response:', result)
+
+  //     if (result.success && result.form) {
+  //       // Generate the public URL using the form_id from API response
+  //       const publicUrl = `${window.location.origin}/forms/${result.form.form_id}`
+  //       setGeneratedLink(publicUrl)
+
+  //       // Store form data locally for the form view page
+  //       const completeFormData = {
+  //         form_name: formName,
+  //         description: formDescription,
+  //         // Store all preview fields with their complete data including options
+  //         previewFields: previewFields.map(field => ({
+  //           id: field.id,
+  //           type: field.type,
+  //           label: field.label,
+  //           placeholder: field.placeholder,
+  //           required: field.required,
+  //           options: field.options, // Include options array directly for local storage
+  //           validation: field.validation,
+  //           source: field.source,
+  //           tableColumnId: field.tableColumnId,
+  //           tableColumnName: field.tableColumnName
+  //         })),
+  //         tableFields: tableFields,
+  //         extraFields: extraFields,
+  //         generatedAt: new Date().toISOString()
+  //       }
+
+  //       localStorage.setItem(`form-${result.form.form_id}`, JSON.stringify(completeFormData))
+  //       toast.success("Form link generated successfully!")
+  //       return result
+  //     } else {
+  //       throw new Error('Invalid response from server: ' + JSON.stringify(result))
+  //     }
+
+  //   } catch (error) {
+  //     console.error('❌ Form creation failed:', error)
+      
+  //     // Handle specific error cases
+  //     if (error.response?.status === 409) {
+  //       throw new Error(`Field already exists: ${error.response.data?.error || 'Unknown error'}`)
+  //     } else if (error.response?.status === 500) {
+  //       throw new Error(`Invalid data format: ${error.response.data?.error || 'Unknown error'}`)
+  //     } else {
+  //       throw new Error(error.message || 'Failed to create form')
+  //     }
+  //   }
+
+  //   } finally {
+  //     setIsGenerating(false)
+  //   }
+  // }
+
+  // Update the handleGenerateLink function in form-preview.js
+const handleGenerateLink = async () => {
+  if (!formName.trim()) {
+    toast.error("Please enter a form name")
+    return
+  }
+
+  if (fields.length === 0) {
+    toast.error("Please add at least one field to the form")
+    return
+  }
+
+  if (previewFields.length === 0) {
+    toast.error("Please add at least one field to the form")
+    return
+  }
+
+  setIsGenerating(true)
+  try {
+    // API configuration
+    const API_BASE_URL = 'http://10.10.15.194:3001'
+    const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
+    const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
+    const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
+    const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwMzM1OTgyLCJleHAiOjE3NjA0MjIzODJ9.i8x4KfEjbRhMp454y_maUARuNDo0pTyM8dcTmutFjrY'
+
+    // Recursive function to process nested fields
+    const processNestedFields = (nestedFields, parentIndex = null) => {
+      if (!nestedFields || !Array.isArray(nestedFields)) return []
+      
+      return nestedFields.map((nestedField, nestedIndex) => {
+        const nestedFieldId = parentIndex !== null ? 
+          `${parentIndex}_${nestedIndex}` : 
+          `${nestedIndex}`
+        
+        // Process options for this nested field if it has them
+        let nestedOptions = []
+        if (nestedField.options && Array.isArray(nestedField.options)) {
+          nestedOptions = nestedField.options.map((nestedOption, nestedOptionIndex) => {
+            const nestedOptionObj = {
+              value: typeof nestedOption === 'string' ? nestedOption : nestedOption.value,
+              label: typeof nestedOption === 'string' ? nestedOption : nestedOption.label,
+              nestedFields: []
+            }
+
+            // Recursively process nested fields within nested options
+            if (nestedField.nestedFields && nestedField.nestedFields[nestedOptionIndex]) {
+              nestedOptionObj.nestedFields = processNestedFields(
+                nestedField.nestedFields[nestedOptionIndex], 
+                nestedOptionIndex
+              )
+            }
+
+            return nestedOptionObj
+          })
+        }
+
+        const processedNestedField = {
+          id: nestedField.id,
+          name: nestedField.label.toLowerCase().replace(/\s+/g, '_'),
+          label: nestedField.label,
+          type: nestedField.type,
+          required: nestedField.required || false,
+          validations: nestedField.validation || {},
+          hasNested: false,
+          options: nestedOptions
+        }
+
+        // Check if this nested field has nested fields
+        processedNestedField.hasNested = processedNestedField.options.some(
+          option => option.nestedFields && option.nestedFields.length > 0
+        )
+
+        return processedNestedField
+      })
+    }
+
+    // Prepare table column fields
+    const tableFields = tableColumnFields.map(field => {
+      let optionsArray = []
+      
+      if (field.options && Array.isArray(field.options)) {
+        optionsArray = field.options.map((option, index) => {
+          const optionObj = {
+            value: typeof option === 'string' ? option : option.value,
+            label: typeof option === 'string' ? option : option.label,
+            nestedFields: []
+          }
+          
+          // Process nested fields for this option
+          if (field.nestedFields && field.nestedFields[index]) {
+            optionObj.nestedFields = processNestedFields(field.nestedFields[index], index)
+          }
+          
+          return optionObj
+        })
+      }
+
+      const hasNestedFields = optionsArray.some(option => 
+        option.nestedFields && option.nestedFields.length > 0
+      )
+      
+      const fieldObj = {
+        id: field.tableColumnId || field.id,
+        name: field.tableColumnName || field.label.toLowerCase().replace(/\s+/g, '_'),
+        label: field.label,
+        type: field.type,
+        required: field.required || false,
+        validations: field.validation || {},
+        hasNested: hasNestedFields,
+        options: optionsArray
+      }
+      
+      console.log('📊 Table Field:', {
+        name: fieldObj.name,
+        type: fieldObj.type,
+        hasNested: fieldObj.hasNested,
+        optionsCount: fieldObj.options.length,
+        nestedLevels: fieldObj.options.map(opt => ({
+          value: opt.value,
+          nestedFieldsCount: opt.nestedFields.length
+        }))
+      })
+      
+      return fieldObj
+    })
+
+    // Prepare extra fields (regular form fields)
+    const extraFields = regularFormFields.map(field => {
+      let optionsArray = []
+      
+      if (field.options && Array.isArray(field.options)) {
+        optionsArray = field.options.map((option, index) => {
+          const optionObj = {
+            value: typeof option === 'string' ? option : option.value,
+            label: typeof option === 'string' ? option : option.label,
+            nestedFields: []
+          }
+          
+          // Process nested fields for this option
+          if (field.nestedFields && field.nestedFields[index]) {
+            optionObj.nestedFields = processNestedFields(field.nestedFields[index], index)
+          }
+          
+          return optionObj
+        })
+      }
+
+      const hasNestedFields = optionsArray.some(option => 
+        option.nestedFields && option.nestedFields.length > 0
+      )
+      
+      const fieldObj = {
+        id: field.id,
+        name: field.label.toLowerCase().replace(/\s+/g, '_'),
+        label: field.label,
+        type: field.type,
+        required: field.required || false,
+        validations: field.validation || {},
+        hasNested: hasNestedFields,
+        options: optionsArray
+      }
+      
+      console.log('📝 Extra Field:', {
+        name: fieldObj.name,
+        type: fieldObj.type,
+        hasNested: fieldObj.hasNested,
+        optionsCount: fieldObj.options.length,
+        nestedLevels: fieldObj.options.map(opt => ({
+          value: opt.value,
+          nestedFieldsCount: opt.nestedFields.length
+        }))
+      })
+      
+      return fieldObj
+    })
+
+    // Check if we have any fields to send
+    if (tableFields.length === 0 && extraFields.length === 0) {
+      toast.error("No valid fields to add to the form")
+      setIsGenerating(false)
+      return
+    }
+
+    // Prepare the form data for API
+    const formData = {
+      organization_id: ORGANIZATION_ID,
+      table_id: TABLE_ID,
+      form_name: formName,
+      description: formDescription,
+      created_by: USER_ID,
+      fields: [...tableFields, ...extraFields].map(field => {
+        // Ensure options is always an array
+        const processedOptions = Array.isArray(field.options) ? field.options : []
+        
+        const processedField = {
+          id: field.id,
+          name: field.name,
+          label: field.label,
+          type: field.type,
+          required: field.required ? "true" : "false",
+          validations: field.validations || {},
+          hasNested: field.hasNested || false,
+          options: processedOptions.map(option => ({
+            value: option.value,
+            label: option.label,
+            nestedFields: option.nestedFields || []
+          }))
+        }
+
+        console.log(`✅ Processed field ${field.name}:`, {
+          name: processedField.name,
+          type: processedField.type,
+          hasNested: processedField.hasNested,
+          options: processedField.options.map(opt => ({
+            value: opt.value,
+            nestedFieldsCount: opt.nestedFields.length,
+            nestedFields: opt.nestedFields.map(nf => ({
+              name: nf.name,
+              type: nf.type,
+              hasNested: nf.hasNested
+            }))
+          }))
         })
 
-      // Check if we have any fields to send after filtering duplicates
-      if (tableFields.length === 0 && extraFields.length === 0) {
-        toast.error("All fields already exist in the table. No new fields to add.")
-        setIsGenerating(false)
-        return
-      }
+        return processedField
+      }),
+      published: true
+    }
 
-      // Prepare the form data for API
-      const formData = {
-        organization_id: ORGANIZATION_ID,
-        table_id: TABLE_ID,
-        form_name: formName,
-        description: formDescription,
-        created_by: USER_ID,
-        fields: [...tableFields, ...extraFields], // Combine all fields into single array
-        published: true
-      }
+    console.log('🚀 Final API Payload:', JSON.stringify(formData, null, 2))
 
-      console.log('🚀 Sending form data to API:', formData)
-      console.log('🔍 Detailed nested fields analysis:')
-      formData.fields.forEach((field, index) => {
-        console.log(`Field ${index + 1}: ${field.name}`)
-        console.log(`  - Options:`, field.options)
-        console.log(`  - Has nested fields:`, field.hasNested)
-        if (field.hasNested) {
-          field.options.forEach((option, optIndex) => {
-            if (option.nestedFields.length > 0) {
-              console.log(`    Option ${optIndex} (${option.value}):`, option.nestedFields)
+    // Debug nested structure
+    console.log('🔍 Detailed nested structure analysis:')
+    formData.fields.forEach((field, fieldIndex) => {
+      console.log(`Field ${fieldIndex + 1}: ${field.name} (${field.type})`)
+      field.options.forEach((option, optIndex) => {
+        if (option.nestedFields.length > 0) {
+          console.log(`  Option ${optIndex}: "${option.value}"`)
+          option.nestedFields.forEach((nestedField, nestedIndex) => {
+            console.log(`    Nested Field ${nestedIndex}: ${nestedField.name} (${nestedField.type})`)
+            if (nestedField.options && nestedField.options.length > 0) {
+              nestedField.options.forEach((nestedOption, nestedOptIndex) => {
+                if (nestedOption.nestedFields.length > 0) {
+                  console.log(`      Nested Option ${nestedOptIndex}: "${nestedOption.value}"`)
+                  nestedOption.nestedFields.forEach((deepNested, deepIndex) => {
+                    console.log(`        Deep Nested ${deepIndex}: ${deepNested.name} (${deepNested.type})`)
+                  })
+                }
+              })
             }
           })
         }
       })
+    })
 
-      // Use only the correct endpoint
-      const endpoint = `${API_BASE_URL}/api/forms`
-      console.log(`🔄 Using endpoint: ${endpoint}`)
+    // Use only the correct endpoint
+    const endpoint = `${API_BASE_URL}/api/forms`
+    console.log(`🔄 Using endpoint: ${endpoint}`)
 
-      try {
-        const response = await axios.post(`${API_BASE_URL}/api/forms`, formData, {
-          headers: {
-            'Authorization': `Bearer ${AUTH_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-        })
-        const result = response.data
-        console.log('✅ API Success Response:', result)
+    try {
+      const response = await axios.post(endpoint, formData, {
+        headers: {
+          'Authorization': `Bearer ${AUTH_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      const result = response.data
+      console.log('✅ API Success Response:', result)
 
       if (result.success && result.form) {
         // Generate the public URL using the form_id from API response
@@ -337,18 +677,18 @@ export function FormPreview({ fields }) {
         const completeFormData = {
           form_name: formName,
           description: formDescription,
-          // Store all preview fields with their complete data including options
           previewFields: previewFields.map(field => ({
             id: field.id,
             type: field.type,
             label: field.label,
             placeholder: field.placeholder,
             required: field.required,
-            options: field.options, // Include options array directly for local storage
+            options: field.options,
             validation: field.validation,
             source: field.source,
             tableColumnId: field.tableColumnId,
-            tableColumnName: field.tableColumnName
+            tableColumnName: field.tableColumnName,
+            nestedFields: field.nestedFields // Include nested fields structure
           })),
           tableFields: tableFields,
           extraFields: extraFields,
@@ -375,10 +715,13 @@ export function FormPreview({ fields }) {
       }
     }
 
-    } finally {
-      setIsGenerating(false)
-    }
+  } catch (error) {
+    console.error('❌ Form generation error:', error)
+    toast.error(error.message || 'Failed to generate form link')
+  } finally {
+    setIsGenerating(false)
   }
+}
 
   const copyToClipboard = async () => {
     if (generatedLink) {

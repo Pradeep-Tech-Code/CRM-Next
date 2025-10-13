@@ -78,6 +78,27 @@ const createFileFromBase64 = (base64String, filename = 'uploaded_file') => {
   }
 }
 
+// Helper function to process field options with nested structure
+const processFieldOptions = (field) => {
+  // If we have processed options with nested structure, use those
+  if (field._processedOptions && Array.isArray(field._processedOptions)) {
+    return field._processedOptions.map(option => {
+      if (typeof option === 'object' && option !== null) {
+        return {
+          value: option.value,
+          label: option.label,
+          nestedFields: option.nestedFields || []
+        }
+      } else {
+        return option
+      }
+    })
+  }
+  
+  // Fallback to regular options
+  return field.options || []
+}
+
 export default function PublicFormPage() {
   const params = useParams()
   const searchParams = useSearchParams()
@@ -119,7 +140,7 @@ export default function PublicFormPage() {
         ])
       }
     }
-    
+
     loadPhoneCountries()
   }, [])
 
@@ -266,6 +287,249 @@ export default function PublicFormPage() {
     }
   }
 
+  // Helper function to recursively parse nested fields
+  const parseNestedFields = (nestedFieldsArray) => {
+    if (!Array.isArray(nestedFieldsArray)) return []
+    
+    return nestedFieldsArray.map(nestedField => {
+      // Parse options if they exist as JSON string
+      let options = []
+      if (nestedField.options) {
+        if (typeof nestedField.options === 'string') {
+          try {
+            options = JSON.parse(nestedField.options)
+          } catch (e) {
+            console.warn('Failed to parse nested field options:', nestedField.options)
+            options = []
+          }
+        } else if (Array.isArray(nestedField.options)) {
+          options = nestedField.options
+        }
+      }
+
+      // Recursively parse nested fields within options
+      const processedOptions = options.map(option => {
+        const processedOption = {
+          value: option.value || option,
+          label: option.label || option.value || option,
+          nestedFields: []
+        }
+
+        // Recursively process nested fields for this option
+        if (option.nestedFields && Array.isArray(option.nestedFields)) {
+          processedOption.nestedFields = parseNestedFields(option.nestedFields)
+        }
+
+        return processedOption
+      })
+
+      return {
+        id: nestedField.id,
+        name: nestedField.name,
+        label: nestedField.label,
+        type: nestedField.type,
+        required: nestedField.required === true || nestedField.required === 'true',
+        validations: typeof nestedField.validations === 'string' ? 
+          JSON.parse(nestedField.validations || '{}') : 
+          (nestedField.validations || {}),
+        hasNested: nestedField.hasNested === true || nestedField.hasNested === 'true',
+        options: processedOptions
+      }
+    })
+  }
+
+  // Helper function to parse form data from API
+  const parseFormData = (apiForm) => {
+    try {
+      let parsedFields = []
+
+      console.log('Raw API form fields:', apiForm.fields)
+
+      // Handle different field formats
+      if (Array.isArray(apiForm.fields)) {
+        parsedFields = apiForm.fields.map((field, index) => {
+          let fieldData = field
+
+          // Case 1: Field is an object with numeric keys (character-by-character JSON)
+          if (typeof field === 'object' && field !== null && !Array.isArray(field)) {
+            const keys = Object.keys(field).filter(key => !isNaN(key))
+
+            if (keys.length > 0) {
+              try {
+                // Reconstruct the JSON string by sorting numeric keys and joining characters
+                const jsonString = keys
+                  .sort((a, b) => parseInt(a) - parseInt(b))
+                  .map(key => field[key])
+                  .join('')
+
+                console.log(`Reconstructed JSON for field ${index}:`, jsonString)
+
+                if (jsonString.trim()) {
+                  fieldData = JSON.parse(jsonString)
+                }
+              } catch (parseError) {
+                console.error(`Failed to parse reconstructed JSON for field ${index}:`, parseError)
+              }
+            }
+          }
+
+          // Case 2: Field is a JSON string
+          if (typeof fieldData === 'string') {
+            try {
+              fieldData = JSON.parse(fieldData)
+            } catch (parseError) {
+              console.warn(`Failed to parse field ${index} as JSON string:`, fieldData)
+            }
+          }
+
+          // Now process the field data
+          if (fieldData && typeof fieldData === 'object') {
+            console.log(`Processing field ${index}:`, fieldData)
+
+            // Parse options from JSON string if needed
+            let options = []
+            if (fieldData.options) {
+              if (typeof fieldData.options === 'string') {
+                try {
+                  options = JSON.parse(fieldData.options)
+                  console.log(`✅ Successfully parsed options for field ${fieldData.label}:`, options)
+                } catch (e) {
+                  console.error(`❌ Failed to parse options JSON for field ${fieldData.label}:`, fieldData.options)
+                  // Fallback: try to split by commas for simple options
+                  if (typeof fieldData.options === 'string') {
+                    options = fieldData.options.split(',').map(opt => opt.trim()).filter(opt => opt)
+                  }
+                }
+              } else if (Array.isArray(fieldData.options)) {
+                options = fieldData.options
+              }
+            }
+
+            // Recursively process nested fields structure
+            const processedOptions = options.map(option => {
+              const processedOption = {
+                value: option.value || option,
+                label: option.label || option.value || option,
+                nestedFields: []
+              }
+
+              // Recursively process nested fields for this option
+              if (option.nestedFields && Array.isArray(option.nestedFields)) {
+                processedOption.nestedFields = parseNestedFields(option.nestedFields)
+              }
+
+              return processedOption
+            })
+
+            // Parse validation
+            let validation = {}
+            if (fieldData.validations) {
+              if (typeof fieldData.validations === 'string') {
+                try {
+                  validation = JSON.parse(fieldData.validations)
+                } catch (e) {
+                  console.warn('Failed to parse validations as JSON:', fieldData.validations)
+                }
+              } else if (typeof fieldData.validations === 'object') {
+                validation = fieldData.validations
+              }
+            } else if (fieldData.validation) {
+              if (typeof fieldData.validation === 'string') {
+                try {
+                  validation = JSON.parse(fieldData.validation)
+                } catch (e) {
+                  console.warn('Failed to parse validation as JSON:', fieldData.validation)
+                }
+              } else if (typeof fieldData.validation === 'object') {
+                validation = fieldData.validation
+              }
+            }
+
+            // Handle required field
+            const isRequired = fieldData.required === true || fieldData.required === 'true' || false
+
+            // Build nestedFields structure for backward compatibility with FieldRenderer
+            const nestedFields = {}
+            processedOptions.forEach((option, optionIndex) => {
+              if (option.nestedFields && option.nestedFields.length > 0) {
+                nestedFields[optionIndex] = option.nestedFields.map(nestedField => ({
+                  id: nestedField.id,
+                  type: nestedField.type,
+                  label: nestedField.label,
+                  placeholder: nestedField.placeholder || '',
+                  required: nestedField.required || false,
+                  validation: nestedField.validations || {},
+                  options: nestedField.options || [],
+                  nestedFields: nestedField.nestedFields || {}
+                }))
+              }
+            })
+
+            const parsedField = {
+              id: fieldData.id || fieldData.name || `field-${index}-${Date.now()}`,
+              type: fieldData.type || 'text',
+              label: fieldData.label || fieldData.name || 'Field',
+              placeholder: fieldData.placeholder || '',
+              required: isRequired,
+              options: processedOptions.map(opt => opt.value || opt), // For simple option values
+              nestedFields: nestedFields,
+              validation: {
+                required: isRequired,
+                multiple: validation.multiple || false,
+                min: validation.min,
+                max: validation.max,
+                accept: validation.accept,
+                pattern: validation.pattern,
+                ...validation
+              },
+              // Store the full processed options for nested rendering
+              _processedOptions: processedOptions
+            }
+
+            console.log(`✅ Final parsed field ${parsedField.label}:`, {
+              id: parsedField.id,
+              type: parsedField.type,
+              options: parsedField.options,
+              nestedFields: parsedField.nestedFields,
+              hasNested: Object.keys(parsedField.nestedFields).length > 0
+            })
+
+            return parsedField
+          }
+
+          // Default fallback
+          console.warn(`Field ${index} could not be parsed, using default`)
+          return {
+            id: `field-${index}-${Date.now()}`,
+            type: 'text',
+            label: 'Text Field',
+            placeholder: 'Enter text',
+            required: false,
+            options: [],
+            nestedFields: {},
+            validation: {
+              required: false,
+              multiple: false
+            }
+          }
+        })
+      }
+
+      const parsedForm = {
+        form_name: apiForm.form_name || apiForm.name || 'Untitled Form',
+        description: apiForm.description || '',
+        fields: parsedFields
+      }
+
+      console.log('✅ Final parsed form:', parsedForm)
+      return parsedForm
+
+    } catch (error) {
+      console.error('❌ Error parsing form data:', error)
+      throw new Error('Failed to parse form data: ' + error.message)
+    }
+  }
+
   const fetchFormData = async () => {
     try {
       console.log('🔍 Fetching form data for ID:', formId)
@@ -336,249 +600,6 @@ export default function PublicFormPage() {
 
     } finally {
       setLoading(false)
-    }
-  }
-
-  // Helper function to recursively process nested fields
-  const processNestedField = (nestedField) => {
-    const processedField = {
-      id: nestedField.id,
-      type: nestedField.type,
-      label: nestedField.label,
-      placeholder: nestedField.placeholder || '',
-      required: nestedField.required || false,
-      validation: nestedField.validations || {},
-      options: [],
-      nestedFields: {}
-    }
-
-    // Process options if they exist
-    if (nestedField.options && Array.isArray(nestedField.options)) {
-      processedField.options = nestedField.options.map(option => {
-        if (typeof option === 'object' && option !== null) {
-          return {
-            value: option.value,
-            label: option.label,
-            nestedFields: option.nestedFields || []
-          }
-        } else {
-          // Convert string options to objects for consistency
-          return {
-            value: option,
-            label: option,
-            nestedFields: []
-          }
-        }
-      })
-
-      // Process nested fields for each option
-      nestedField.options.forEach((option, optionIndex) => {
-        if (option.nestedFields && option.nestedFields.length > 0) {
-          processedField.nestedFields[optionIndex] = option.nestedFields.map(deepNestedField => 
-            processNestedField(deepNestedField)
-          )
-        }
-      })
-    }
-
-    return processedField
-  }
-
-  // Helper function to parse form data from API
-  const parseFormData = (apiForm) => {
-    try {
-      let parsedFields = []
-
-      console.log('Raw API form fields:', apiForm.fields)
-
-      // Handle different field formats
-      if (Array.isArray(apiForm.fields)) {
-        parsedFields = apiForm.fields.map((field, index) => {
-          let fieldData = null
-
-          // Case 1: Field is an object with numeric keys (character-by-character JSON)
-          if (typeof field === 'object' && field !== null && !Array.isArray(field)) {
-            const keys = Object.keys(field).filter(key => !isNaN(key))
-
-            if (keys.length > 0) {
-              try {
-                // Reconstruct the JSON string by sorting numeric keys and joining characters
-                const jsonString = keys
-                  .sort((a, b) => parseInt(a) - parseInt(b))
-                  .map(key => field[key])
-                  .join('')
-
-                console.log(`Reconstructed JSON for field ${index}:`, jsonString)
-
-                if (jsonString.trim()) {
-                  fieldData = JSON.parse(jsonString)
-                }
-              } catch (parseError) {
-                console.error(`Failed to parse reconstructed JSON for field ${index}:`, parseError)
-              }
-            }
-          }
-
-          // Case 2: Field is a JSON string
-          if (!fieldData && typeof field === 'string') {
-            try {
-              fieldData = JSON.parse(field)
-            } catch (parseError) {
-              console.warn(`Failed to parse field ${index} as JSON string:`, field)
-            }
-          }
-
-          // Case 3: Field is already a proper object (simple field object)
-          if (!fieldData && typeof field === 'object' && field !== null) {
-            // Check if it has expected field properties (not character objects)
-            if (field.id || field.name || field.type || field.label) {
-              fieldData = field
-            }
-          }
-
-          // If we successfully got fieldData, process it
-          if (fieldData) {
-            console.log(`Processed field ${index}:`, fieldData)
-
-            // Handle options - convert string to array if needed
-            let options = []
-            let nestedFields = {}
-            
-            if (Array.isArray(fieldData.options)) {
-              options = fieldData.options
-            } else if (typeof fieldData.options === 'string') {
-              // First try to parse as JSON string (for new nested structure)
-              try {
-                const parsedOptions = JSON.parse(fieldData.options)
-                if (Array.isArray(parsedOptions)) {
-                  // New nested structure: preserve full option objects with nestedFields
-                  options = parsedOptions.map(option => {
-                    if (typeof option === 'object' && option !== null) {
-                      // This is a proper option object with nestedFields
-                      const processedOption = {
-                        value: option.value,
-                        label: option.label,
-                        nestedFields: option.nestedFields || []
-                      }
-                      console.log('🔍 Processed option:', processedOption)
-                      return processedOption
-                    } else {
-                      // This is a simple string option
-                      return option
-                    }
-                  })
-                  
-                  // Extract nested fields from options for backward compatibility
-                  parsedOptions.forEach((option, index) => {
-                    if (option.nestedFields && option.nestedFields.length > 0) {
-                      nestedFields[index] = option.nestedFields.map(nestedField => 
-                        processNestedField(nestedField)
-                      )
-                    }
-                  })
-                } else if (typeof parsedOptions === 'string') {
-                  // If it's a JSON string containing a comma-separated string, split it
-                  options = parsedOptions.split(',').map(opt => opt.trim()).filter(opt => opt)
-                }
-              } catch (e) {
-                // If JSON parsing fails, treat as comma-separated string
-                options = fieldData.options.split(',').map(opt => opt.trim()).filter(opt => opt)
-              }
-            }
-
-            // Parse validation - ensure it's an object
-            let validation = {}
-            if (typeof fieldData.validation === 'string') {
-              try {
-                validation = JSON.parse(fieldData.validation)
-              } catch (e) {
-                console.warn('Failed to parse validation as JSON:', fieldData.validation)
-              }
-            } else if (typeof fieldData.validation === 'object') {
-              validation = fieldData.validation
-            }
-
-            // Handle old nested_fields structure (fallback)
-            if (Object.keys(nestedFields).length === 0 && typeof fieldData.nested_fields === 'string') {
-              try {
-                const oldNestedFields = JSON.parse(fieldData.nested_fields)
-                if (typeof oldNestedFields === 'object') {
-                  nestedFields = oldNestedFields
-                }
-              } catch (e) {
-                console.warn('Failed to parse nested_fields as JSON:', fieldData.nested_fields)
-              }
-            } else if (Object.keys(nestedFields).length === 0 && typeof fieldData.nested_fields === 'object') {
-              nestedFields = fieldData.nested_fields
-            }
-
-            // Ensure required is properly set in both field and validation
-            const isRequired = fieldData.required === true || fieldData.required === 'true' || false
-
-            const parsedField = {
-              id: fieldData.id || fieldData.name || `field-${index}-${Date.now()}`,
-              type: fieldData.type || 'text',
-              label: fieldData.label || fieldData.name || 'Field',
-              placeholder: fieldData.placeholder || '',
-              required: isRequired,
-              options: options,
-              nestedFields: nestedFields,
-              validation: {
-                required: isRequired,
-                multiple: validation.multiple || false,
-                min: validation.min,
-                max: validation.max,
-                accept: validation.accept,
-                pattern: validation.pattern,
-                ...validation
-              }
-            }
-            
-            // Debug logging for checkbox fields
-            if (parsedField.type === 'checkbox') {
-              console.log(`🔧 Parsed checkbox field ${parsedField.id}:`, {
-                fieldId: parsedField.id,
-                fieldType: parsedField.type,
-                fieldValidation: parsedField.validation,
-                isMultiple: parsedField.validation.multiple,
-                options: parsedField.options,
-                nestedFields: parsedField.nestedFields
-              })
-            }
-            
-            return parsedField
-          }
-
-          // Default fallback if all parsing attempts failed
-          console.warn(`Field ${index} could not be parsed, using default`)
-          return {
-            id: `field-${index}-${Date.now()}`,
-            type: 'text',
-            label: 'Text Field',
-            placeholder: 'Enter text',
-            required: false,
-            options: [],
-            nestedFields: [],
-            validation: {
-              required: false,
-              multiple: false
-            }
-          }
-        })
-      }
-
-      const parsedForm = {
-        form_name: apiForm.form_name || apiForm.name || 'Untitled Form',
-        description: apiForm.description || '',
-        fields: parsedFields
-      }
-
-      console.log('Final parsed form:', parsedForm)
-      return parsedForm
-
-    } catch (error) {
-      console.error('Error parsing form data:', error)
-      throw new Error('Failed to parse form data: ' + error.message)
     }
   }
 
@@ -676,10 +697,10 @@ export default function PublicFormPage() {
               parsedValue,
               fieldValue
             })
-            
+
             // For checkbox fields, if they have options, treat them as multiple by default
             const isMultipleCheckbox = field.validation?.multiple || (field.options && field.options.length > 0)
-            
+
             if (isMultipleCheckbox) {
               // Multiple checkbox with nested values
               if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
@@ -882,12 +903,12 @@ export default function PublicFormPage() {
             const checkboxData = {
               value: Array.isArray(fieldValue.value) ? fieldValue.value : []
             }
-            
+
             // Add nested values if they exist
             if (fieldValue.nestedFields) {
               checkboxData.nestedValues = fieldValue.nestedFields
             }
-            
+
             transformedValues[fieldId] = checkboxData
           } else {
             transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
@@ -901,12 +922,12 @@ export default function PublicFormPage() {
               const selectData = {
                 value: Array.isArray(fieldValue.value) ? fieldValue.value : []
               }
-              
+
               // Add nested values if they exist
               if (fieldValue.nestedFields) {
                 selectData.nestedValues = fieldValue.nestedFields
               }
-              
+
               transformedValues[fieldId] = selectData
             } else {
               transformedValues[fieldId] = Array.isArray(fieldValue) ? fieldValue : []
@@ -917,12 +938,12 @@ export default function PublicFormPage() {
               const selectData = {
                 value: fieldValue.value || ""
               }
-              
+
               // Add nested values if they exist
               if (fieldValue.nestedFields) {
                 selectData.nestedValues = fieldValue.nestedFields
               }
-              
+
               transformedValues[fieldId] = selectData
             } else {
               transformedValues[fieldId] = fieldValue || ""
@@ -936,12 +957,12 @@ export default function PublicFormPage() {
             const radioData = {
               value: fieldValue.value || ""
             }
-            
+
             // Add nested values if they exist
             if (fieldValue.nestedFields) {
               radioData.nestedValues = fieldValue.nestedFields
             }
-            
+
             transformedValues[fieldId] = radioData
           } else {
             transformedValues[fieldId] = fieldValue || ""
@@ -1034,7 +1055,7 @@ export default function PublicFormPage() {
     // Otherwise, use empty defaults
     const emptyValues = formData.fields.reduce((acc, field) => {
       const fieldId = field.id
-      
+
       if (["select", "checkbox", "radio"].includes(field.type)) {
         if (field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)) {
           acc[fieldId] = {
@@ -1054,7 +1075,7 @@ export default function PublicFormPage() {
       } else {
         acc[fieldId] = ""
       }
-      
+
       return acc
     }, {})
 
@@ -1112,7 +1133,7 @@ export default function PublicFormPage() {
 
     return formData.fields.reduce((acc, field) => {
       const fieldId = field.id
-      
+
       if (["select", "checkbox", "radio"].includes(field.type)) {
         if (field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)) {
           acc[fieldId] = {
@@ -1132,7 +1153,7 @@ export default function PublicFormPage() {
       } else {
         acc[fieldId] = ""
       }
-      
+
       return acc
     }, {})
   }
@@ -1310,7 +1331,7 @@ export default function PublicFormPage() {
             console.log('Submission ID from data field:', newSubmissionId)
 
             const editToken = newSubmissionId
-            
+
             console.log('Generated edit token:', editToken)
 
             if (newSubmissionId) {
@@ -1381,13 +1402,13 @@ export default function PublicFormPage() {
         const defaultValues = getDefaultValues()
         console.log('🔄 Resetting form with submission data for edit mode:', defaultValues)
         console.log('🔄 Form values before reset:', form.state.values)
-        
+
         // Only reset if the values are actually different
         const currentValues = form.state.values
-        const hasChanges = Object.keys(defaultValues).some(key => 
+        const hasChanges = Object.keys(defaultValues).some(key =>
           JSON.stringify(currentValues[key]) !== JSON.stringify(defaultValues[key])
         )
-        
+
         if (hasChanges || Object.keys(currentValues).length === 0) {
           form.reset(defaultValues)
           console.log('🔄 Form values after reset:', form.state.values)
@@ -1415,6 +1436,34 @@ export default function PublicFormPage() {
       formValues: form?.state?.values
     })
   }, [isEditMode, submissionData, formData, form?.state?.values])
+
+  // Debug parsed form data structure
+  useEffect(() => {
+    if (formData) {
+      console.log('🔍 Debug: Parsed Form Data Structure')
+      formData.fields.forEach((field, index) => {
+        console.log(`Field ${index}: ${field.label} (${field.type})`, {
+          id: field.id,
+          options: field.options,
+          nestedFields: field.nestedFields,
+          hasProcessedOptions: !!field._processedOptions,
+          processedOptions: field._processedOptions
+        })
+        
+        // Log nested structure
+        if (field._processedOptions) {
+          field._processedOptions.forEach((option, optIndex) => {
+            if (option.nestedFields && option.nestedFields.length > 0) {
+              console.log(`  Option ${optIndex}: "${option.value}" has ${option.nestedFields.length} nested fields`)
+              option.nestedFields.forEach((nested, nestedIndex) => {
+                console.log(`    Nested Field ${nestedIndex}: ${nested.label} (${nested.type})`)
+              })
+            }
+          })
+        }
+      })
+    }
+  }, [formData])
 
   if (loading) {
     return (
@@ -1575,7 +1624,6 @@ export default function PublicFormPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-transparent flex items-center justify-center">
-                {/* <Building className="h-6 w-6 text-primary-foreground" /> */}
                 <Image
                   src="/SlashLogo.png"
                   alt="SlashRtc Logo"
@@ -1639,8 +1687,14 @@ export default function PublicFormPage() {
                 className="space-y-6"
               >
                 {formData.fields.map((field, index) => {
-                  // Ensure unique key for each field
                   const fieldKey = field.id || `field-${index}`
+                  
+                  // Process the field to ensure options and nested fields are properly structured
+                  const processedField = {
+                    ...field,
+                    options: processFieldOptions(field)
+                  }
+
                   return (
                     <form.Field
                       key={fieldKey}
@@ -1671,11 +1725,11 @@ export default function PublicFormPage() {
                             fieldApiValueStructure: fieldApi.state.value ? Object.keys(fieldApi.state.value) : 'no value'
                           })
                         }
-                        
+
                         return (
                           <div className="space-y-2">
                             <FieldRenderer
-                              field={field}
+                              field={processedField}
                               value={fieldApi.state.value}
                               onChange={fieldApi.handleChange}
                               invalid={fieldApi.state.meta.errors.length > 0}

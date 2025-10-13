@@ -18,7 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 
 // API Configuration
 const API_BASE_URL = 'http://10.10.15.194:3001'
-const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwMDY5NzIyLCJleHAiOjE3NjAxNTYxMjJ9.cYySNY2VRHfLi4pP82PzCi4xBwZ3zqsGSBnQp-xG37g'
+const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwMzM1OTgyLCJleHAiOjE3NjA0MjIzODJ9.i8x4KfEjbRhMp454y_maUARuNDo0pTyM8dcTmutFjrY'
 const LEADS_TABLE_ID = 'dc6032a9-391b-43b6-bab3-405b397d5283'
 
 export default function LeadsPage() {
