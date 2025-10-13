@@ -688,7 +688,7 @@ const handleGenerateLink = async () => {
             source: field.source,
             tableColumnId: field.tableColumnId,
             tableColumnName: field.tableColumnName,
-            nestedFields: field.nestedFields // Include nested fields structure
+            nestedFields: field.nestedFields
           })),
           tableFields: tableFields,
           extraFields: extraFields,
