@@ -1216,6 +1216,206 @@ export default function PublicFormPage() {
   //   return transformedValues
   // }
 
+  // const transformFormValues = (formValues, fields) => {
+  //   const transformedValues = {}
+  
+  //   console.log('🔍 Transforming form values with field names:', formValues)
+  //   console.log('📋 Available fields:', fields.map(f => ({ id: f.id, name: f.name, label: f.label, type: f.type })))
+  
+  //   // Helper function to recursively transform nested values using field names
+  //   const transformNestedValues = (nestedFields) => {
+  //     const result = {}
+      
+  //     Object.keys(nestedFields).forEach(key => {
+  //       const value = nestedFields[key]
+        
+  //       // Extract the actual field name from the key
+  //       // Keys are in format like "nested-Brand-0-0" but we want "brand"
+  //       let fieldName = key
+        
+  //       // Handle complex nested field keys
+  //       if (key.includes('-')) {
+  //         const parts = key.split('-')
+  //         // Find the part that contains the actual field name
+  //         // Skip "nested" and numeric parts
+  //         const namePart = parts.find(part => 
+  //           part && 
+  //           part !== 'nested' && 
+  //           isNaN(part) && 
+  //           part !== '0'
+  //         )
+  //         if (namePart) {
+  //           fieldName = namePart.toLowerCase()
+  //         }
+  //       }
+  
+  //       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+  //         // Handle nested object structure
+  //         if (value.value !== undefined) {
+  //           result[fieldName] = {
+  //             value: value.value,
+  //             ...(value.nestedFields && Object.keys(value.nestedFields).length > 0 && {
+  //               nestedValues: transformNestedValues(value.nestedFields)
+  //             })
+  //           }
+  //         } else {
+  //           // Direct nested object - process recursively
+  //           result[fieldName] = transformNestedValues(value)
+  //         }
+  //       } else if (Array.isArray(value)) {
+  //         // Handle array of nested values (like multiple checkboxes)
+  //         result[fieldName] = value.map(item => {
+  //           if (typeof item === 'object' && item !== null) {
+  //             return {
+  //               value: item.value,
+  //               ...(item.nestedFields && Object.keys(item.nestedFields).length > 0 && {
+  //                 nestedValues: transformNestedValues(item.nestedFields)
+  //               })
+  //             }
+  //           }
+  //           return { value: item }
+  //         })
+  //       } else {
+  //         // Simple value
+  //         result[fieldName] = { value }
+  //       }
+  //     })
+      
+  //     return result
+  //   }
+  
+  //   // Helper function to get clean field name - PRIORITIZE FIELD NAME OVER LABEL
+  //   const getCleanFieldName = (field) => {
+  //     // Use field.name if available, otherwise use a cleaned version of the label
+  //     if (field.name) {
+  //       return field.name
+  //     }
+  //     // Fallback to label only if name is not available
+  //     return field.label?.toLowerCase().replace(/\s+/g, '_') || field.id
+  //   }
+  
+  //   Object.keys(formValues).forEach(fieldId => {
+  //     const fieldValue = formValues[fieldId]
+  //     const field = fields.find(f => f.id === fieldId)
+  
+  //     if (!field) return
+  
+  //     // Skip empty values for non-required fields
+  //     if (!field.required && !field.validation?.required) {
+  //       let isEmpty = false
+  
+  //       if (fieldValue === null || fieldValue === undefined || fieldValue === '') {
+  //         isEmpty = true
+  //       } else if (Array.isArray(fieldValue) && fieldValue.length === 0) {
+  //         isEmpty = true
+  //       } else if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //         if (field.type === 'location') {
+  //           isEmpty = (!fieldValue.country || fieldValue.country === '') &&
+  //             (!fieldValue.state || fieldValue.state === '') &&
+  //             (!fieldValue.city || fieldValue.city === '')
+  //         } else if (field.type === 'phone') {
+  //           isEmpty = (!fieldValue.country || fieldValue.country === '') &&
+  //             (!fieldValue.number || fieldValue.number === '')
+  //         } else if (field.type === 'file') {
+  //           isEmpty = !fieldValue.name && !fieldValue.base64
+  //         } else if (fieldValue.value !== undefined) {
+  //           // For nested fields, check if the value is empty
+  //           if (Array.isArray(fieldValue.value)) {
+  //             isEmpty = fieldValue.value.length === 0
+  //           } else {
+  //             isEmpty = !fieldValue.value || fieldValue.value === ''
+  //           }
+  //         } else {
+  //           isEmpty = Object.keys(fieldValue).length === 0
+  //         }
+  //       }
+  
+  //       if (isEmpty) {
+  //         return
+  //       }
+  //     }
+  
+  //     // Use field name instead of ID as the key
+  //     const fieldName = getCleanFieldName(field)
+  
+  //     // Handle different field types
+  //     switch (field.type) {
+  //       case "checkbox":
+  //       case "select":
+  //       case "radio":
+  //         // Handle fields with nested values
+  //         if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //           if (fieldValue.value !== undefined || fieldValue.nestedFields) {
+  //             const fieldData = {
+  //               value: fieldValue.value || (Array.isArray(fieldValue) ? fieldValue : "")
+  //             }
+  
+  //             // Add nested values if they exist
+  //             if (fieldValue.nestedFields && Object.keys(fieldValue.nestedFields).length > 0) {
+  //               fieldData.nestedValues = transformNestedValues(fieldValue.nestedFields)
+  //             }
+  
+  //             transformedValues[fieldName] = fieldData
+  //           } else {
+  //             // Fallback for simple values
+  //             transformedValues[fieldName] = { value: fieldValue }
+  //           }
+  //         } else {
+  //           transformedValues[fieldName] = { value: fieldValue }
+  //         }
+  //         break
+  
+  //       case "file":
+  //         if (fieldValue && typeof fieldValue === 'object' && fieldValue.base64) {
+  //           transformedValues[fieldName] = { value: fieldValue.base64 }
+  //         } else if (fieldValue && typeof fieldValue === 'string' && fieldValue.startsWith('data:')) {
+  //           transformedValues[fieldName] = { value: fieldValue }
+  //         } else {
+  //           transformedValues[fieldName] = { value: "" }
+  //         }
+  //         break
+  
+  //       case "location":
+  //         if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //           const locationData = {
+  //             value: "location",
+  //             nestedValues: {
+  //               country: { value: fieldValue.country || "" },
+  //               state: { value: fieldValue.state || "" },
+  //               city: { value: fieldValue.city || "" }
+  //             }
+  //           }
+  //           transformedValues[fieldName] = locationData
+  //         } else {
+  //           transformedValues[fieldName] = { value: "" }
+  //         }
+  //         break
+  
+  //       case "phone":
+  //         if (typeof fieldValue === 'object' && fieldValue !== null) {
+  //           const phoneData = {
+  //             value: "phone",
+  //             nestedValues: {
+  //               country: { value: fieldValue.country || "" },
+  //               number: { value: fieldValue.number || "" }
+  //             }
+  //           }
+  //           transformedValues[fieldName] = phoneData
+  //         } else {
+  //           transformedValues[fieldName] = { value: "" }
+  //         }
+  //         break
+  
+  //       default:
+  //         // Text, email, number, textarea
+  //         transformedValues[fieldName] = { value: fieldValue || "" }
+  //     }
+  //   })
+  
+  //   console.log('✅ Final transformed values with field names:',transformedValues)
+  //   return transformedValues
+  // }
+
   const transformFormValues = (formValues, fields) => {
     const transformedValues = {}
   
@@ -1229,11 +1429,22 @@ export default function PublicFormPage() {
       Object.keys(nestedFields).forEach(key => {
         const value = nestedFields[key]
         
+        // Skip numeric keys (0, 1, 2, etc.) - these are array indices we want to remove
+        if (!isNaN(key) && key !== 'value') {
+          // This is a numeric key, skip it and process its contents directly
+          if (typeof value === 'object' && value !== null) {
+            // Recursively process the content of numeric keys
+            const nestedResult = transformNestedValues(value)
+            // Merge the nested result into the main result
+            Object.assign(result, nestedResult)
+          }
+          return
+        }
+  
         // Extract the actual field name from the key
-        // Keys are in format like "nested-Brand-0-0" but we want "brand"
         let fieldName = key
         
-        // Handle complex nested field keys
+        // Handle complex nested field keys like "nested-Brand-0-0" 
         if (key.includes('-')) {
           const parts = key.split('-')
           // Find the part that contains the actual field name
@@ -1260,22 +1471,35 @@ export default function PublicFormPage() {
             }
           } else {
             // Direct nested object - process recursively
-            result[fieldName] = transformNestedValues(value)
+            const processedNested = transformNestedValues(value)
+            if (Object.keys(processedNested).length > 0) {
+              result[fieldName] = processedNested
+            }
           }
         } else if (Array.isArray(value)) {
           // Handle array of nested values (like multiple checkboxes)
-          result[fieldName] = value.map(item => {
+          // Remove numeric indices from arrays
+          const processedArray = value.map(item => {
             if (typeof item === 'object' && item !== null) {
-              return {
+              const processedItem = {
                 value: item.value,
                 ...(item.nestedFields && Object.keys(item.nestedFields).length > 0 && {
                   nestedValues: transformNestedValues(item.nestedFields)
                 })
               }
+              // Remove empty nestedValues
+              if (processedItem.nestedValues && Object.keys(processedItem.nestedValues).length === 0) {
+                delete processedItem.nestedValues
+              }
+              return processedItem
             }
             return { value: item }
-          })
-        } else {
+          }).filter(item => item.value !== undefined && item.value !== null)
+          
+          if (processedArray.length > 0) {
+            result[fieldName] = processedArray
+          }
+        } else if (value !== undefined && value !== null) {
           // Simple value
           result[fieldName] = { value }
         }
@@ -1352,7 +1576,10 @@ export default function PublicFormPage() {
   
               // Add nested values if they exist
               if (fieldValue.nestedFields && Object.keys(fieldValue.nestedFields).length > 0) {
-                fieldData.nestedValues = transformNestedValues(fieldValue.nestedFields)
+                const processedNested = transformNestedValues(fieldValue.nestedFields)
+                if (Object.keys(processedNested).length > 0) {
+                  fieldData.nestedValues = processedNested
+                }
               }
   
               transformedValues[fieldName] = fieldData
@@ -1412,7 +1639,7 @@ export default function PublicFormPage() {
       }
     })
   
-    console.log('✅ Final transformed values with field names:',transformedValues)
+    console.log('✅ Final transformed values with field names (no numeric keys):', JSON.stringify(transformedValues, null, 2))
     return transformedValues
   }
 
