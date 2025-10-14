@@ -1178,7 +1178,6 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
 }
 
 export function FieldRenderer({ field, value, onChange, disabled = false, invalid = false, error }) {
-  // Provide a default onChange function if none is provided
   const safeOnChange = onChange || (() => {})
   const [countries, setCountries] = useState([])
   const [phoneCountries, setPhoneCountries] = useState([])
