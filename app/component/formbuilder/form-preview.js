@@ -456,7 +456,8 @@ export function FormPreview({ fields }) {
             required: nestedField.required || false,
             validations: nestedField.validation || {},
             hasNested: false,
-            options: nestedOptions
+            options: nestedOptions,
+            isLeadColumn: nestedField.isLeadColumn || false
           }
 
           // Check if this nested field has nested fields
@@ -501,7 +502,8 @@ export function FormPreview({ fields }) {
           required: field.required || false,
           validations: field.validation || {},
           hasNested: hasNestedFields,
-          options: optionsArray
+          options: optionsArray,
+          isLeadColumn: field.isLeadColumn || false
         }
 
         console.log('📊 Table Field:', {
@@ -551,7 +553,8 @@ export function FormPreview({ fields }) {
           required: field.required || false,
           validations: field.validation || {},
           hasNested: hasNestedFields,
-          options: optionsArray
+          options: optionsArray,
+          isLeadColumn: field.isLeadColumn || false
         }
 
         console.log('📝 Extra Field:', {
@@ -575,6 +578,51 @@ export function FormPreview({ fields }) {
         return
       }
 
+      // Separate fields based on isLeadColumn setting
+      const allFields = [...tableFields, ...extraFields]
+      const regularFields = allFields.filter(field => !field.isLeadColumn)
+      const leadDatabaseFields = allFields.filter(field => field.isLeadColumn)
+
+      // Helper function to process field data
+      const processFieldData = (field) => {
+        // Ensure options is always an array
+        const processedOptions = Array.isArray(field.options) ? field.options : []
+
+        const processedField = {
+          id: field.id,
+          name: field.name,
+          label: field.label,
+          type: field.type,
+          required: field.required ? "true" : "false",
+          validations: field.validations || {},
+          hasNested: field.hasNested || false,
+          isLeadColumn: field.isLeadColumn ? "true" : "false",
+          options: processedOptions.map(option => ({
+            value: option.value,
+            label: option.label,
+            nestedFields: option.nestedFields || []
+          }))
+        }
+
+        console.log(`✅ Processed field ${field.name}:`, {
+          name: processedField.name,
+          type: processedField.type,
+          hasNested: processedField.hasNested,
+          isLeadColumn: processedField.isLeadColumn,
+          options: processedField.options.map(opt => ({
+            value: opt.value,
+            nestedFieldsCount: opt.nestedFields.length,
+            nestedFields: opt.nestedFields.map(nf => ({
+              name: nf.name,
+              type: nf.type,
+              hasNested: nf.hasNested
+            }))
+          }))
+        })
+
+        return processedField
+      }
+
       // Prepare the form data for API
       const formData = {
         organization_id: ORGANIZATION_ID,
@@ -582,42 +630,8 @@ export function FormPreview({ fields }) {
         form_name: formName,
         description: formDescription,
         created_by: USER_ID,
-        fields: [...tableFields, ...extraFields].map(field => {
-          // Ensure options is always an array
-          const processedOptions = Array.isArray(field.options) ? field.options : []
-
-          const processedField = {
-            id: field.id,
-            name: field.name,
-            label: field.label,
-            type: field.type,
-            required: field.required ? "true" : "false",
-            validations: field.validations || {},
-            hasNested: field.hasNested || false,
-            options: processedOptions.map(option => ({
-              value: option.value,
-              label: option.label,
-              nestedFields: option.nestedFields || []
-            }))
-          }
-
-          console.log(`✅ Processed field ${field.name}:`, {
-            name: processedField.name,
-            type: processedField.type,
-            hasNested: processedField.hasNested,
-            options: processedField.options.map(opt => ({
-              value: opt.value,
-              nestedFieldsCount: opt.nestedFields.length,
-              nestedFields: opt.nestedFields.map(nf => ({
-                name: nf.name,
-                type: nf.type,
-                hasNested: nf.hasNested
-              }))
-            }))
-          })
-
-          return processedField
-        }),
+        fields: regularFields.map(processFieldData),
+        extraFields: leadDatabaseFields.map(processFieldData),
         published: true
       }
 
@@ -625,8 +639,32 @@ export function FormPreview({ fields }) {
 
       // Debug nested structure
       console.log('🔍 Detailed nested structure analysis:')
+      console.log(`📊 Regular Fields (${formData.fields.length}):`)
       formData.fields.forEach((field, fieldIndex) => {
-        console.log(`Field ${fieldIndex + 1}: ${field.name} (${field.type})`)
+        console.log(`Field ${fieldIndex + 1}: ${field.name} (${field.type}) - isLeadColumn: ${field.isLeadColumn}`)
+        field.options.forEach((option, optIndex) => {
+          if (option.nestedFields.length > 0) {
+            console.log(`  Option ${optIndex}: "${option.value}"`)
+            option.nestedFields.forEach((nestedField, nestedIndex) => {
+              console.log(`    Nested Field ${nestedIndex}: ${nestedField.name} (${nestedField.type})`)
+              if (nestedField.options && nestedField.options.length > 0) {
+                nestedField.options.forEach((nestedOption, nestedOptIndex) => {
+                  if (nestedOption.nestedFields.length > 0) {
+                    console.log(`      Nested Option ${nestedOptIndex}: "${nestedOption.value}"`)
+                    nestedOption.nestedFields.forEach((deepNested, deepIndex) => {
+                      console.log(`        Deep Nested ${deepIndex}: ${deepNested.name} (${deepNested.type})`)
+                    })
+                  }
+                })
+              }
+            })
+          }
+        })
+      })
+      
+      console.log(`📊 Lead Database Fields (${formData.extraFields.length}):`)
+      formData.extraFields.forEach((field, fieldIndex) => {
+        console.log(`Extra Field ${fieldIndex + 1}: ${field.name} (${field.type}) - isLeadColumn: ${field.isLeadColumn}`)
         field.options.forEach((option, optIndex) => {
           if (option.nestedFields.length > 0) {
             console.log(`  Option ${optIndex}: "${option.value}"`)

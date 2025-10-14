@@ -150,14 +150,20 @@ const transformFormValues = (formValues, fields) => {
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         // Handle nested object structure
         if (value.value !== undefined) {
+          // Ensure value is not wrapped in array
+          let processedValueValue = value.value
+          if (Array.isArray(processedValueValue) && processedValueValue.length === 1) {
+            processedValueValue = processedValueValue[0]
+          }
+
           // Store the actual selected value, not the parent option
           const processedValue = {
-            value: value.value
+            value: processedValueValue
           }
 
           // Add nested values if they exist
           if (value.nestedFields && Object.keys(value.nestedFields).length > 0) {
-            const processedNested = transformNestedValues(value.nestedFields, value.value, fieldDefinition)
+            const processedNested = transformNestedValues(value.nestedFields, processedValueValue, fieldDefinition)
             if (Object.keys(processedNested).length > 0) {
               processedValue.nestedValues = processedNested
             }
@@ -175,10 +181,16 @@ const transformFormValues = (formValues, fields) => {
         // Handle array of nested values (like multiple checkboxes)
         const processedArray = value.map(item => {
           if (typeof item === 'object' && item !== null) {
+            // Ensure value is not wrapped in array
+            let processedValue = item.value
+            if (Array.isArray(processedValue) && processedValue.length === 1) {
+              processedValue = processedValue[0]
+            }
+
             const processedItem = {
-              value: item.value, // Keep as-is, don't wrap in array
+              value: processedValue,
               ...(item.nestedFields && Object.keys(item.nestedFields).length > 0 && {
-                nestedValues: transformNestedValues(item.nestedFields, item.value, fieldDefinition)
+                nestedValues: transformNestedValues(item.nestedFields, processedValue, fieldDefinition)
               })
             }
             // Remove empty nestedValues
@@ -187,21 +199,37 @@ const transformFormValues = (formValues, fields) => {
             }
             return processedItem
           }
-          return { value: item }
+          // Handle simple values that might be arrays
+          let processedValue = item
+          if (Array.isArray(processedValue) && processedValue.length === 1) {
+            processedValue = processedValue[0]
+          }
+          return { value: processedValue }
         }).filter(item => item.value !== undefined && item.value !== null)
         
         if (processedArray.length > 0) {
           // Only use array if we have multiple items, otherwise use the single value
-          if (processedArray.length === 1 && !Array.isArray(processedArray[0].value)) {
-            // For single non-array values, extract the value directly
-            fieldValues[fieldId] = processedArray[0]
+          if (processedArray.length === 1) {
+            // For single values, extract the value directly and ensure it's not wrapped in array
+            const singleItem = processedArray[0]
+            if (Array.isArray(singleItem.value) && singleItem.value.length === 1) {
+              // If the value itself is an array with one item, extract that item
+              fieldValues[fieldId] = { value: singleItem.value[0] }
+            } else {
+              fieldValues[fieldId] = singleItem
+            }
           } else {
             fieldValues[fieldId] = processedArray
           }
         }
       } else if (value !== undefined && value !== null) {
-        // Simple value - don't wrap in array
-        fieldValues[fieldId] = { value }
+        // Simple value - don't wrap in array, but handle if value is already an array
+        if (Array.isArray(value) && value.length === 1) {
+          // If value is an array with one item, extract that item
+          fieldValues[fieldId] = { value: value[0] }
+        } else {
+          fieldValues[fieldId] = { value }
+        }
       }
     })
     
@@ -285,13 +313,19 @@ const transformFormValues = (formValues, fields) => {
           // Single select
           if (typeof fieldValue === 'object' && fieldValue !== null) {
             if (fieldValue.value !== undefined || fieldValue.nestedFields) {
+              // Ensure value is not wrapped in array for single selections
+              let processedValue = fieldValue.value || ""
+              if (Array.isArray(processedValue) && processedValue.length === 1) {
+                processedValue = processedValue[0]
+              }
+
               const fieldData = {
-                value: fieldValue.value || ""
+                value: processedValue
               }
 
               // Only include nested fields if they exist and are relevant to the selected option
               if (fieldValue.nestedFields && Object.keys(fieldValue.nestedFields).length > 0) {
-                const processedNested = transformNestedValues(fieldValue.nestedFields, fieldValue.value, field)
+                const processedNested = transformNestedValues(fieldValue.nestedFields, processedValue, field)
                 if (Object.keys(processedNested).length > 0) {
                   fieldData.nestedValues = processedNested
                 }
@@ -299,10 +333,20 @@ const transformFormValues = (formValues, fields) => {
 
               transformedValues[finalFieldKey] = fieldData
             } else {
-              transformedValues[finalFieldKey] = { value: fieldValue }
+              // Fallback for simple values
+              let processedValue = fieldValue
+              if (Array.isArray(processedValue) && processedValue.length === 1) {
+                processedValue = processedValue[0]
+              }
+              transformedValues[finalFieldKey] = { value: processedValue }
             }
           } else {
-            transformedValues[finalFieldKey] = { value: fieldValue || "" }
+            // Handle direct values that might be arrays
+            let processedValue = fieldValue || ""
+            if (Array.isArray(processedValue) && processedValue.length === 1) {
+              processedValue = processedValue[0]
+            }
+            transformedValues[finalFieldKey] = { value: processedValue }
           }
         }
         break
@@ -312,13 +356,19 @@ const transformFormValues = (formValues, fields) => {
         // Handle fields with nested values
         if (typeof fieldValue === 'object' && fieldValue !== null) {
           if (fieldValue.value !== undefined || fieldValue.nestedFields) {
+            // Ensure value is not wrapped in array for single selections
+            let processedValue = fieldValue.value
+            if (Array.isArray(processedValue) && processedValue.length === 1) {
+              processedValue = processedValue[0]
+            }
+
             const fieldData = {
-              value: fieldValue.value
+              value: processedValue
             }
 
             // Add nested values if they exist
             if (fieldValue.nestedFields && Object.keys(fieldValue.nestedFields).length > 0) {
-              const processedNested = transformNestedValues(fieldValue.nestedFields, fieldValue.value, field)
+              const processedNested = transformNestedValues(fieldValue.nestedFields, processedValue, field)
               if (Object.keys(processedNested).length > 0) {
                 fieldData.nestedValues = processedNested
               }
@@ -327,10 +377,19 @@ const transformFormValues = (formValues, fields) => {
             transformedValues[finalFieldKey] = fieldData
           } else {
             // Fallback for simple values
-            transformedValues[finalFieldKey] = { value: fieldValue }
+            let processedValue = fieldValue
+            if (Array.isArray(processedValue) && processedValue.length === 1) {
+              processedValue = processedValue[0]
+            }
+            transformedValues[finalFieldKey] = { value: processedValue }
           }
         } else {
-          transformedValues[finalFieldKey] = { value: fieldValue }
+          // Handle direct values that might be arrays
+          let processedValue = fieldValue
+          if (Array.isArray(processedValue) && processedValue.length === 1) {
+            processedValue = processedValue[0]
+          }
+          transformedValues[finalFieldKey] = { value: processedValue }
         }
         break
 
@@ -426,6 +485,8 @@ const transformSubmissionValues = (submissionValues, fields) => {
 
   // Helper function to process the main field values
   const processFieldValue = (fieldId, fieldValue, field) => {
+    console.log(`🔄 Processing field ${fieldId}:`, { fieldValue, fieldType: field?.type })
+    
     // Handle JSON strings from API
     let parsedValue = fieldValue
     if (typeof fieldValue === 'string') {
@@ -458,7 +519,20 @@ const transformSubmissionValues = (submissionValues, fields) => {
     const fieldId = field.id
     let fieldValue = submissionValues[fieldId]
 
+    console.log(`🔍 Looking for field ${fieldId} (${field.label}):`, { 
+      fieldValue, 
+      submissionKeys: Object.keys(submissionValues),
+      originalId: field.originalId 
+    })
+
     // If not found by parsed form ID, try the original field ID from API
+    if (fieldValue === undefined && field.originalId) {
+      console.log(`🔄 Trying original ID ${field.originalId} for field ${fieldId}`)
+      fieldValue = submissionValues[field.originalId]
+      console.log(`✅ Found value with original ID:`, fieldValue)
+    }
+
+    // If still not found, try other fallback methods
     if (fieldValue === undefined) {
       // Try to find by field name or other identifiers
       const possibleKeys = [
@@ -692,12 +766,13 @@ export default function PublicFormPage() {
           values: {}
         }
         
-        // Parse each field value if it's a JSON string
+        // Parse each field value if it's a JSON string and transform nested structure
         Object.keys(result.submission.values || {}).forEach(key => {
           const value = result.submission.values[key]
           if (typeof value === 'string') {
             try {
-              parsedSubmission.values[key] = JSON.parse(value)
+              const parsedValue = JSON.parse(value)
+              parsedSubmission.values[key] = parsedValue
             } catch (e) {
               parsedSubmission.values[key] = value
             }
@@ -705,6 +780,12 @@ export default function PublicFormPage() {
             parsedSubmission.values[key] = value
           }
         })
+        
+        // Now transform the parsed values using the existing transformation logic
+        if (formData?.fields) {
+          const transformedValues = transformSubmissionValues(parsedSubmission.values, formData.fields)
+          parsedSubmission.values = transformedValues
+        }
         
         setSubmissionData(parsedSubmission)
         toast.success("Submission loaded for editing")
@@ -775,6 +856,7 @@ export default function PublicFormPage() {
           JSON.parse(nestedField.validations || '{}') : 
           (nestedField.validations || {}),
         hasNested: nestedField.hasNested === true || nestedField.hasNested === 'true',
+        isLeadColumn: nestedField.isLeadColumn === true || nestedField.isLeadColumn === 'true',
         options: processedOptions
       }
     })
@@ -834,7 +916,9 @@ export default function PublicFormPage() {
               if (typeof fieldData.options === 'string') {
                 try {
                   options = JSON.parse(fieldData.options)
+                  console.log(`✅ Parsed options for field ${fieldData.label}:`, options)
                 } catch (e) {
+                  console.error(`❌ Failed to parse options for field ${fieldData.label}:`, e)
                   // Fallback: try to split by commas for simple options
                   if (typeof fieldData.options === 'string') {
                     options = fieldData.options.split(',').map(opt => opt.trim()).filter(opt => opt)
@@ -856,10 +940,13 @@ export default function PublicFormPage() {
               // Recursively process nested fields for this option
               if (option.nestedFields && Array.isArray(option.nestedFields)) {
                 processedOption.nestedFields = parseNestedFields(option.nestedFields)
+                console.log(`✅ Processed nested fields for option ${option.value}:`, processedOption.nestedFields)
               }
 
               return processedOption
             })
+            
+            console.log(`✅ Final processed options for field ${fieldData.label}:`, processedOptions)
 
             // Parse validation
             let validation = {}
@@ -914,6 +1001,7 @@ export default function PublicFormPage() {
               label: fieldData.label || fieldData.name || 'Field',
               placeholder: fieldData.placeholder || '',
               required: isRequired,
+              isLeadColumn: fieldData.isLeadColumn === true || fieldData.isLeadColumn === 'true',
               options: processedOptions.map(opt => opt.value || opt), // For simple option values
               nestedFields: nestedFields,
               validation: {
