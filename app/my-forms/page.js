@@ -8,22 +8,36 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
-import { Eye, Copy, BarChart3, Calendar, Users, ExternalLink, Loader2, Edit, Trash2, RotateCcw, Search, ArrowUpDown } from "lucide-react"
+import { Eye, Copy, BarChart3, Calendar, Users, ExternalLink, Loader2, Edit, Trash2, RotateCcw, Search, ArrowUpDown, Archive, ArchiveRestore } from "lucide-react"
 import { toast } from "sonner"
 import axios from "axios"
 import EditFormDialog from "../component/EditForm/edit-form"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 // API configuration
 const API_BASE_URL = 'http://10.10.15.194:3001'
 const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
 const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
-const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzU5MzE0ODY2LCJleHAiOjE3NTk0MDEyNjZ9.QjKz8fTFwia76o7LkkdmlGGhEKoguy8o6iFbCojMwkE'
+const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwNDM2MjAyLCJleHAiOjE3NjA1MjI2MDJ9.rXbGaZSpO0G6tMp-OiTTERW7D0pCXi5OutXH-8exGnw'
 
 export default function MyFormsPage() {
   const [forms, setForms] = useState([])
   const [loading, setLoading] = useState(true)
   const [editingForm, setEditingForm] = useState(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [archivingForm, setArchivingForm] = useState(null)
+  const [deletingForm, setDeletingForm] = useState(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [formToDelete, setFormToDelete] = useState(null)
   
   // Search, filter, sort, and pagination states
   const [searchTerm, setSearchTerm] = useState("")
@@ -192,6 +206,118 @@ export default function MyFormsPage() {
     }
   }
 
+  // Function to archive/unarchive form
+  const toggleArchiveForm = async (formId, currentStatus) => {
+    try {
+      setArchivingForm(formId)
+      
+      const response = await axios.post(
+        `${API_BASE_URL}/api/forms/archieve`,
+        {
+          organization_id: ORGANIZATION_ID,
+          form_id: formId,
+          table_id: TABLE_ID,
+          status: !currentStatus // Toggle the status
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+      
+      const result = response.data
+      console.log('Archive API Response:', result)
+      
+      if (result.success) {
+        // Use the archieve_status from API response to update local state
+        const newArchiveStatus = result.archieve_status
+        console.log('New archive status:', newArchiveStatus, 'for form:', formId)
+        
+        // Update the local state
+        setForms(prevForms => {
+          const updatedForms = prevForms.map(form => 
+            form.form_id === formId 
+              ? { 
+                  ...form, 
+                  archived: newArchiveStatus,
+                  isarchieved: newArchiveStatus  // Also update the isarchieved property
+                }
+              : form
+          )
+          console.log('Updated forms:', updatedForms.find(f => f.form_id === formId))
+          return updatedForms
+        })
+        
+        const action = newArchiveStatus ? "archived" : "unarchived"
+        toast.success(`Form ${action} successfully!`)
+        
+        if (newArchiveStatus) {
+          toast.info("Form is now inactive. Users cannot access it.")
+        } else {
+          toast.info("Form is now active. Users can access it.")
+        }
+      } else {
+        throw new Error(result.message || 'Failed to update form status')
+      }
+    } catch (error) {
+      console.error('Error toggling archive status:', error)
+      toast.error(`Failed to update form: ${error.message}`)
+    } finally {
+      setArchivingForm(null)
+    }
+  }
+
+  // Function to delete form
+  const deleteForm = async (formId) => {
+    try {
+      console.log('Starting delete for form:', formId)
+      setDeletingForm(formId)
+      
+      const response = await axios.post(
+        `${API_BASE_URL}/api/forms/delete`,
+        {
+          organization_id: ORGANIZATION_ID,
+          form_id: formId,
+          table_id: TABLE_ID
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+      
+      const result = response.data
+      console.log('Delete response:', result)
+      
+      if (result.success) {
+        // Remove the form from local state
+        setForms(prevForms => prevForms.filter(form => form.form_id !== formId))
+        toast.success("Form deleted successfully!")
+        // Close dialog and reset state
+        setDeleteDialogOpen(false)
+        setFormToDelete(null)
+      } else {
+        throw new Error(result.message || 'Failed to delete form')
+      }
+    } catch (error) {
+      console.error('Error deleting form:', error)
+      toast.error(`Failed to delete form: ${error.message}`)
+    } finally {
+      // Only reset deletingForm state, don't close dialog on error
+      setDeletingForm(null)
+    }
+  }
+
+  // Function to confirm delete
+  const confirmDelete = (form) => {
+    setFormToDelete(form)
+    setDeleteDialogOpen(true)
+  }
+
   const fetchForms = async () => {
     try {
       setLoading(true)
@@ -210,15 +336,26 @@ export default function MyFormsPage() {
       
       if (result.success && Array.isArray(result.form)) {
         // Process the forms to add field counts and format dates
-        const processedForms = result.form.map(form => ({
-          ...form,
-          // Count the number of valid fields
-          fieldCount: countFormFields(form),
-          // Format the created date
-          created: form.created_at ? new Date(form.created_at).toLocaleDateString() : 'Unknown',
-          createdDate: form.created_at ? new Date(form.created_at) : new Date(),
-          form_id: form.form_id || form.id
-        }))
+        const processedForms = result.form.map(form => {
+          console.log('Processing form:', form.form_id, 'archived status:', form.archived, 'archieve_status:', form.archieve_status)
+          return {
+            ...form,
+            // Count the number of valid fields
+            fieldCount: countFormFields(form),
+            // Format the created date
+            created: form.created_at ? new Date(form.created_at).toLocaleDateString() : 'Unknown',
+            createdDate: form.created_at ? new Date(form.created_at) : new Date(),
+            form_id: form.form_id || form.id,
+            // Check all possible archive status properties from API
+            archived: form.archived === true || form.archived === 'true' || 
+                     form.archieve_status === true || form.archieve_status === 'true' ||
+                     form.isarchieved === true || form.isarchieved === 'true',
+            // Ensure isarchieved property is also set correctly
+            isarchieved: form.isarchieved === true || form.isarchieved === 'true' ||
+                        form.archived === true || form.archived === 'true' ||
+                        form.archieve_status === true || form.archieve_status === 'true'
+          }
+        })
         
         setForms(processedForms)
       } else {
@@ -236,13 +373,23 @@ export default function MyFormsPage() {
     }
   }
 
-  const copyFormLink = (formId) => {
+  const copyFormLink = (formId, isArchived) => {
+    if (isArchived) {
+      toast.error("Cannot copy link: Form is archived")
+      return
+    }
+    
     const link = `${window.location.origin}/forms/${formId}`
     navigator.clipboard.writeText(link)
     toast.success("Form link copied to clipboard!")
   }
 
-  const openFormInNewTab = (formId) => {
+  const openFormInNewTab = (formId, isArchived) => {
+    if (isArchived) {
+      toast.error("Cannot open form: Form is archived")
+      return
+    }
+    
     const link = `${window.location.origin}/forms/${formId}`
     window.open(link, '_blank', 'noopener,noreferrer')
     toast.info("Opening form in new tab")
@@ -269,13 +416,74 @@ export default function MyFormsPage() {
           validation = parsedField.validation
         }
         
-        // Parse options
+        // Parse options and extract nested fields
         let options = []
+        let nestedFields = {}
+        
         if (Array.isArray(parsedField.options)) {
           options = parsedField.options
         } else if (typeof parsedField.options === 'string') {
           try {
-            options = JSON.parse(parsedField.options)
+            const parsedOptions = JSON.parse(parsedField.options)
+            console.log('🔍 Raw parsed options:', parsedOptions)
+            if (Array.isArray(parsedOptions)) {
+              // Extract options and nested fields from the complex structure
+              options = parsedOptions.map((option, optionIndex) => {
+                if (typeof option === 'object' && option.value) {
+                  // If this option has nested fields, extract them recursively
+                  if (option.nestedFields && Array.isArray(option.nestedFields) && option.nestedFields.length > 0) {
+                    const parseNestedFields = (nestedFieldsArray) => {
+                      return nestedFieldsArray.map(nestedField => {
+                        const parsedNestedField = {
+                          id: nestedField.id,
+                          name: nestedField.name,
+                          type: nestedField.type,
+                          label: nestedField.label,
+                          placeholder: nestedField.placeholder || '',
+                          required: nestedField.required === true || nestedField.required === 'true' || false,
+                          options: [],
+                          validation: nestedField.validations || {},
+                          nestedFields: {}
+                        }
+                        
+                        // Parse options if they exist
+                        if (nestedField.options && Array.isArray(nestedField.options)) {
+                          console.log('🔍 Parsing nested field options:', nestedField.options)
+                          parsedNestedField.options = nestedField.options.map(opt => {
+                            if (typeof opt === 'object' && opt.value) {
+                              return opt.value || opt.label || 'Option'
+                            }
+                            return typeof opt === 'string' ? opt : (opt.value || opt.label || 'Option')
+                          })
+                          console.log('🔍 Parsed nested field options:', parsedNestedField.options)
+                          
+                          // Parse sub-nested fields from options
+                          const subNestedFields = {}
+                          nestedField.options.forEach((subOption, subOptionIndex) => {
+                            if (typeof subOption === 'object' && subOption.nestedFields && Array.isArray(subOption.nestedFields) && subOption.nestedFields.length > 0) {
+                              subNestedFields[subOptionIndex] = parseNestedFields(subOption.nestedFields)
+                            }
+                          })
+                          // Only set nestedFields if there are actual nested fields
+                          if (Object.keys(subNestedFields).length > 0) {
+                            parsedNestedField.nestedFields = subNestedFields
+                          }
+                        }
+                        
+                        return parsedNestedField
+                      })
+                    }
+                    
+                    nestedFields[optionIndex] = parseNestedFields(option.nestedFields)
+                  }
+                  return option.value || option.label || 'Option'
+                }
+                return typeof option === 'string' ? option : (option.value || option.label || 'Option')
+              })
+              console.log('🔍 Final options array:', options)
+            } else {
+              options = parsedOptions
+            }
           } catch (e) {
             options = parsedField.options.split(',').map(opt => opt.trim()).filter(opt => opt)
           }
@@ -289,6 +497,7 @@ export default function MyFormsPage() {
           placeholder: parsedField.placeholder || '',
           required: parsedField.required === true || parsedField.required === 'true' || false,
           options: options,
+          nestedFields: nestedFields,
           validation: {
             required: parsedField.required === true || parsedField.required === 'true' || false,
             multiple: validation.multiple || false,
@@ -301,7 +510,9 @@ export default function MyFormsPage() {
         }
       }).filter(field => field.id && field.type)
       
-      console.log('Parsed fields for editing:', parsedFields)
+        console.log('Parsed fields for editing:', parsedFields)
+        console.log('🔍 Debug - First field nestedFields:', parsedFields[0]?.nestedFields)
+        console.log('🔍 Debug - First field options:', parsedFields[0]?.options)
       
       setEditingForm({
         ...formDetails,
@@ -403,8 +614,9 @@ export default function MyFormsPage() {
                          form.description?.toLowerCase().includes(searchTerm.toLowerCase())
     
     const matchesStatus = statusFilter === "all" || 
-                         (statusFilter === "published" && form.published) ||
-                         (statusFilter === "draft" && !form.published)
+                         (statusFilter === "published" && form.published && !form.archived) ||
+                         (statusFilter === "draft" && !form.published && !form.archived) ||
+                         (statusFilter === "archived" && form.archived)
     
     return matchesSearch && matchesStatus
   })
@@ -500,6 +712,7 @@ export default function MyFormsPage() {
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="published">Published</SelectItem>
                 <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
               </SelectContent>
             </Select>
 
@@ -612,9 +825,21 @@ export default function MyFormsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={form.published ? "default" : "secondary"}>
-                          {form.published ? "Published" : "Draft"}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge 
+                            variant={
+                              form.archived ? "destructive" : 
+                              form.published ? "default" : "secondary"
+                            }
+                          >
+                            {form.archived ? "Archived" : form.published ? "Published" : "Draft"}
+                          </Badge>
+                          {form.archived && (
+                            <span className="text-xs text-muted-foreground">
+                              Inactive - Users cannot access
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
@@ -623,22 +848,23 @@ export default function MyFormsPage() {
                             variant="outline" 
                             onClick={() => handleEditForm(form.form_id)}
                             title="Edit form"
+                            disabled={form.archived}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button 
                             size="sm" 
                             variant="outline" 
-                            onClick={() => copyFormLink(form.form_id)}
-                            title="Copy form link"
+                            onClick={() => copyFormLink(form.form_id, form.archived)}
+                            title={form.archived ? "Form archived - cannot copy link" : "Copy form link"}
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
                           <Button 
                             size="sm" 
                             variant="outline"
-                            onClick={() => openFormInNewTab(form.form_id)}
-                            title="Open form in new tab"
+                            onClick={() => openFormInNewTab(form.form_id, form.archived)}
+                            title={form.archived ? "Form archived - cannot open" : "Open form in new tab"}
                           >
                             <ExternalLink className="h-4 w-4" />
                           </Button>
@@ -649,6 +875,34 @@ export default function MyFormsPage() {
                             disabled
                           >
                             <BarChart3 className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant={form.archived ? "default" : "outline"}
+                            onClick={() => toggleArchiveForm(form.form_id, form.archived)}
+                            title={form.archived ? "Unarchive form" : "Archive form"}
+                            disabled={archivingForm === form.form_id}
+                          >
+                            {archivingForm === form.form_id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : form.archived ? (
+                              <ArchiveRestore className="h-4 w-4" />
+                            ) : (
+                              <Archive className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="destructive"
+                            onClick={() => confirmDelete(form)}
+                            title="Delete form"
+                            disabled={deletingForm === form.form_id}
+                          >
+                            {deletingForm === form.form_id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
                           </Button>
                         </div>
                       </TableCell>
@@ -773,6 +1027,43 @@ export default function MyFormsPage() {
         onOpenChange={setEditDialogOpen}
         onSave={handleUpdateForm}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this form?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the form "
+              <span className="font-semibold">{formToDelete?.form_name}</span>" and all of its data.
+              {formToDelete?.published && (
+                <span className="block mt-2 text-amber-600 font-medium">
+                  ⚠️ This form is currently published. Deleting it will make it inaccessible to users.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingForm === formToDelete?.form_id}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteForm(formToDelete?.form_id)}
+              disabled={deletingForm === formToDelete?.form_id}
+              className="bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {deletingForm === formToDelete?.form_id ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete Form'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

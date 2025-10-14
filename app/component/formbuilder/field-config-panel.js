@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, X, Copy, Trash2, Settings2, ChevronDown, ChevronRight, ChevronUp } from "lucide-react"
 import { useState } from "react"
+import { TableColumnSelector } from "./table-column-selector"
 
 export function FieldConfigPanel({ field, onUpdateField }) {
   const [newOption, setNewOption] = useState("")
@@ -347,7 +348,7 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                       <div className="ml-4 space-y-3">
                           {nestedField.nestedFields?.[optionIndex]?.map((childField, childIndex) => (
                           <NestedFieldConfig
-                              key={childField.id}
+                              key={childField.id || `child-${optionIndex}-${childIndex}-${childField.label || 'field'}`}
                               nestedField={childField}
                               path={[...path, optionIndex, childIndex]}
                           />
@@ -561,7 +562,7 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                         <div className="space-y-3">
                           {field.nestedFields?.[index]?.map((nestedField, nestedIndex) => (
                             <NestedFieldConfig
-                              key={nestedField.id}
+                              key={nestedField.id || `nested-${index}-${nestedIndex}-${nestedField.label || 'field'}`}
                               nestedField={nestedField}
                                 path={[index, nestedIndex]}
                             />
@@ -690,6 +691,23 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                   />
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Table Column Selector */}
+        {field.type === "table_column" && (
+          <Card className="border-0 shadow-none bg-transparent">
+            <CardHeader className="px-0 pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                Table Columns
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-0">
+              <TableColumnSelector 
+                field={field} 
+                onUpdateField={onUpdateField} 
+              />
             </CardContent>
           </Card>
         )}

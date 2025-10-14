@@ -94,7 +94,7 @@ export function FormPreview({ fields }) {
   //     const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
   //     const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
   //     const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
-  //     const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwMzM1OTgyLCJleHAiOjE3NjA0MjIzODJ9.i8x4KfEjbRhMp454y_maUARuNDo0pTyM8dcTmutFjrY'
+  //     const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwNDM2MjAyLCJleHAiOjE3NjA1MjI2MDJ9.rXbGaZSpO0G6tMp-OiTTERW7D0pCXi5OutXH-8exGnw'
 
   //     // Get existing table columns to avoid duplicates
   //     let existingColumns = []
@@ -421,7 +421,7 @@ const handleGenerateLink = async () => {
     const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
     const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
     const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
-    const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwMzM1OTgyLCJleHAiOjE3NjA0MjIzODJ9.i8x4KfEjbRhMp454y_maUARuNDo0pTyM8dcTmutFjrY'
+    const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwNDM2MjAyLCJleHAiOjE3NjA1MjI2MDJ9.rXbGaZSpO0G6tMp-OiTTERW7D0pCXi5OutXH-8exGnw'
 
     // Recursive function to process nested fields
     const processNestedFields = (nestedFields, parentIndex = null) => {

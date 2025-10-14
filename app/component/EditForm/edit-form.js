@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Loader2, Save, X, Edit, Download, Eye, File, Image, Upload } from "lucide-react"
+import { TableColumnSelector } from "../formbuilder/table-column-selector"
 
 // Enhanced helper functions
 const formatFileSize = (bytes) => {
@@ -237,12 +238,77 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
           hasValue: !!(form.values && form.values[field.id])
         })
         
-        // Handle options
+        // Parse options and extract nested fields
         let options = []
+        let nestedFields = {}
+        
         if (Array.isArray(field.options)) {
           options = field.options
         } else if (typeof field.options === 'string') {
-          options = field.options.split(',').map(opt => opt.trim()).filter(opt => opt)
+          try {
+            const parsedOptions = JSON.parse(field.options)
+            console.log('🔍 Raw parsed options:', parsedOptions)
+            if (Array.isArray(parsedOptions)) {
+              // Extract options and nested fields from the complex structure
+              options = parsedOptions.map((option, optionIndex) => {
+                if (typeof option === 'object' && option.value) {
+                  // If this option has nested fields, extract them recursively
+                  if (option.nestedFields && Array.isArray(option.nestedFields) && option.nestedFields.length > 0) {
+                    const parseNestedFields = (nestedFieldsArray) => {
+                      return nestedFieldsArray.map(nestedField => {
+                        const parsedNestedField = {
+                          id: nestedField.id,
+                          name: nestedField.name,
+                          type: nestedField.type,
+                          label: nestedField.label,
+                          placeholder: nestedField.placeholder || '',
+                          required: nestedField.required === true || nestedField.required === 'true' || false,
+                          options: [],
+                          validation: nestedField.validations || {},
+                          nestedFields: {}
+                        }
+                        
+                        // Parse options if they exist
+                        if (nestedField.options && Array.isArray(nestedField.options)) {
+                          console.log('🔍 Parsing nested field options:', nestedField.options)
+                          parsedNestedField.options = nestedField.options.map(opt => {
+                            if (typeof opt === 'object' && opt.value) {
+                              return opt.value || opt.label || 'Option'
+                            }
+                            return typeof opt === 'string' ? opt : (opt.value || opt.label || 'Option')
+                          })
+                          console.log('🔍 Parsed nested field options:', parsedNestedField.options)
+                          
+                          // Parse sub-nested fields from options
+                          const subNestedFields = {}
+                          nestedField.options.forEach((subOption, subOptionIndex) => {
+                            if (typeof subOption === 'object' && subOption.nestedFields && Array.isArray(subOption.nestedFields) && subOption.nestedFields.length > 0) {
+                              subNestedFields[subOptionIndex] = parseNestedFields(subOption.nestedFields)
+                            }
+                          })
+                          // Only set nestedFields if there are actual nested fields
+                          if (Object.keys(subNestedFields).length > 0) {
+                            parsedNestedField.nestedFields = subNestedFields
+                          }
+                        }
+                        
+                        return parsedNestedField
+                      })
+                    }
+                    
+                    nestedFields[optionIndex] = parseNestedFields(option.nestedFields)
+                  }
+                  return option.value || option.label || 'Option'
+                }
+                return typeof option === 'string' ? option : (option.value || option.label || 'Option')
+              })
+              console.log('🔍 Final options array:', options)
+            } else {
+              options = parsedOptions
+            }
+          } catch (e) {
+            options = field.options.split(',').map(opt => opt.trim()).filter(opt => opt)
+          }
         }
         
         // Parse validation
@@ -291,7 +357,6 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
         }
         
         // Parse nested fields
-        let nestedFields = {}
         if (field.nested_fields) {
           if (typeof field.nested_fields === 'string') {
             try {
@@ -305,6 +370,66 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
         } else if (field.nestedFields) {
           // Handle camelCase version
           nestedFields = field.nestedFields
+        }
+        
+        // If options contain nested fields, extract them
+        if (Array.isArray(field.options)) {
+          field.options.forEach((option, optionIndex) => {
+            if (typeof option === 'object' && option.nestedFields) {
+              nestedFields[optionIndex] = option.nestedFields
+            }
+          })
+        }
+        
+        // Parse nestedValues from form values if they exist
+        if (form.values && form.values[field.id] && form.values[field.id].nestedValues) {
+          const nestedValues = form.values[field.id].nestedValues
+          console.log('🔍 Found nestedValues for field:', field.id, nestedValues)
+          
+          // Convert nestedValues structure to nestedFields structure
+          const convertNestedValues = (nestedValuesObj, level = 0) => {
+            if (!nestedValuesObj || typeof nestedValuesObj !== 'object') return []
+            
+            return Object.entries(nestedValuesObj).map(([key, value], nestedIndex) => {
+              // Detect field type based on structure
+              let fieldType = 'text'
+              let options = []
+              
+              // If it has nestedValues, it might be a select/checkbox/radio
+              if (value.nestedValues && Object.keys(value.nestedValues).length > 0) {
+                fieldType = 'select' // Default to select for nested structures
+                // Extract options from the nestedValues keys or values
+                options = Object.values(value.nestedValues).map(nestedValue => 
+                  nestedValue.value || 'Option'
+                )
+              }
+              
+              const nestedField = {
+                id: key,
+                type: fieldType,
+                label: `Nested Field ${nestedIndex + 1}`,
+                placeholder: '',
+                required: false,
+                value: value.value || '',
+                options: options,
+                nestedFields: {}
+              }
+              
+              // If this nested field has its own nestedValues, process them recursively
+              if (value.nestedValues) {
+                nestedField.nestedFields = convertNestedValues(value.nestedValues, level + 1)
+              }
+              
+              return nestedField
+            })
+          }
+          
+          // Convert the nestedValues to the expected nestedFields structure
+          const convertedNestedFields = convertNestedValues(nestedValues)
+          if (convertedNestedFields.length > 0) {
+            // Map to the first option (Option 1) since that's what the payload shows
+            nestedFields[0] = convertedNestedFields
+          }
         }
 
         return {
@@ -345,7 +470,14 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
       const initialOptionsInputs = {}
       parsedFields.forEach((field, index) => {
         if (field.options && field.options.length > 0) {
-          initialOptionsInputs[index] = field.options.join(', ')
+          // Convert options to string format for input
+          const optionsString = field.options.map(opt => {
+            if (typeof opt === 'object' && opt !== null) {
+              return opt.label || opt.value || opt.id || 'Option'
+            }
+            return opt
+          }).join(', ')
+          initialOptionsInputs[index] = optionsString
         }
       })
       setOptionsInputs(initialOptionsInputs)
@@ -367,7 +499,7 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
           const processedField = { ...field }
           
           // Ensure nested fields are included
-          if (field.nestedFields) {
+          if (field.nestedFields && Object.keys(field.nestedFields).length > 0) {
             processedField.nestedFields = field.nestedFields
           }
           
@@ -573,7 +705,7 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className="edit-dialog-content">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Edit className="h-5 w-5" />
@@ -672,6 +804,7 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                         <option value="file">File</option>
                         <option value="phone">Phone</option>
                         <option value="location">Location</option>
+                        <option value="table_column">Table Columns</option>
                       </select>
                     </div>
                     <div className="space-y-2">
@@ -686,7 +819,7 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                       <input
                         type="checkbox"
                         id={`required-${index}`}
-                        checked={getBooleanRequired(field.required)}
+                        checked={Boolean(field.required)}
                         onChange={(e) => updateField(index, { required: e.target.checked })}
                         className="mr-2"
                       />
@@ -716,7 +849,7 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                           <div className="flex flex-wrap gap-1">
                             {field.options.map((option, optIndex) => (
                               <Badge key={optIndex} variant="outline" className="text-xs">
-                                {option}
+                                {typeof option === 'object' ? (option.label || option.value || option.id || 'Option') : option}
                               </Badge>
                             ))}
                           </div>
@@ -753,14 +886,16 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                         </Badge>
                       </div>
                       
-                      {field.options.map((option, optionIndex) => (
+                      {field.options.map((option, optionIndex) => {
+                        const optionLabel = typeof option === 'object' ? (option.label || option.value || option.id || 'Option') : option
+                        return (
                         <div key={optionIndex} className="space-y-3 p-3 border rounded-lg bg-muted/20">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <Badge variant="secondary" className="text-xs">
                                 Option {optionIndex + 1}
                               </Badge>
-                              <span className="font-medium text-sm">{option}</span>
+                              <span className="font-medium text-sm">{optionLabel}</span>
                             </div>
                             <Button
                               size="sm"
@@ -793,7 +928,7 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                           </div>
                           
                           {field.nestedFields?.[optionIndex]?.map((nestedField, nestedIndex) => (
-                            <div key={nestedField.id} className="ml-4 p-3 border rounded bg-background space-y-3">
+                            <div key={nestedField.id || `nested-${index}-${optionIndex}-${nestedIndex}`} className="ml-4 p-3 border rounded bg-background space-y-3">
                               <div className="flex items-center justify-between">
                                 <Badge variant="outline" className="text-xs">
                                   Additional Field {nestedIndex + 1}
@@ -858,6 +993,10 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                                           if (["checkbox", "radio", "select"].includes(e.target.value) && !updatedField.options) {
                                             updatedField.options = ["Option 1", "Option 2", "Option 3"]
                                           }
+                                          // Clear options if changing away from option-based types
+                                          if (!["checkbox", "radio", "select"].includes(e.target.value)) {
+                                            updatedField.options = []
+                                          }
                                           
                                           return updatedField
                                         }
@@ -914,7 +1053,7 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                                   <input
                                     type="checkbox"
                                     id={`nested-required-${index}-${optionIndex}-${nestedIndex}`}
-                                    checked={nestedField.required || false}
+                                    checked={Boolean(nestedField.required)}
                                     onChange={(e) => {
                                       const currentNestedFields = field.nestedFields || {}
                                       const optionNestedFields = currentNestedFields[optionIndex] || []
@@ -942,7 +1081,9 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                                 <div className="space-y-2">
                                   <Label className="text-xs">Options</Label>
                                   <Input
-                                    value={(nestedField.options || []).join(", ")}
+                                    value={(nestedField.options || []).map(opt => 
+                                      typeof opt === 'object' ? (opt.label || opt.value || opt.id || 'Option') : opt
+                                    ).join(", ")}
                                     onChange={(e) => {
                                       const options = e.target.value.split(",").map(opt => opt.trim()).filter(opt => opt)
                                       const currentNestedFields = field.nestedFields || {}
@@ -963,6 +1104,304 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                                   />
                                 </div>
                               )}
+                              
+                              {/* Multi-level nested fields for nested select, checkbox, radio */}
+                              {["select", "checkbox", "radio"].includes(nestedField.type) && nestedField.options && nestedField.options.length > 0 && (
+                                <div className="space-y-3 border-t pt-3 ml-4">
+                                  <div className="flex items-center justify-between">
+                                    <Label className="text-xs font-medium">Sub-options Additional Fields</Label>
+                                    <Badge variant="outline" className="text-xs">
+                                      {Object.keys(nestedField.nestedFields || {}).length} sub-option{Object.keys(nestedField.nestedFields || {}).length !== 1 ? 's' : ''} configured
+                                    </Badge>
+                                  </div>
+                                  
+                                  {nestedField.options.map((subOption, subOptionIndex) => (
+                                    <div key={subOptionIndex} className="space-y-2 p-2 border rounded bg-muted/10">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                          <Badge variant="secondary" className="text-xs">
+                                            Sub-option {subOptionIndex + 1}
+                                          </Badge>
+                                          <span className="font-medium text-xs">
+                                            {typeof subOption === 'object' ? (subOption.label || subOption.value || subOption.id || 'Option') : subOption}
+                                          </span>
+                                        </div>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => {
+                                            const currentNestedFields = field.nestedFields || {}
+                                            const optionNestedFields = currentNestedFields[optionIndex] || []
+                                            const nestedFieldData = optionNestedFields[nestedIndex] || {}
+                                            const currentSubNestedFields = nestedFieldData.nestedFields || {}
+                                            const subOptionNestedFields = currentSubNestedFields[subOptionIndex] || []
+                                            
+                                            const newSubNestedField = {
+                                              id: `sub-nested-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                                              type: "text",
+                                              label: "Sub-additional Field",
+                                              placeholder: "",
+                                              required: false
+                                            }
+                                            
+                                            const updatedSubNestedFields = {
+                                              ...currentSubNestedFields,
+                                              [subOptionIndex]: [...subOptionNestedFields, newSubNestedField]
+                                            }
+                                            
+                                            const updatedNestedField = {
+                                              ...nestedFieldData,
+                                              nestedFields: updatedSubNestedFields
+                                            }
+                                            
+                                            const updatedNestedFields = optionNestedFields.map((f, i) =>
+                                              i === nestedIndex ? updatedNestedField : f
+                                            )
+                                            
+                                            updateField(index, {
+                                              nestedFields: {
+                                                ...currentNestedFields,
+                                                [optionIndex]: updatedNestedFields
+                                              }
+                                            })
+                                          }}
+                                          className="h-6 text-xs"
+                                        >
+                                          Add Field
+                                        </Button>
+                                      </div>
+                                      
+                                      {nestedField.nestedFields?.[subOptionIndex]?.map((subNestedField, subNestedIndex) => (
+                                        <div key={subNestedField.id || `sub-nested-${index}-${optionIndex}-${nestedIndex}-${subOptionIndex}-${subNestedIndex}`} className="ml-4 p-2 border rounded bg-background space-y-2">
+                                          <div className="flex items-center justify-between">
+                                            <Badge variant="outline" className="text-xs">
+                                              Sub-additional Field {subNestedIndex + 1}
+                                            </Badge>
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              onClick={() => {
+                                                const currentNestedFields = field.nestedFields || {}
+                                                const optionNestedFields = currentNestedFields[optionIndex] || []
+                                                const nestedFieldData = optionNestedFields[nestedIndex] || {}
+                                                const currentSubNestedFields = nestedFieldData.nestedFields || {}
+                                                const subOptionNestedFields = currentSubNestedFields[subOptionIndex] || []
+                                                const updatedSubNestedFields = subOptionNestedFields.filter((_, i) => i !== subNestedIndex)
+                                                
+                                                const updatedNestedField = {
+                                                  ...nestedFieldData,
+                                                  nestedFields: {
+                                                    ...currentSubNestedFields,
+                                                    [subOptionIndex]: updatedSubNestedFields
+                                                  }
+                                                }
+                                                
+                                                const updatedNestedFields = optionNestedFields.map((f, i) =>
+                                                  i === nestedIndex ? updatedNestedField : f
+                                                )
+                                                
+                                                updateField(index, {
+                                                  nestedFields: {
+                                                    ...currentNestedFields,
+                                                    [optionIndex]: updatedNestedFields
+                                                  }
+                                                })
+                                              }}
+                                              className="h-5 w-5 p-0 text-red-600 hover:text-red-700"
+                                            >
+                                              <X className="h-2 w-2" />
+                                            </Button>
+                                          </div>
+                                          
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                            <div className="space-y-1">
+                                              <Label className="text-xs">Field Label</Label>
+                                              <Input
+                                                value={subNestedField.label || ""}
+                                                onChange={(e) => {
+                                                  const currentNestedFields = field.nestedFields || {}
+                                                  const optionNestedFields = currentNestedFields[optionIndex] || []
+                                                  const nestedFieldData = optionNestedFields[nestedIndex] || {}
+                                                  const currentSubNestedFields = nestedFieldData.nestedFields || {}
+                                                  const subOptionNestedFields = currentSubNestedFields[subOptionIndex] || []
+                                                  const updatedSubNestedFields = subOptionNestedFields.map((f, i) =>
+                                                    i === subNestedIndex ? { ...f, label: e.target.value } : f
+                                                  )
+                                                  
+                                                  const updatedNestedField = {
+                                                    ...nestedFieldData,
+                                                    nestedFields: {
+                                                      ...currentSubNestedFields,
+                                                      [subOptionIndex]: updatedSubNestedFields
+                                                    }
+                                                  }
+                                                  
+                                                  const updatedNestedFields = optionNestedFields.map((f, i) =>
+                                                    i === nestedIndex ? updatedNestedField : f
+                                                  )
+                                                  
+                                                  updateField(index, {
+                                                    nestedFields: {
+                                                      ...currentNestedFields,
+                                                      [optionIndex]: updatedNestedFields
+                                                    }
+                                                  })
+                                                }}
+                                                placeholder="Field label"
+                                                className="h-7 text-xs"
+                                              />
+                                            </div>
+                                            
+                                            <div className="space-y-1">
+                                              <Label className="text-xs">Field Type</Label>
+                                              <select
+                                                value={subNestedField.type || "text"}
+                                                onChange={(e) => {
+                                                  const currentNestedFields = field.nestedFields || {}
+                                                  const optionNestedFields = currentNestedFields[optionIndex] || []
+                                                  const nestedFieldData = optionNestedFields[nestedIndex] || {}
+                                                  const currentSubNestedFields = nestedFieldData.nestedFields || {}
+                                                  const subOptionNestedFields = currentSubNestedFields[subOptionIndex] || []
+                                                  const updatedSubNestedFields = subOptionNestedFields.map((f, i) => {
+                                                    if (i === subNestedIndex) {
+                                                      const updatedField = { ...f, type: e.target.value }
+                                                      if (["checkbox", "radio", "select"].includes(e.target.value) && !updatedField.options) {
+                                                        updatedField.options = ["Option 1", "Option 2", "Option 3"]
+                                                      }
+                                                      if (!["checkbox", "radio", "select"].includes(e.target.value)) {
+                                                        updatedField.options = []
+                                                      }
+                                                      return updatedField
+                                                    }
+                                                    return f
+                                                  })
+                                                  
+                                                  const updatedNestedField = {
+                                                    ...nestedFieldData,
+                                                    nestedFields: {
+                                                      ...currentSubNestedFields,
+                                                      [subOptionIndex]: updatedSubNestedFields
+                                                    }
+                                                  }
+                                                  
+                                                  const updatedNestedFields = optionNestedFields.map((f, i) =>
+                                                    i === nestedIndex ? updatedNestedField : f
+                                                  )
+                                                  
+                                                  updateField(index, {
+                                                    nestedFields: {
+                                                      ...currentNestedFields,
+                                                      [optionIndex]: updatedNestedFields
+                                                    }
+                                                  })
+                                                }}
+                                                className="w-full h-7 p-1 border rounded text-xs"
+                                              >
+                                                <option value="text">Text Input</option>
+                                                <option value="email">Email</option>
+                                                <option value="number">Number</option>
+                                                <option value="textarea">Textarea</option>
+                                                <option value="select">Select Dropdown</option>
+                                                <option value="checkbox">Checkbox Group</option>
+                                                <option value="radio">Radio Group</option>
+                                                <option value="file">File Upload</option>
+                                                <option value="datetime">Date & Time</option>
+                                                <option value="phone">Phone Number</option>
+                                                <option value="location">Location</option>
+                                              </select>
+                                            </div>
+                                            
+                                            <div className="space-y-1">
+                                              <Label className="text-xs">Placeholder</Label>
+                                              <Input
+                                                value={subNestedField.placeholder || ""}
+                                                onChange={(e) => {
+                                                  const currentNestedFields = field.nestedFields || {}
+                                                  const optionNestedFields = currentNestedFields[optionIndex] || []
+                                                  const nestedFieldData = optionNestedFields[nestedIndex] || {}
+                                                  const currentSubNestedFields = nestedFieldData.nestedFields || {}
+                                                  const subOptionNestedFields = currentSubNestedFields[subOptionIndex] || []
+                                                  const updatedSubNestedFields = subOptionNestedFields.map((f, i) =>
+                                                    i === subNestedIndex ? { ...f, placeholder: e.target.value } : f
+                                                  )
+                                                  
+                                                  const updatedNestedField = {
+                                                    ...nestedFieldData,
+                                                    nestedFields: {
+                                                      ...currentSubNestedFields,
+                                                      [subOptionIndex]: updatedSubNestedFields
+                                                    }
+                                                  }
+                                                  
+                                                  const updatedNestedFields = optionNestedFields.map((f, i) =>
+                                                    i === nestedIndex ? updatedNestedField : f
+                                                  )
+                                                  
+                                                  updateField(index, {
+                                                    nestedFields: {
+                                                      ...currentNestedFields,
+                                                      [optionIndex]: updatedNestedFields
+                                                    }
+                                                  })
+                                                }}
+                                                placeholder="Placeholder text"
+                                                className="h-7 text-xs"
+                                              />
+                                            </div>
+                                            
+                                            <div className="space-y-1 flex items-center">
+                                              <input
+                                                type="checkbox"
+                                                id={`sub-nested-required-${index}-${optionIndex}-${nestedIndex}-${subOptionIndex}-${subNestedIndex}`}
+                                                checked={Boolean(subNestedField.required)}
+                                                onChange={(e) => {
+                                                  const currentNestedFields = field.nestedFields || {}
+                                                  const optionNestedFields = currentNestedFields[optionIndex] || []
+                                                  const nestedFieldData = optionNestedFields[nestedIndex] || {}
+                                                  const currentSubNestedFields = nestedFieldData.nestedFields || {}
+                                                  const subOptionNestedFields = currentSubNestedFields[subOptionIndex] || []
+                                                  const updatedSubNestedFields = subOptionNestedFields.map((f, i) =>
+                                                    i === subNestedIndex ? { ...f, required: e.target.checked } : f
+                                                  )
+                                                  
+                                                  const updatedNestedField = {
+                                                    ...nestedFieldData,
+                                                    nestedFields: {
+                                                      ...currentSubNestedFields,
+                                                      [subOptionIndex]: updatedSubNestedFields
+                                                    }
+                                                  }
+                                                  
+                                                  const updatedNestedFields = optionNestedFields.map((f, i) =>
+                                                    i === nestedIndex ? updatedNestedField : f
+                                                  )
+                                                  
+                                                  updateField(index, {
+                                                    nestedFields: {
+                                                      ...currentNestedFields,
+                                                      [optionIndex]: updatedNestedFields
+                                                    }
+                                                  })
+                                                }}
+                                                className="mr-2"
+                                              />
+                                              <Label htmlFor={`sub-nested-required-${index}-${optionIndex}-${nestedIndex}-${subOptionIndex}-${subNestedIndex}`} className="text-xs">
+                                                Required Field
+                                              </Label>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                      
+                                      {(!nestedField.nestedFields?.[subOptionIndex] || nestedField.nestedFields[subOptionIndex].length === 0) && (
+                                        <div className="ml-4 text-center py-2 text-muted-foreground text-xs border-2 border-dashed rounded bg-muted/5">
+                                          No sub-additional fields for this sub-option
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           ))}
                           
@@ -972,7 +1411,8 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                             </div>
                           )}
                         </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
 
@@ -1060,6 +1500,107 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                           <p className="text-sm">Upload a file to see it here</p>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* Table field specific settings */}
+                  {field.type === "table" && (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Table Columns</Label>
+                        <div className="space-y-3">
+                          {(field.tableColumns || []).map((column, columnIndex) => (
+                            <div key={columnIndex} className="flex items-center gap-2 p-3 border rounded-lg bg-muted/20">
+                              <div className="flex-1 grid grid-cols-2 gap-2">
+                                <Input
+                                  value={column.name || ""}
+                                  onChange={(e) => {
+                                    const newColumns = [...(field.tableColumns || [])]
+                                    newColumns[columnIndex] = { ...newColumns[columnIndex], name: e.target.value }
+                                    updateField(index, { tableColumns: newColumns })
+                                  }}
+                                  placeholder="Column name"
+                                  className="h-8 text-sm"
+                                />
+                                <select
+                                  value={column.type || "text"}
+                                  onChange={(e) => {
+                                    const newColumns = [...(field.tableColumns || [])]
+                                    newColumns[columnIndex] = { ...newColumns[columnIndex], type: e.target.value }
+                                    updateField(index, { tableColumns: newColumns })
+                                  }}
+                                  className="h-8 p-1 border rounded text-sm"
+                                >
+                                  <option value="text">Text</option>
+                                  <option value="number">Number</option>
+                                  <option value="email">Email</option>
+                                  <option value="date">Date</option>
+                                  <option value="select">Select</option>
+                                  <option value="checkbox">Checkbox</option>
+                                </select>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  const newColumns = (field.tableColumns || []).filter((_, i) => i !== columnIndex)
+                                  updateField(index, { tableColumns: newColumns })
+                                }}
+                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ))}
+                          
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const newColumns = [...(field.tableColumns || []), { name: "", type: "text" }]
+                              updateField(index, { tableColumns: newColumns })
+                            }}
+                            className="w-full"
+                          >
+                            Add Column
+                          </Button>
+                          
+                          {(!field.tableColumns || field.tableColumns.length === 0) && (
+                            <div className="text-center py-4 text-muted-foreground text-sm border-2 border-dashed rounded-lg bg-muted/10">
+                              No columns added yet. Click "Add Column" to get started.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Table Column Selector */}
+                  {field.type === "table_column" && (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Select Table Columns</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Choose columns from your database table to add as form fields
+                        </p>
+                        <TableColumnSelector 
+                          field={{
+                            ...field,
+                            onAddTableColumns: (newFields) => {
+                              console.log('🚀 onAddTableColumns called in EditForm with:', newFields)
+                              // Add the new fields to the form
+                              setFormData(prev => ({
+                                ...prev,
+                                fields: [...prev.fields, ...newFields]
+                              }))
+                            }
+                          }} 
+                          onUpdateField={(fieldId, updates) => {
+                            // This is not used for table_column fields, but required by the component
+                            console.log('onUpdateField called for table_column field:', fieldId, updates)
+                          }} 
+                        />
+                      </div>
                     </div>
                   )}
 
