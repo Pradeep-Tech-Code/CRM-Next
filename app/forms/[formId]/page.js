@@ -150,9 +150,30 @@ const transformFormValues = (formValues, fields) => {
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         // Handle nested object structure
         if (value.value !== undefined) {
-          // Ensure value is not wrapped in array
+          // Handle checkbox fields with multiple selections
           let processedValueValue = value.value
-          if (Array.isArray(processedValueValue) && processedValueValue.length === 1) {
+          if (Array.isArray(processedValueValue) && processedValueValue.length > 1) {
+            // Multiple checkbox selections - create array of objects with nested values
+            processedValueValue = processedValueValue.map(optionValue => {
+              const checkboxItem = { value: optionValue }
+              
+              // Find nested fields for this specific option
+              if (value.nestedFields && Object.keys(value.nestedFields).length > 0) {
+                // Look for nested fields that match this option value
+                const optionNestedFields = value.nestedFields[optionValue] || 
+                                         value.nestedFields[processedValueValue.indexOf(optionValue)]
+                
+                if (optionNestedFields) {
+                  const processedNested = transformNestedValues(optionNestedFields, optionValue, fieldDefinition)
+                  if (Object.keys(processedNested).length > 0) {
+                    checkboxItem.nestedValues = processedNested
+                  }
+                }
+              }
+              
+              return checkboxItem
+            })
+          } else if (Array.isArray(processedValueValue) && processedValueValue.length === 1) {
             processedValueValue = processedValueValue[0]
           }
 
@@ -161,8 +182,9 @@ const transformFormValues = (formValues, fields) => {
             value: processedValueValue
           }
 
-          // Add nested values if they exist
-          if (value.nestedFields && Object.keys(value.nestedFields).length > 0) {
+          // Add nested values if they exist (but not for multiple checkbox selections)
+          if (value.nestedFields && Object.keys(value.nestedFields).length > 0 && 
+              !(Array.isArray(value.value) && value.value.length > 1)) {
             const processedNested = transformNestedValues(value.nestedFields, processedValueValue, fieldDefinition)
             if (Object.keys(processedNested).length > 0) {
               processedValue.nestedValues = processedNested
@@ -223,11 +245,18 @@ const transformFormValues = (formValues, fields) => {
           }
         }
       } else if (value !== undefined && value !== null) {
-        // Simple value - don't wrap in array, but handle if value is already an array
-        if (Array.isArray(value) && value.length === 1) {
-          // If value is an array with one item, extract that item
+        // Handle checkbox fields in nested values - check if this is a checkbox field
+        if (Array.isArray(value) && value.length > 1) {
+          // This looks like multiple checkbox selections - create array of objects
+          const checkboxArray = value.map(optionValue => {
+            return { value: optionValue }
+          })
+          fieldValues[fieldId] = { value: checkboxArray }
+        } else if (Array.isArray(value) && value.length === 1) {
+          // Single item array - extract the item
           fieldValues[fieldId] = { value: value[0] }
         } else {
+          // Simple value
           fieldValues[fieldId] = { value }
         }
       }
@@ -352,8 +381,68 @@ const transformFormValues = (formValues, fields) => {
         break
 
       case "checkbox":
+        // Handle checkbox fields with multiple selections
+        if (typeof fieldValue === 'object' && fieldValue !== null) {
+          if (fieldValue.value !== undefined || fieldValue.nestedFields) {
+            let processedValue = fieldValue.value
+
+            // For checkboxes, handle multiple selections properly
+            if (Array.isArray(processedValue)) {
+              // Multiple checkbox selections - create array of objects
+              const checkboxArray = processedValue.map(optionValue => {
+                const checkboxItem = { value: optionValue }
+                
+                // Find nested fields for this specific option
+                if (fieldValue.nestedFields && Object.keys(fieldValue.nestedFields).length > 0) {
+                  // Look for nested fields that match this option value
+                  const optionNestedFields = fieldValue.nestedFields[optionValue] || 
+                                           fieldValue.nestedFields[processedValue.indexOf(optionValue)]
+                  
+                  if (optionNestedFields) {
+                    const processedNested = transformNestedValues(optionNestedFields, optionValue, field)
+                    if (Object.keys(processedNested).length > 0) {
+                      checkboxItem.nestedValues = processedNested
+                    }
+                  }
+                }
+                
+                return checkboxItem
+              })
+              
+              transformedValues[finalFieldKey] = { value: checkboxArray }
+            } else {
+              // Single checkbox selection
+              const fieldData = { value: processedValue }
+              
+              if (fieldValue.nestedFields && Object.keys(fieldValue.nestedFields).length > 0) {
+                const processedNested = transformNestedValues(fieldValue.nestedFields, processedValue, field)
+                if (Object.keys(processedNested).length > 0) {
+                  fieldData.nestedValues = processedNested
+                }
+              }
+              
+              transformedValues[finalFieldKey] = fieldData
+            }
+          } else {
+            // Fallback for simple values
+            let processedValue = fieldValue
+            if (Array.isArray(processedValue) && processedValue.length === 1) {
+              processedValue = processedValue[0]
+            }
+            transformedValues[finalFieldKey] = { value: processedValue }
+          }
+        } else {
+          // Handle direct values that might be arrays
+          let processedValue = fieldValue
+          if (Array.isArray(processedValue) && processedValue.length === 1) {
+            processedValue = processedValue[0]
+          }
+          transformedValues[finalFieldKey] = { value: processedValue }
+        }
+        break
+
       case "radio":
-        // Handle fields with nested values
+        // Handle radio fields with single selection
         if (typeof fieldValue === 'object' && fieldValue !== null) {
           if (fieldValue.value !== undefined || fieldValue.nestedFields) {
             // Ensure value is not wrapped in array for single selections
