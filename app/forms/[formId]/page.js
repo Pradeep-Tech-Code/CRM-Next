@@ -177,21 +177,26 @@ const transformFormValues = (formValues, fields) => {
             processedValueValue = processedValueValue[0]
           }
 
-          // Store the actual selected value, not the parent option
-          const processedValue = {
-            value: processedValueValue
-          }
-
-          // Add nested values if they exist (but not for multiple checkbox selections)
-          if (value.nestedFields && Object.keys(value.nestedFields).length > 0 && 
-              !(Array.isArray(value.value) && value.value.length > 1)) {
-            const processedNested = transformNestedValues(value.nestedFields, processedValueValue, fieldDefinition)
-            if (Object.keys(processedNested).length > 0) {
-              processedValue.nestedValues = processedNested
+          // Handle checkbox fields with multiple selections differently
+          if (Array.isArray(value.value) && value.value.length > 1) {
+            // For multiple checkbox selections, store directly as array
+            fieldValues[fieldId] = processedValueValue
+          } else {
+            // For single values, wrap in object structure
+            const processedValue = {
+              value: processedValueValue
             }
-          }
 
-          fieldValues[fieldId] = processedValue
+            // Add nested values if they exist
+            if (value.nestedFields && Object.keys(value.nestedFields).length > 0) {
+              const processedNested = transformNestedValues(value.nestedFields, processedValueValue, fieldDefinition)
+              if (Object.keys(processedNested).length > 0) {
+                processedValue.nestedValues = processedNested
+              }
+            }
+
+            fieldValues[fieldId] = processedValue
+          }
         } else {
           // Direct nested object - process recursively
           const processedNested = transformNestedValues(value, parentValue, fieldDefinition)
@@ -550,7 +555,21 @@ const transformSubmissionValues = (submissionValues, fields) => {
     Object.keys(nestedValues).forEach(key => {
       const value = nestedValues[key]
       
-      if (typeof value === 'object' && value !== null) {
+      if (Array.isArray(value)) {
+        // Handle checkbox arrays - convert to nested fields structure
+        const checkboxFields = {}
+        value.forEach((item, index) => {
+          if (typeof item === 'object' && item !== null && item.value !== undefined) {
+            checkboxFields[index] = {
+              value: item.value,
+              ...(item.nestedValues && Object.keys(item.nestedValues).length > 0 && {
+                nestedFields: transformApiNestedValuesToNestedFields(item.nestedValues)
+              })
+            }
+          }
+        })
+        result[key] = checkboxFields
+      } else if (typeof value === 'object' && value !== null) {
         if (value.value !== undefined) {
           // Transform nestedValues to nestedFields structure
           result[key] = {
