@@ -257,7 +257,40 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
                   {renderNestedFields(
                     nestedField, 
                     nestedValue?.value || nestedValue, 
-                    handleNestedChange, 
+                    (deepValue) => {
+                      // Create a recursive change handler that properly propagates changes through all nesting levels
+                      const currentNestedFields = parentValue?.nestedFields || {}
+                      const optionNestedFields = currentNestedFields[nestedField.optionIndex] || {}
+                      
+                      // Handle deep nested values properly - merge the deep value structure
+                      let updatedOptionNestedFields
+                      if (typeof deepValue === 'object' && deepValue !== null && deepValue.nestedFields) {
+                        // Deep value contains nested fields - merge them properly
+                        updatedOptionNestedFields = {
+                          ...optionNestedFields,
+                          [nestedField.id]: {
+                            ...optionNestedFields[nestedField.id],
+                            ...deepValue
+                          }
+                        }
+                      } else {
+                        // Simple value update
+                        updatedOptionNestedFields = {
+                          ...optionNestedFields,
+                          [nestedField.id]: deepValue
+                        }
+                      }
+                      
+                      const updatedNestedFields = {
+                        ...currentNestedFields,
+                        [nestedField.optionIndex]: updatedOptionNestedFields
+                      }
+
+                      onChange({
+                        ...parentValue,
+                        nestedFields: updatedNestedFields
+                      })
+                    }, 
                     nestedValue, 
                     disabled, 
                     invalid, 

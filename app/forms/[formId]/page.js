@@ -374,39 +374,50 @@ const processFieldOptions = (field) => {
 const transformFormValues = (formValues, fields) => {
   const transformedValues = {}
 
-  console.log('🔍 Transforming form values with field IDs:', formValues)
-  console.log('📋 Available fields:', fields.map(f => ({ 
-    id: f.id, 
-    originalId: f.originalId, 
-    name: f.name, 
-    label: f.label, 
-    type: f.type 
-  })))
-
   // Helper function to recursively transform nested values using field IDs
   const transformNestedValues = (nestedFields, parentValue, fieldDefinition) => {
     const result = {}
     
     if (!nestedFields || typeof nestedFields !== 'object') return result
     
+    // First, collect all field IDs and their values, prioritizing numeric keys (which contain updated values)
+    const fieldValues = {}
+    
+    // Process numeric keys first (these contain the updated values)
     Object.keys(nestedFields).forEach(key => {
       const value = nestedFields[key]
       
-      // Skip numeric keys (0, 1, 2, etc.) - these are array indices we want to remove
+      // Process numeric keys (0, 1, 2, etc.) - these contain the updated values
       if (!isNaN(key) && key !== 'value') {
-        // This is a numeric key, skip it and process its contents directly
+        // This is a numeric key, process its contents directly
         if (typeof value === 'object' && value !== null) {
           // Recursively process the content of numeric keys
           const nestedResult = transformNestedValues(value, parentValue, fieldDefinition)
-          // Merge the nested result into the main result
-          Object.assign(result, nestedResult)
+          // Merge the nested result into fieldValues
+          Object.assign(fieldValues, nestedResult)
         }
+        return
+      }
+    })
+    
+    // Then process non-numeric keys (these contain the old values)
+    Object.keys(nestedFields).forEach(key => {
+      const value = nestedFields[key]
+      
+      // Skip numeric keys (already processed above)
+      if (!isNaN(key) && key !== 'value') {
         return
       }
 
       // Use the key as-is (field ID) - don't try to extract field names
       const fieldId = key
-
+      
+      // Only process if we haven't already processed this field ID from numeric keys
+      if (fieldValues[fieldId]) {
+        return
+      }
+      
+      // Process the value and store it
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         // Handle nested object structure
         if (value.value !== undefined) {
@@ -423,12 +434,12 @@ const transformFormValues = (formValues, fields) => {
             }
           }
 
-          result[fieldId] = processedValue
+          fieldValues[fieldId] = processedValue
         } else {
           // Direct nested object - process recursively
           const processedNested = transformNestedValues(value, parentValue, fieldDefinition)
           if (Object.keys(processedNested).length > 0) {
-            result[fieldId] = processedNested
+            fieldValues[fieldId] = processedNested
           }
         }
       } else if (Array.isArray(value)) {
@@ -454,16 +465,19 @@ const transformFormValues = (formValues, fields) => {
           // Only use array if we have multiple items, otherwise use the single value
           if (processedArray.length === 1 && !Array.isArray(processedArray[0].value)) {
             // For single non-array values, extract the value directly
-            result[fieldId] = processedArray[0]
+            fieldValues[fieldId] = processedArray[0]
           } else {
-            result[fieldId] = processedArray
+            fieldValues[fieldId] = processedArray
           }
         }
       } else if (value !== undefined && value !== null) {
         // Simple value - don't wrap in array
-        result[fieldId] = { value }
+        fieldValues[fieldId] = { value }
       }
     })
+    
+    // Now copy all field values to the result
+    Object.assign(result, fieldValues)
     
     return result
   }
@@ -638,7 +652,6 @@ const transformFormValues = (formValues, fields) => {
     }
   })
 
-  console.log('✅ Final transformed values with ORIGINAL field IDs:', JSON.stringify(transformedValues, null, 2))
   return transformedValues
 }
 
@@ -650,14 +663,6 @@ const transformSubmissionValues = (submissionValues, fields) => {
     console.log('No submission values to transform')
     return transformedValues
   }
-
-  console.log('🔄 Raw submission values from API:', submissionValues)
-  console.log('📋 Available fields:', fields.map(f => ({
-    id: f.id,
-    name: f.name,
-    label: f.label,
-    type: f.type
-  })))
 
   // Helper function to recursively transform API nestedValues to nestedFields structure
   const transformApiNestedValuesToNestedFields = (nestedValues) => {
