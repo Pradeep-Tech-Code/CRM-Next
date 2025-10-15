@@ -186,6 +186,53 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
             nestedValue = parentValue[nestedField.id]
           }
 
+          // For select/radio/checkbox fields, ensure the nested value has the correct structure
+          if (["select", "radio", "checkbox"].includes(nestedField.type)) {
+            if (typeof nestedValue === 'string' && nestedValue !== "") {
+              // Convert string value to object structure for select/radio/checkbox fields
+              nestedValue = {
+                value: nestedValue,
+                nestedFields: {}
+              }
+            } else if (typeof nestedValue === 'object' && nestedValue !== null && nestedValue.value !== undefined) {
+              // Already in correct structure, keep as is
+              nestedValue = nestedValue
+            } else if (typeof nestedValue === 'object' && nestedValue !== null && !nestedValue.value) {
+              // Object without value property - might be a nested fields structure
+              // Check if it has nested fields and convert to proper structure
+              if (Object.keys(nestedValue).length > 0) {
+                nestedValue = {
+                  value: "",
+                  nestedFields: nestedValue
+                }
+              } else {
+                nestedValue = {
+                  value: "",
+                  nestedFields: {}
+                }
+              }
+            } else {
+              // Default structure for empty values
+              nestedValue = {
+                value: "",
+                nestedFields: {}
+              }
+            }
+          } else {
+            // For other field types (text, textarea, etc.), ensure we have a string value
+            if (typeof nestedValue === 'object' && nestedValue !== null) {
+              // If it's an object, try to extract the value or convert to string
+              if (nestedValue.value !== undefined) {
+                nestedValue = nestedValue.value
+              } else {
+                // If it's an object without a value property, convert to string
+                nestedValue = String(nestedValue)
+              }
+            } else if (nestedValue === null || nestedValue === undefined) {
+              nestedValue = ""
+            }
+          }
+
           const handleNestedChange = (value) => {
             const currentNestedFields = parentValue?.nestedFields || {}
             const optionNestedFields = currentNestedFields[nestedField.optionIndex] || {}

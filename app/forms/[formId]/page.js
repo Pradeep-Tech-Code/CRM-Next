@@ -636,15 +636,19 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
         }
       } else if (typeof value === 'object' && value !== null) {
         if (value.value !== undefined) {
-          // For nested fields, store the value directly, not wrapped in a value property
-          result[key] = value.value
+          // For nested fields, maintain the proper structure for select/radio/checkbox fields
+          const fieldValue = {
+            value: value.value,
+            nestedFields: {}
+          }
           
           // If there are nested values, process them recursively
           if (value.nestedValues && Object.keys(value.nestedValues).length > 0) {
             const nestedResult = transformApiNestedValuesToNestedFields(value.nestedValues)
-            // Merge the nested result into the current result
-            Object.assign(result, nestedResult)
+            fieldValue.nestedFields = nestedResult
           }
+          
+          result[key] = fieldValue
         } else {
           // Direct nested object
           const nestedResult = transformApiNestedValuesToNestedFields(value)
@@ -777,7 +781,29 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
         // Process nested values from API and convert nestedValues to nestedFields
         if (parsedValue.nestedValues) {
           console.log(`🔄 Processing nested values for ${field.type} field ${fieldId}:`, parsedValue.nestedValues)
-          processedValue.nestedFields = transformApiNestedValuesToNestedFields(parsedValue.nestedValues)
+          
+          // For fields with nested values, we need to organize them by option index
+          // First, find the option index for the selected value
+          let optionIndex = -1
+          if (field.options && Array.isArray(field.options)) {
+            optionIndex = field.options.findIndex(opt => {
+              const optValue = typeof opt === 'string' ? opt : opt.value
+              return optValue === parsedValue.value
+            })
+          }
+          
+          console.log(`🔍 Found option index ${optionIndex} for value "${parsedValue.value}"`)
+          
+          if (optionIndex !== -1) {
+            // Create the nested fields structure organized by option index
+            processedValue.nestedFields = {
+              [optionIndex]: transformApiNestedValuesToNestedFields(parsedValue.nestedValues)
+            }
+          } else {
+            // Fallback to the old structure if we can't find the option index
+            processedValue.nestedFields = transformApiNestedValuesToNestedFields(parsedValue.nestedValues)
+          }
+          
           console.log(`✅ Processed nested fields for ${field.type} field ${fieldId}:`, processedValue.nestedFields)
           console.log(`🔍 Nested fields structure:`, JSON.stringify(processedValue.nestedFields, null, 2))
         }
