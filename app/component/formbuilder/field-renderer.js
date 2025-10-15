@@ -212,9 +212,9 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
                   {nestedField.required && <span className="text-red-500 ml-1">*</span>}
                 </Label>
                 {!hideFieldTypes && (
-                  <Badge variant="outline" className="text-xs">
-                    {nestedField.type}
-                  </Badge>
+                <Badge variant="outline" className="text-xs">
+                  {nestedField.type}
+                </Badge>
                 )}
               </div>
               
@@ -375,14 +375,14 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
     case "email":
       return (
         <div className="relative">
-          <Input
-            type={nestedField.type}
-            value={value || ""}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-            placeholder={nestedField.placeholder}
-            minLength={nestedField.validation?.minLength}
-            maxLength={nestedField.validation?.maxLength}
+        <Input
+          type={nestedField.type}
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          placeholder={nestedField.placeholder}
+          minLength={nestedField.validation?.minLength}
+          maxLength={nestedField.validation?.maxLength}
             className={`pr-8 ${invalid ? "border-red-500" : ""}`}
           />
           {value && !disabled && (
@@ -400,14 +400,14 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
     case "number":
       return (
         <div className="relative">
-          <Input
-            type="number"
-            value={value || ""}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-            placeholder={nestedField.placeholder}
-            min={nestedField.validation?.min}
-            max={nestedField.validation?.max}
+        <Input
+          type="number"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          placeholder={nestedField.placeholder}
+          min={nestedField.validation?.min}
+          max={nestedField.validation?.max}
             className={`pr-8 ${invalid ? "border-red-500" : ""}`}
           />
           {value && !disabled && (
@@ -425,13 +425,13 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
     case "textarea":
       return (
         <div className="relative">
-          <Textarea
-            value={value || ""}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-            placeholder={nestedField.placeholder}
-            minLength={nestedField.validation?.minLength}
-            maxLength={nestedField.validation?.maxLength}
+        <Textarea
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          placeholder={nestedField.placeholder}
+          minLength={nestedField.validation?.minLength}
+          maxLength={nestedField.validation?.maxLength}
             className={`pr-8 ${invalid ? "border-red-500" : ""}`}
           />
           {value && !disabled && (
@@ -1264,12 +1264,12 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
     default:
       return (
         <div className="relative">
-          <Input
-            type="text"
-            value={value || ""}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={disabled}
-            placeholder={nestedField.placeholder}
+        <Input
+          type="text"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          placeholder={nestedField.placeholder}
             className={`pr-8 ${invalid ? "border-red-500" : ""}`}
           />
           {value && !disabled && (
@@ -1493,12 +1493,12 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
       case "text":
         return (
           <div className="relative">
-            <Input
-              type="text"
-              placeholder={placeholder}
-              value={value || ""}
-              onChange={(e) => onChange?.(e.target.value)}
-              disabled={disabled}
+          <Input
+            type="text"
+            placeholder={placeholder}
+            value={value || ""}
+            onChange={(e) => onChange?.(e.target.value)}
+            disabled={disabled}
               className={`bg-input pr-8 ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
             />
             {value && !disabled && (
@@ -1517,12 +1517,12 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
       case "email":
         return (
           <div className="relative">
-            <Input
-              type="email"
-              placeholder={placeholder}
-              value={value || ""}
-              onChange={(e) => onChange?.(e.target.value)}
-              disabled={disabled}
+          <Input
+            type="email"
+            placeholder={placeholder}
+            value={value || ""}
+            onChange={(e) => onChange?.(e.target.value)}
+            disabled={disabled}
               className={`bg-input pr-8 ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
             />
             {value && !disabled && (
@@ -1541,14 +1541,14 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
       case "number":
         return (
           <div className="relative">
-            <Input
-              type="number"
-              placeholder={placeholder}
-              value={value || ""}
-              onChange={(e) => onChange?.(e.target.value)}
-              disabled={disabled}
-              min={field.validation?.min}
-              max={field.validation?.max}
+          <Input
+            type="number"
+            placeholder={placeholder}
+            value={value || ""}
+            onChange={(e) => onChange?.(e.target.value)}
+            disabled={disabled}
+            min={field.validation?.min}
+            max={field.validation?.max}
               className={`bg-input pr-8 ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
             />
             {value && !disabled && (
@@ -1567,11 +1567,11 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
       case "textarea":
         return (
           <div className="relative">
-            <Textarea
-              placeholder={placeholder}
-              value={value || ""}
-              onChange={(e) => onChange?.(e.target.value)}
-              disabled={disabled}
+          <Textarea
+            placeholder={placeholder}
+            value={value || ""}
+            onChange={(e) => onChange?.(e.target.value)}
+            disabled={disabled}
               className={`bg-input min-h-[100px] pr-8 ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
             />
             {value && !disabled && (
