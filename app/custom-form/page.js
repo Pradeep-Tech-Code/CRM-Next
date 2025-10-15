@@ -5,7 +5,6 @@ import { FieldPalette } from "../component/formbuilder/field-palette"
 import { FormCanvas } from "../component/formbuilder/form-canvas"
 import { FieldConfigPanel } from "../component/formbuilder/field-config-panel"
 import { FormPreview } from "../component/formbuilder/form-preview"
-import { ExportDialog } from "../component/formbuilder/export-dialog"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
@@ -225,13 +224,6 @@ export default function CustomFormPage() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-
-          <ExportDialog fields={fields}>
-            <Button variant="outline" className="gap-2">
-              <Download className="h-4 w-4" />
-              Export
-            </Button>
-          </ExportDialog>
         </div>
       </div>
 
@@ -243,12 +235,14 @@ export default function CustomFormPage() {
         onDragEnd={handleDragEnd}
       >
         <div className="flex-1 flex border rounded-lg overflow-hidden bg-background min-h-0">
-          {/* Field Palette */}
-          <FieldPalette
-            onAddField={addField}
-            collapsed={fieldPaletteCollapsed}
-            onToggleCollapse={toggleFieldPalette}
-          />
+          {/* Field Palette - Only show in builder mode */}
+          {activeTab === "builder" && (
+            <FieldPalette
+              onAddField={addField}
+              collapsed={fieldPaletteCollapsed}
+              onToggleCollapse={toggleFieldPalette}
+            />
+          )}
 
           {/* Main Canvas/Preview */}
           <div className="flex-1 flex">
