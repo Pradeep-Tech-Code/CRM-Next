@@ -415,7 +415,7 @@ export function FormPreview({ fields }) {
       const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
       const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
       const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
-      const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwMzM1OTgyLCJleHAiOjE3NjA0MjIzODJ9.i8x4KfEjbRhMp454y_maUARuNDo0pTyM8dcTmutFjrY'
+      const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwNTA2OTYzLCJleHAiOjE3NjA1OTMzNjN9.SEAwwoCusaotsc_lhb3nh0Fq5tIOWIHtbMYCG1vZ2jU'
 
       // Recursive function to process nested fields
       const processNestedFields = (nestedFields, parentIndex = null) => {
@@ -1167,6 +1167,7 @@ export function FormPreview({ fields }) {
                         onChange={fieldApi.handleChange}
                         invalid={fieldApi.state.meta.errors.length > 0}
                         error={fieldApi.state.meta.errors.length > 0 ? fieldApi.state.meta.errors[0] : undefined}
+                        hideFieldTypes={true}
                       />
                     </div>
                   )}
@@ -1265,7 +1266,7 @@ export function FormPreview({ fields }) {
         </Card>
 
         {/* Form Data Debug Panel */}
-        <Card className="mt-6">
+        {/* <Card className="mt-6">
           <CardHeader>
             <CardTitle className="text-sm">Form Structure (Debug)</CardTitle>
           </CardHeader>
@@ -1294,7 +1295,7 @@ export function FormPreview({ fields }) {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </Card> */}
       </div>
     </div>
   )

@@ -9,13 +9,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Check, ChevronsUpDown, Search, AlertCircle, Info } from "lucide-react"
+import { Check, ChevronsUpDown, Search, AlertCircle, Info, X } from "lucide-react"
 import { fetchCountries, fetchStates, fetchCities, fetchPhoneCountries } from "@/lib/constants/location-api"
 import { useState, useEffect } from "react"
 import { Database } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
-const renderNestedFields = (field, selectedOptions, onChange, parentValue, disabled, invalid, locationData, depth = 0, processedIds = new Set()) => {
+const renderNestedFields = (field, selectedOptions, onChange, parentValue, disabled, invalid, locationData, depth = 0, processedIds = new Set(), hideFieldTypes = false) => {
   
   // Generate a unique key for this field if id is undefined
   const fieldKey = field.id || `field-${field.label}-${depth}-${Date.now()}`
@@ -211,9 +211,11 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
                   {nestedField.label}
                   {nestedField.required && <span className="text-red-500 ml-1">*</span>}
                 </Label>
-                <Badge variant="outline" className="text-xs">
-                  {nestedField.type}
-                </Badge>
+                {!hideFieldTypes && (
+                  <Badge variant="outline" className="text-xs">
+                    {nestedField.type}
+                  </Badge>
+                )}
               </div>
               
               {/* Render the nested field input */}
@@ -325,7 +327,8 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
                       filteredPhoneCountries: locationData?.filteredPhoneCountries || []
                     }, 
                     depth + 1, 
-                    new Set(currentProcessedIds)
+                    new Set(currentProcessedIds),
+                    hideFieldTypes
                   )}
                 </div>
               )}
@@ -371,41 +374,77 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
     case "text":
     case "email":
       return (
-        <Input
-          type={nestedField.type}
-          value={value || ""}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-          placeholder={nestedField.placeholder}
-          minLength={nestedField.validation?.minLength}
-          maxLength={nestedField.validation?.maxLength}
-          className={invalid ? "border-red-500" : ""}
-        />
+        <div className="relative">
+          <Input
+            type={nestedField.type}
+            value={value || ""}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled}
+            placeholder={nestedField.placeholder}
+            minLength={nestedField.validation?.minLength}
+            maxLength={nestedField.validation?.maxLength}
+            className={`pr-8 ${invalid ? "border-red-500" : ""}`}
+          />
+          {value && !disabled && (
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Clear input"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       )
     case "number":
       return (
-        <Input
-          type="number"
-          value={value || ""}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-          placeholder={nestedField.placeholder}
-          min={nestedField.validation?.min}
-          max={nestedField.validation?.max}
-          className={invalid ? "border-red-500" : ""}
-        />
+        <div className="relative">
+          <Input
+            type="number"
+            value={value || ""}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled}
+            placeholder={nestedField.placeholder}
+            min={nestedField.validation?.min}
+            max={nestedField.validation?.max}
+            className={`pr-8 ${invalid ? "border-red-500" : ""}`}
+          />
+          {value && !disabled && (
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Clear input"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       )
     case "textarea":
       return (
-        <Textarea
-          value={value || ""}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-          placeholder={nestedField.placeholder}
-          minLength={nestedField.validation?.minLength}
-          maxLength={nestedField.validation?.maxLength}
-          className={invalid ? "border-red-500" : ""}
-        />
+        <div className="relative">
+          <Textarea
+            value={value || ""}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled}
+            placeholder={nestedField.placeholder}
+            minLength={nestedField.validation?.minLength}
+            maxLength={nestedField.validation?.maxLength}
+            className={`pr-8 ${invalid ? "border-red-500" : ""}`}
+          />
+          {value && !disabled && (
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="absolute right-2 top-2 text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Clear textarea"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       )
     case "select":
       if (nestedField.validation?.multiple) {
@@ -689,6 +728,19 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
               No options available
             </div>
           )}
+          {selectedValue && !disabled && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => onChange({ value: "", nestedFields: {} })}
+                className="text-gray-400 hover:text-gray-600 transition-colors text-sm"
+                aria-label="Clear selection"
+              >
+                <X className="h-4 w-4 inline mr-1" />
+                Clear selection
+              </button>
+            </div>
+          )}
         </div>
       )
     case "file":
@@ -929,6 +981,19 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
             <p className="text-xs text-muted-foreground">
               Selected: {selectedCountry.emoji} {selectedCountry.label} • Format: {selectedCountry.dial} {selectedCountry.len} digits
             </p>
+          )}
+          {(country || number) && !disabled && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => onChange?.({ country: "", dial_code: "", number: "" })}
+                className="text-gray-400 hover:text-gray-600 transition-colors text-sm"
+                aria-label="Clear phone"
+              >
+                <X className="h-4 w-4 inline mr-1" />
+                Clear phone
+              </button>
+            </div>
           )}
           {!invalid && !selectedCountry && (
             <p className="text-xs text-muted-foreground">Select country code, then enter phone number</p>
@@ -1198,19 +1263,31 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
 
     default:
       return (
-        <Input
-          type="text"
-          value={value || ""}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-          placeholder={nestedField.placeholder}
-          className={invalid ? "border-red-500" : ""}
-        />
+        <div className="relative">
+          <Input
+            type="text"
+            value={value || ""}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled}
+            placeholder={nestedField.placeholder}
+            className={`pr-8 ${invalid ? "border-red-500" : ""}`}
+          />
+          {value && !disabled && (
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Clear input"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       )
   }
 }
 
-export function FieldRenderer({ field, value, onChange, disabled = false, invalid = false, error }) {
+export function FieldRenderer({ field, value, onChange, disabled = false, invalid = false, error, hideFieldTypes = false }) {
   const safeOnChange = onChange || (() => {})
   const [countries, setCountries] = useState([])
   const [phoneCountries, setPhoneCountries] = useState([])
@@ -1415,51 +1492,99 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
     switch (field.type) {
       case "text":
         return (
-          <Input
-            type="text"
-            placeholder={placeholder}
-            value={value || ""}
-            onChange={(e) => onChange?.(e.target.value)}
-            disabled={disabled}
-            className={`bg-input ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
-          />
+          <div className="relative">
+            <Input
+              type="text"
+              placeholder={placeholder}
+              value={value || ""}
+              onChange={(e) => onChange?.(e.target.value)}
+              disabled={disabled}
+              className={`bg-input pr-8 ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
+            />
+            {value && !disabled && (
+              <button
+                type="button"
+                onClick={() => onChange?.("")}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="Clear input"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         )
 
       case "email":
         return (
-          <Input
-            type="email"
-            placeholder={placeholder}
-            value={value || ""}
-            onChange={(e) => onChange?.(e.target.value)}
-            disabled={disabled}
-            className={`bg-input ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
-          />
+          <div className="relative">
+            <Input
+              type="email"
+              placeholder={placeholder}
+              value={value || ""}
+              onChange={(e) => onChange?.(e.target.value)}
+              disabled={disabled}
+              className={`bg-input pr-8 ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
+            />
+            {value && !disabled && (
+              <button
+                type="button"
+                onClick={() => onChange?.("")}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="Clear input"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         )
 
       case "number":
         return (
-          <Input
-            type="number"
-            placeholder={placeholder}
-            value={value || ""}
-            onChange={(e) => onChange?.(e.target.value)}
-            disabled={disabled}
-            min={field.validation?.min}
-            max={field.validation?.max}
-            className={`bg-input ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
-          />
+          <div className="relative">
+            <Input
+              type="number"
+              placeholder={placeholder}
+              value={value || ""}
+              onChange={(e) => onChange?.(e.target.value)}
+              disabled={disabled}
+              min={field.validation?.min}
+              max={field.validation?.max}
+              className={`bg-input pr-8 ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
+            />
+            {value && !disabled && (
+              <button
+                type="button"
+                onClick={() => onChange?.("")}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="Clear input"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         )
 
       case "textarea":
         return (
-          <Textarea
-            placeholder={placeholder}
-            value={value || ""}
-            onChange={(e) => onChange?.(e.target.value)}
-            disabled={disabled}
-            className={`bg-input min-h-[100px] ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
-          />
+          <div className="relative">
+            <Textarea
+              placeholder={placeholder}
+              value={value || ""}
+              onChange={(e) => onChange?.(e.target.value)}
+              disabled={disabled}
+              className={`bg-input min-h-[100px] pr-8 ${invalid ? "border-red-500 text-red-500 placeholder-red-500 focus-visible:ring-red-500" : ""}`}
+            />
+            {value && !disabled && (
+              <button
+                type="button"
+                onClick={() => onChange?.("")}
+                className="absolute right-2 top-2 text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="Clear textarea"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         )
 
       case "select":
@@ -1616,7 +1741,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 filteredStates,
                 filteredCities,
                 filteredPhoneCountries
-              })}
+              }, 0, new Set(), hideFieldTypes)}
             </div>
           )
         } else {
@@ -1695,7 +1820,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 filteredStates,
                 filteredCities,
                 filteredPhoneCountries
-              })}
+              }, 0, new Set(), hideFieldTypes)}
             </div>
           )
         }
@@ -1778,7 +1903,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                       filteredStates,
                       filteredCities,
                       filteredPhoneCountries
-                    })}
+                    }, 0, new Set(), hideFieldTypes)}
                   </div>
                 )}
               </div>
@@ -1863,7 +1988,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                           filteredStates,
                           filteredCities,
                           filteredPhoneCountries
-                        })}
+                        }, 0, new Set(), hideFieldTypes)}
                       </div>
                     )}
                   </div>
@@ -1873,6 +1998,32 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
             ) : (
               <div className="text-sm text-muted-foreground p-3 border border-dashed rounded-lg text-center">
                 No options available. Add options in the field configuration panel.
+              </div>
+            )}
+            {value?.value && !disabled && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => safeOnChange({ value: "", nestedFields: {} })}
+                  className="text-gray-400 hover:text-gray-600 transition-colors text-sm"
+                  aria-label="Clear selection"
+                >
+                  <X className="h-4 w-4 inline mr-1" />
+                  Clear selection
+                </button>
+              </div>
+            )}
+            {(value?.country || value?.state || value?.city) && !disabled && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => onChange?.({ country: undefined, state: undefined, city: undefined })}
+                  className="text-gray-400 hover:text-gray-600 transition-colors text-sm"
+                  aria-label="Clear location"
+                >
+                  <X className="h-4 w-4 inline mr-1" />
+                  Clear location
+                </button>
               </div>
             )}
             {invalid && (
@@ -2334,6 +2485,20 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
               </div>
             )}
 
+            {(current.country || current.state || current.city) && !disabled && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => onChange?.({ country: undefined, state: undefined, city: undefined })}
+                  className="text-gray-400 hover:text-gray-600 transition-colors text-sm"
+                  aria-label="Clear location"
+                >
+                  <X className="h-4 w-4 inline mr-1" />
+                  Clear location
+                </button>
+              </div>
+            )}
+
             {invalid && error && !current.country && (
               <div className="text-xs text-red-500 font-medium">
                 {error}
@@ -2464,6 +2629,19 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 />
               </div>
             </div>
+            {(country || number) && !disabled && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => onChange?.({ country: "", dial_code: "", number: "" })}
+                  className="text-gray-400 hover:text-gray-600 transition-colors text-sm"
+                  aria-label="Clear phone"
+                >
+                  <X className="h-4 w-4 inline mr-1" />
+                  Clear phone
+                </button>
+              </div>
+            )}
             {!invalid && selectedCountry && (
               <p className="text-xs text-muted-foreground">
                 Selected: {selectedCountry.emoji} {selectedCountry.label} • Format: {selectedCountry.dial} {selectedCountry.len} digits

@@ -180,4 +180,13 @@
   border-color: var(--color-primary) !important;
   background-color: color-mix(in oklab, var(--color-primary) 10%, transparent) !important;
 }
+
+/* Edit dialog box size */
+.edit-dialog-content {
+  width: 55vw !important;
+  max-width: none !important;
+  max-height: 95vh !important;
+  overflow-y: auto !important;
 }
+}
+

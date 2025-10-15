@@ -556,19 +556,26 @@ const transformSubmissionValues = (submissionValues, fields) => {
       const value = nestedValues[key]
       
       if (Array.isArray(value)) {
-        // Handle checkbox arrays - convert to nested fields structure
-        const checkboxFields = {}
+        // Handle checkbox arrays - convert to form's expected structure
+        const checkboxValues = []
+        const checkboxNestedFields = {}
+        
         value.forEach((item, index) => {
           if (typeof item === 'object' && item !== null && item.value !== undefined) {
-            checkboxFields[index] = {
-              value: item.value,
-              ...(item.nestedValues && Object.keys(item.nestedValues).length > 0 && {
-                nestedFields: transformApiNestedValuesToNestedFields(item.nestedValues)
-              })
+            checkboxValues.push(item.value)
+            
+            // Convert nestedValues to nestedFields for this option
+            if (item.nestedValues && Object.keys(item.nestedValues).length > 0) {
+              checkboxNestedFields[index] = transformApiNestedValuesToNestedFields(item.nestedValues)
             }
           }
         })
-        result[key] = checkboxFields
+        
+        // Return the form's expected structure
+        result[key] = {
+          value: checkboxValues,
+          nestedFields: checkboxNestedFields
+        }
       } else if (typeof value === 'object' && value !== null) {
         if (value.value !== undefined) {
           // Transform nestedValues to nestedFields structure
@@ -595,18 +602,42 @@ const transformSubmissionValues = (submissionValues, fields) => {
   const processFieldValue = (fieldId, fieldValue, field) => {
     console.log(`🔄 Processing field ${fieldId}:`, { fieldValue, fieldType: field?.type })
     
+    // Handle empty strings
+    if (fieldValue === "" || fieldValue === null || fieldValue === undefined) {
+      // Return appropriate default based on field type
+      if (field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)) {
+        return { value: [], nestedFields: {} }
+      } else if (field.type === "file") {
+        return null
+      } else if (field.type === "location" || field.type === "phone") {
+        return {}
+      } else {
+        return ""
+      }
+    }
+    
     // Handle JSON strings from API
     let parsedValue = fieldValue
     if (typeof fieldValue === 'string') {
       try {
         parsedValue = JSON.parse(fieldValue)
       } catch (e) {
-        parsedValue = fieldValue
+        // If JSON parsing fails, treat as simple string value
+        return fieldValue
       }
     }
 
     // Handle different field types
     if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
+      // For simple text fields with only a value (no nested values), return just the string
+      if (!parsedValue.nestedValues || Object.keys(parsedValue.nestedValues).length === 0) {
+        // Check if this is a simple field type that expects just a string value
+        if (field.type === 'text' || field.type === 'textarea' || field.type === 'email' || field.type === 'number') {
+          return parsedValue.value
+        }
+      }
+      
+      // For complex fields with nested values, return the full object structure
       const processedValue = {
         value: parsedValue.value
       }
@@ -640,35 +671,12 @@ const transformSubmissionValues = (submissionValues, fields) => {
       console.log(`✅ Found value with original ID:`, fieldValue)
     }
 
-    // If still not found, try other fallback methods
-    if (fieldValue === undefined) {
-      // Try to find by field name or other identifiers
-      const possibleKeys = [
-        fieldId, // parsed form ID (select_field)
-        field.name, // field name (select_field)
-        ...Object.keys(submissionValues).filter(key => 
-          key === fieldId ||
-          key === field.name ||
-          key.includes(fieldId) ||
-          key.includes(field.name) ||
-          (field.originalId && key === field.originalId)
-        )
-      ]
-
-      // Also try to match by field structure - look for any key that contains our field data
-      for (const key of Object.keys(submissionValues)) {
-        const value = submissionValues[key]
-        // If this looks like our field data, use it
-        if (typeof value === 'string' && value.includes(field.name)) {
-          fieldValue = value
-          break
-        }
-      }
-
-      // If still not found, use the first available key (fallback)
-      if (fieldValue === undefined && Object.keys(submissionValues).length > 0) {
-        const firstKey = Object.keys(submissionValues)[0]
-        fieldValue = submissionValues[firstKey]
+    // If still not found, try to find by field name
+    if (fieldValue === undefined && field.name) {
+      console.log(`🔄 Trying field name ${field.name} for field ${fieldId}`)
+      fieldValue = submissionValues[field.name]
+      if (fieldValue !== undefined) {
+        console.log(`✅ Found value with field name:`, fieldValue)
       }
     }
 
@@ -722,7 +730,6 @@ export default function PublicFormPage() {
   const [submissionSuccess, setSubmissionSuccess] = useState(false)
   const [lastSubmissionId, setLastSubmissionId] = useState(null)
   const [lastSubmissionToken, setLastSubmissionToken] = useState(null)
-  const [hasExistingSubmission, setHasExistingSubmission] = useState(false)
   const [phoneCountries, setPhoneCountries] = useState([])
   const [formInitialized, setFormInitialized] = useState(false)
 
@@ -775,7 +782,6 @@ export default function PublicFormPage() {
       })
 
       if (savedFormId === formId && savedSubmissionId && savedEditToken && isSubmitted) {
-        setHasExistingSubmission(true)
         setLastSubmissionId(savedSubmissionId)
         setLastSubmissionToken(savedEditToken)
         setSubmissionSuccess(true)
@@ -783,12 +789,10 @@ export default function PublicFormPage() {
         console.log('Found existing submission for this form')
       } else {
         console.log('No valid existing submission found')
-        setHasExistingSubmission(false)
         setSubmissionSuccess(false)
       }
     } catch (error) {
       console.error('Error checking localStorage:', error)
-      setHasExistingSubmission(false)
       setSubmissionSuccess(false)
     }
   }
@@ -818,7 +822,6 @@ export default function PublicFormPage() {
       localStorage.removeItem("FORM_SUBMITTED")
       localStorage.removeItem("FORM_ID")
 
-      setHasExistingSubmission(false)
       setSubmissionSuccess(false)
       setLastSubmissionId(null)
       setLastSubmissionToken(null)
@@ -888,12 +891,6 @@ export default function PublicFormPage() {
             parsedSubmission.values[key] = value
           }
         })
-        
-        // Now transform the parsed values using the existing transformation logic
-        if (formData?.fields) {
-          const transformedValues = transformSubmissionValues(parsedSubmission.values, formData.fields)
-          parsedSubmission.values = transformedValues
-        }
         
         setSubmissionData(parsedSubmission)
         toast.success("Submission loaded for editing")
@@ -1175,6 +1172,18 @@ export default function PublicFormPage() {
       console.log('📡 Response:', result)
 
       if (result.success && result.form) {
+        // Check if form is archived/inactive
+        if (result.form.archived || result.form.status === false) {
+          console.log('⚠️ Form is archived/inactive:', result.form.archived, result.form.status)
+          setFormData({
+            form_name: result.form.form_name || 'Form Unavailable',
+            description: 'This form is currently inactive and cannot accept submissions.',
+            fields: [],
+            archived: true
+          })
+          return
+        }
+
         try {
           const parsedForm = parseFormData(result.form)
           console.log('✅ Parsed form data:', parsedForm)
@@ -1287,7 +1296,6 @@ export default function PublicFormPage() {
     console.log('Edit response data:', {
       savedSubmissionId,
       savedEditToken,
-      hasExistingSubmission,
       lastSubmissionId,
       lastSubmissionToken
     })
@@ -1308,22 +1316,6 @@ export default function PublicFormPage() {
       })
       toast.error("Unable to edit response. Missing submission data.")
     }
-  }
-
-  const handleSubmitAnotherResponse = () => {
-    clearSubmissionFromStorage()
-    setSubmissionSuccess(false)
-    setHasExistingSubmission(false)
-    setIsEditMode(false)
-    setSubmissionData(null)
-    setFormInitialized(false)
-
-    if (formData) {
-      const emptyValues = getEmptyFormValues()
-      form.reset(emptyValues)
-    }
-
-    toast.success("You can now submit a new response")
   }
 
   const getEmptyFormValues = () => {
@@ -1477,11 +1469,6 @@ export default function PublicFormPage() {
       // Debug the current form state before submission
       debugFormState(value, formData?.fields || [])
       
-      if (hasExistingSubmission && !isEditMode) {
-        toast.error("You have already submitted this form. Please use the edit link to modify your response")
-        return
-      }
-
       console.log('Form values:', value)
 
       setSubmitting(true)
@@ -1571,7 +1558,6 @@ export default function PublicFormPage() {
               setLastSubmissionId(newSubmissionId)
               setLastSubmissionToken(editToken)
               setSubmissionSuccess(true)
-              setHasExistingSubmission(true)
 
               console.log('Edit token generated:', editToken)
               console.log('Submission ID:', newSubmissionId)
@@ -1598,7 +1584,6 @@ export default function PublicFormPage() {
               setLastSubmissionId(newSubmissionId)
               setLastSubmissionToken(editToken)
               setSubmissionSuccess(true)
-              setHasExistingSubmission(true)
 
               console.log('Edit token generated:', editToken)
               console.log('Submission ID:', newSubmissionId)
@@ -1734,8 +1719,32 @@ export default function PublicFormPage() {
     )
   }
 
+  if (formData.archived) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <Card className="w-full max-w-md mx-4">
+          <CardContent className="p-8 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-orange-100 flex items-center justify-center">
+              <Pause className="h-8 w-8 text-orange-600" />
+            </div>
+            <h2 className="text-xl font-semibold mb-2">Form Inactive</h2>
+            <p className="text-muted-foreground mb-4">
+              This form is currently inactive and cannot accept submissions. Please contact the form owner if you need to access it.
+            </p>
+            <Button asChild>
+              <Link href="/">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Home
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   // Success View
-  if ((submissionSuccess && !isEditMode) || (hasExistingSubmission && !isEditMode)) {
+  if (submissionSuccess && !isEditMode) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
         {/* Header */}
@@ -1752,7 +1761,7 @@ export default function PublicFormPage() {
                 </div>
               </div>
               <Badge variant="outline" className="text-xs">
-                {hasExistingSubmission ? "Already Submitted" : "Submission Complete"}
+                Submission Complete
               </Badge>
             </div>
           </div>
@@ -1767,10 +1776,10 @@ export default function PublicFormPage() {
                   <CheckCircle2 className="h-8 w-8 text-green-600" />
                 </div>
                 <CardTitle className="text-2xl font-bold text-green-700">
-                  {hasExistingSubmission ? "Response Recorded" : "Thank You!"}
+                  Thank You!
                 </CardTitle>
                 <p className="text-muted-foreground mt-2">
-                  {hasExistingSubmission ? "You have already submitted a response to this form." : "Your response has been submitted successfully."}
+                  Your response has been submitted successfully.
                 </p>
               </CardHeader>
 
@@ -1779,7 +1788,7 @@ export default function PublicFormPage() {
                   <div className="space-y-2">
                     <h3 className="text-lg font-semibold">What would you like to do next?</h3>
                     <p className="text-sm text-muted-foreground">
-                      {hasExistingSubmission ? "You can edit your existing response or clear it to submit a new one." : "You can edit your response or submit another one."}
+                      You can edit your response if needed.
                     </p>
                   </div>
 
@@ -1790,33 +1799,8 @@ export default function PublicFormPage() {
                       size="lg"
                     >
                       <Edit className="h-4 w-4" />
-                      {hasExistingSubmission ? "Edit Your Response" : "Edit Response"}
+                      Edit Response
                     </Button>
-
-                    {hasExistingSubmission ? (
-                      <Button
-                        variant="outline"
-                        onClick={handleSubmitAnotherResponse}
-                        className="gap-2"
-                        size="lg"
-                      >
-                        <FileText className="h-4 w-4" />
-                        Submit New Response
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setSubmissionSuccess(false)
-                          form.reset()
-                        }}
-                        className="gap-2"
-                        size="lg"
-                      >
-                        <FileText className="h-4 w-4" />
-                        Submit Another Response
-                      </Button>
-                    )}
                   </div>
                 </div>
 
@@ -1952,6 +1936,7 @@ export default function PublicFormPage() {
                               onChange={fieldApi.handleChange}
                               invalid={fieldApi.state.meta.errors.length > 0}
                               error={fieldApi.state.meta.errors.length > 0 ? fieldApi.state.meta.errors[0] : undefined}
+                              hideFieldTypes={true}
                             />
                           </div>
                         )
