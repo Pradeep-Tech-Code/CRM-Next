@@ -13,6 +13,19 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 
+// API configuration
+const API_BASE_URL = 'http://10.10.15.194:3001'
+const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
+const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
+const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
+
+// Generate or use a proper token
+const getAuthToken = () => {
+  return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzU5MzE0ODY2LCJleHAiOjE3NTk0MDEyNjZ9.QjKz8fTFwia76o7LkkdmlGGhEKoguy8o6iFbCojMwkE'
+}
+
+const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwNTA2OTYzLCJleHAiOjE3NjA1OTMzNjN9.SEAwwoCusaotsc_lhb3nh0Fq5tIOWIHtbMYCG1vZ2jU'
+
 export function FormPreview({ fields }) {
   const [generatedLink, setGeneratedLink] = useState(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -410,12 +423,6 @@ export function FormPreview({ fields }) {
 
     setIsGenerating(true)
     try {
-      // API configuration
-      const API_BASE_URL = 'http://10.10.15.194:3001'
-      const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
-      const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
-      const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
-      const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwNTA2OTYzLCJleHAiOjE3NjA1OTMzNjN9.SEAwwoCusaotsc_lhb3nh0Fq5tIOWIHtbMYCG1vZ2jU'
 
       // Recursive function to process nested fields
       const processNestedFields = (nestedFields, parentIndex = null) => {
@@ -701,8 +708,8 @@ export function FormPreview({ fields }) {
         console.log('✅ API Success Response:', result)
 
         if (result.success && result.form) {
-          // Generate the public URL using the form_id from API response
-          const publicUrl = `${window.location.origin}/forms/${result.form.form_id}`
+          // Generate the public URL using the form_id from API response with user ID parameter
+          const publicUrl = `${window.location.origin}/forms/${result.form.form_id}?user_id=${USER_ID}`
           setGeneratedLink(publicUrl)
 
           // Store form data locally for the form view page
@@ -1236,6 +1243,9 @@ export function FormPreview({ fields }) {
                     {copied ? "Copied!" : "Copy"}
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  ✅ User ID ({USER_ID.substring(0, 8)}...) is included in the link for lead attribution
+                </p>
                 <div className="flex gap-2">
                   <Button
                     onClick={openFormInNewTab}

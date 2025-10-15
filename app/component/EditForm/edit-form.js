@@ -802,6 +802,7 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                         <option value="checkbox">Checkbox</option>
                         <option value="radio">Radio</option>
                         <option value="file">File</option>
+                        <option value="datetime">Date & Time</option>
                         <option value="phone">Phone</option>
                         <option value="location">Location</option>
                         <option value="table_column">Table Columns</option>

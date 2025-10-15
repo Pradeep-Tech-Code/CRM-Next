@@ -10,13 +10,226 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, X, Copy, Trash2, Settings2, ChevronDown, ChevronRight, ChevronUp } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+// import { TableColumnSelector } from "./table-column-selector"
 import { TableColumnSelector } from "./table-column-selector"
-import { TableColumnSelector } from "./table-column-selector"
+import { fetchCountries, fetchStates, fetchCities } from "@/lib/constants/location-api"
 
 export function FieldConfigPanel({ field, onUpdateField }) {
   const [newOption, setNewOption] = useState("")
   const [expandedNestedFields, setExpandedNestedFields] = useState({})
+  
+  // Location configuration state
+  const [countries, setCountries] = useState([])
+  const [statesByCountry, setStatesByCountry] = useState({}) // {countryId: [states]}
+  const [citiesByState, setCitiesByState] = useState({}) // {stateId: [cities]}
+  const [loadingStates, setLoadingStates] = useState({}) // {countryId: boolean}
+  const [loadingCities, setLoadingCities] = useState({}) // {stateId: boolean}
+  const [manualCityInput, setManualCityInput] = useState("")
+  const [showManualCityInput, setShowManualCityInput] = useState({}) // {stateId: boolean}
+
+  // Load countries on component mount
+  useEffect(() => {
+    const loadCountries = async () => {
+      try {
+        const countriesData = await fetchCountries()
+        setCountries(countriesData)
+      } catch (error) {
+        console.error('Failed to load countries:', error)
+      }
+    }
+    loadCountries()
+  }, [])
+
+  // Location configuration functions
+  const addAllowedCountry = (countryName) => {
+    const currentAllowed = field.validation?.allowedCountries || []
+    if (!currentAllowed.includes(countryName)) {
+      onUpdateField(field.id, {
+        validation: {
+          ...field.validation,
+          allowedCountries: [...currentAllowed, countryName]
+        }
+      })
+    }
+  }
+
+  const removeAllowedCountry = (countryName) => {
+    const currentAllowed = field.validation?.allowedCountries || []
+    const newAllowed = currentAllowed.filter(c => c !== countryName)
+    
+    // Also remove states and cities for this country
+    const newAllowedStates = { ...field.validation?.allowedStates }
+    const newAllowedCities = { ...field.validation?.allowedCities }
+    delete newAllowedStates[countryName]
+    
+    // Remove cities for states of this country
+    Object.keys(newAllowedCities).forEach(state => {
+      if (newAllowedStates[state]) {
+        delete newAllowedCities[state]
+      }
+    })
+    
+    onUpdateField(field.id, {
+      validation: {
+        ...field.validation,
+        allowedCountries: newAllowed,
+        allowedStates: newAllowedStates,
+        allowedCities: newAllowedCities
+      }
+    })
+  }
+
+  const addAllowedState = (countryName, stateName) => {
+    const currentAllowedStates = field.validation?.allowedStates || {}
+    const countryStates = currentAllowedStates[countryName] || []
+    
+    if (!countryStates.includes(stateName)) {
+      onUpdateField(field.id, {
+        validation: {
+          ...field.validation,
+          allowedStates: {
+            ...currentAllowedStates,
+            [countryName]: [...countryStates, stateName]
+          }
+        }
+      })
+    }
+  }
+
+  const removeAllowedState = (countryName, stateName) => {
+    const currentAllowedStates = field.validation?.allowedStates || {}
+    const countryStates = (currentAllowedStates[countryName] || []).filter(s => s !== stateName)
+    
+    // Also remove cities for this state
+    const newAllowedCities = { ...field.validation?.allowedCities }
+    delete newAllowedCities[stateName]
+    
+    onUpdateField(field.id, {
+      validation: {
+        ...field.validation,
+        allowedStates: {
+          ...currentAllowedStates,
+          [countryName]: countryStates
+        },
+        allowedCities: newAllowedCities
+      }
+    })
+  }
+
+  const addAllowedCity = (stateName, cityName) => {
+    const currentAllowedCities = field.validation?.allowedCities || {}
+    const stateCities = currentAllowedCities[stateName] || []
+    
+    if (!stateCities.includes(cityName)) {
+      onUpdateField(field.id, {
+        validation: {
+          ...field.validation,
+          allowedCities: {
+            ...currentAllowedCities,
+            [stateName]: [...stateCities, cityName]
+          }
+        }
+      })
+    }
+  }
+
+  const removeAllowedCity = (stateName, cityName) => {
+    const currentAllowedCities = field.validation?.allowedCities || {}
+    const stateCities = (currentAllowedCities[stateName] || []).filter(c => c !== cityName)
+    
+    onUpdateField(field.id, {
+      validation: {
+        ...field.validation,
+        allowedCities: {
+          ...currentAllowedCities,
+          [stateName]: stateCities
+        }
+      }
+    })
+  }
+
+  const addManualCity = (stateName) => {
+    if (!manualCityInput.trim()) return
+    
+    const currentAllowedCities = field.validation?.allowedCities || {}
+    const stateCities = currentAllowedCities[stateName] || []
+    
+    if (!stateCities.includes(manualCityInput.trim())) {
+      onUpdateField(field.id, {
+        validation: {
+          ...field.validation,
+          allowedCities: {
+            ...currentAllowedCities,
+            [stateName]: [...stateCities, manualCityInput.trim()]
+          }
+        }
+      })
+    }
+    
+    setManualCityInput("")
+    setShowManualCityInput(false)
+  }
+
+  const loadStatesForCountry = async (countryId) => {
+    setLoadingStates(prev => ({ ...prev, [countryId]: true }))
+    try {
+      const statesData = await fetchStates(countryId)
+      setStatesByCountry(prev => ({ ...prev, [countryId]: statesData }))
+    } catch (error) {
+      console.error('Failed to load states:', error)
+    } finally {
+      setLoadingStates(prev => ({ ...prev, [countryId]: false }))
+    }
+  }
+
+  const loadCitiesForState = async (stateId) => {
+    setLoadingCities(prev => ({ ...prev, [stateId]: true }))
+    try {
+      const citiesData = await fetchCities(stateId)
+      setCitiesByState(prev => ({ ...prev, [stateId]: citiesData }))
+    } catch (error) {
+      console.error('Failed to load cities:', error)
+    } finally {
+      setLoadingCities(prev => ({ ...prev, [stateId]: false }))
+    }
+  }
+
+  const loadCitiesForStateByName = async (stateName, countryName) => {
+    try {
+      // First, we need to find the state ID by loading states for the country
+      const country = countries.find(c => c.name === countryName)
+      if (!country) {
+        console.error('Country not found:', countryName)
+        alert(`Country "${countryName}" not found. Please try again.`)
+        return
+      }
+      
+      console.log('Loading states for country:', countryName, 'ID:', country.id)
+      const statesData = await fetchStates(country.id)
+      console.log('States data received:', statesData)
+      
+      const state = statesData.find(s => s.name === stateName)
+      if (!state) {
+        console.error('State not found:', stateName, 'Available states:', statesData.map(s => s.name))
+        alert(`State "${stateName}" not found in ${countryName}. Available states: ${statesData.map(s => s.name).join(', ')}`)
+        return
+      }
+      
+      console.log('Loading cities for state:', stateName, 'ID:', state.id)
+      const citiesData = await fetchCities(state.id)
+      console.log('Cities data received:', citiesData)
+      
+      if (citiesData.length === 0) {
+        alert(`No cities found for ${stateName}, ${countryName}. This might be because the API doesn't have city data for this state.`)
+      }
+      
+      setCitiesByState(prev => ({ ...prev, [state.id]: citiesData }))
+    } catch (error) {
+      console.error('Failed to load cities:', error)
+      alert(`Failed to load cities for ${stateName}, ${countryName}. Please check the console for more details.`)
+    }
+  }
 
   if (!field) {
     return (
@@ -709,6 +922,248 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                 field={field} 
                 onUpdateField={onUpdateField} 
               />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Location Configuration */}
+        {field.type === "location" && (
+          <Card className="border-0 shadow-none bg-transparent">
+            <CardHeader className="px-0 pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                Location Restrictions
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-0 space-y-4">
+              {/* Allowed Countries */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Allowed Countries</Label>
+                <div className="space-y-2">
+                  {field.validation?.allowedCountries?.map((countryName, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                      <span className="text-sm">{countryName}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => removeAllowedCountry(countryName)}
+                        className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                  
+                  <Select onValueChange={(countryId) => {
+                    const country = countries.find(c => c.id === parseInt(countryId))
+                    if (country) {
+                      addAllowedCountry(country.name)
+                    }
+                  }}>
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Add country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {countries
+                        .filter(country => !field.validation?.allowedCountries?.includes(country.name))
+                        .map(country => (
+                          <SelectItem key={country.id} value={country.id.toString()}>
+                            {country.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Allowed States */}
+              {field.validation?.allowedCountries?.length > 0 && (
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Allowed States</Label>
+                  {field.validation.allowedCountries.map(countryName => {
+                    const country = countries.find(c => c.name === countryName)
+                    if (!country) return null
+                    
+                    return (
+                      <div key={countryName} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">{countryName}</Label>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => loadStatesForCountry(country.id)}
+                            disabled={loadingStates[country.id]}
+                            className="h-6 text-xs"
+                          >
+                            {loadingStates[country.id] ? "Loading..." : "Load States"}
+                          </Button>
+                        </div>
+                        
+                        <div className="space-y-1">
+                          {(field.validation?.allowedStates?.[countryName] || []).map((stateName, index) => (
+                            <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                              <span className="text-xs">{stateName}</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => removeAllowedState(countryName, stateName)}
+                                className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+                              >
+                                <X className="h-2 w-2" />
+                              </Button>
+                            </div>
+                          ))}
+                          
+                          {statesByCountry[country.id]?.length > 0 && (
+                            <Select onValueChange={(stateId) => {
+                              const state = statesByCountry[country.id].find(s => s.id === parseInt(stateId))
+                              if (state) {
+                                addAllowedState(countryName, state.name)
+                              }
+                            }}>
+                              <SelectTrigger className="h-7 text-xs">
+                                <SelectValue placeholder="Add state" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {statesByCountry[country.id]
+                                  .filter(state => !field.validation?.allowedStates?.[countryName]?.includes(state.name))
+                                  .map(state => (
+                                    <SelectItem key={state.id} value={state.id.toString()}>
+                                      {state.name}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Allowed Cities */}
+              {Object.keys(field.validation?.allowedStates || {}).length > 0 && (
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Allowed Cities</Label>
+                  {Object.entries(field.validation?.allowedStates || {}).map(([countryName, stateNames]) => 
+                    stateNames.map(stateName => {
+                      const country = countries.find(c => c.name === countryName)
+                      if (!country) return null
+                      
+                      // Find the state object from the loaded states for this country
+                      const state = statesByCountry[country.id]?.find(s => s.name === stateName)
+                      
+                      return (
+                        <div key={`${countryName}-${stateName}`} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs text-muted-foreground">{stateName}, {countryName}</Label>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => loadCitiesForStateByName(stateName, countryName)}
+                              disabled={state ? loadingCities[state.id] : false}
+                              className="h-6 text-xs"
+                            >
+                              {state && loadingCities[state.id] ? "Loading..." : "Load Cities"}
+                            </Button>
+                          </div>
+                          
+                          <div className="space-y-1">
+                            {(field.validation?.allowedCities?.[stateName] || []).map((cityName, index) => (
+                              <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                                <span className="text-xs">{cityName}</span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => removeAllowedCity(stateName, cityName)}
+                                  className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+                                >
+                                  <X className="h-2 w-2" />
+                                </Button>
+                              </div>
+                            ))}
+                            
+                            {state && citiesByState[state.id]?.length > 0 && (
+                              <Select onValueChange={(cityId) => {
+                                const city = citiesByState[state.id].find(c => c.id === parseInt(cityId))
+                                if (city) {
+                                  addAllowedCity(stateName, city.name)
+                                }
+                              }}>
+                                <SelectTrigger className="h-7 text-xs">
+                                  <SelectValue placeholder="Add city" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {citiesByState[state.id]
+                                    .filter(city => !field.validation?.allowedCities?.[stateName]?.includes(city.name))
+                                    .map(city => (
+                                      <SelectItem key={city.id} value={city.id.toString()}>
+                                        {city.name}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            
+                            {/* Manual city input fallback */}
+                            <div className="space-y-2">
+                              {state && !showManualCityInput[state.id] ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setShowManualCityInput(prev => ({ ...prev, [state.id]: true }))}
+                                  className="h-6 text-xs"
+                                >
+                                  Add City Manually
+                                </Button>
+                              ) : state && showManualCityInput[state.id] ? (
+                                <div className="flex gap-1">
+                                  <Input
+                                    value={manualCityInput}
+                                    onChange={(e) => setManualCityInput(e.target.value)}
+                                    placeholder="Enter city name"
+                                    className="h-6 text-xs"
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        addManualCity(stateName)
+                                      } else if (e.key === 'Escape') {
+                                        setShowManualCityInput(prev => ({ ...prev, [state.id]: false }))
+                                        setManualCityInput("")
+                                      }
+                                    }}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    onClick={() => addManualCity(stateName)}
+                                    className="h-6 px-2 text-xs"
+                                  >
+                                    Add
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setShowManualCityInput(prev => ({ ...prev, [state.id]: false }))
+                                      setManualCityInput("")
+                                    }}
+                                    className="h-6 px-2 text-xs"
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-muted-foreground">
+                                  Load cities first to add manually
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

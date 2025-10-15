@@ -1017,7 +1017,7 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
       }
 
       const handleState = (stateId) => {
-        const state = states.find(s => s.id === parseInt(stateId))
+        const state = states?.find(s => s.id === parseInt(stateId))
         onChange?.({
           ...current,
           state: stateId,
@@ -1028,7 +1028,7 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
       }
 
       const handleCity = (cityId) => {
-        const city = cities.find(c => c.id === parseInt(cityId))
+        const city = cities?.find(c => c.id === parseInt(cityId))
         onChange?.({
           ...current,
           city: cityId,
@@ -1044,16 +1044,16 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
           if (type === "city" && !current.state) return "Select state first"
         }
 
-        if (type === "country" && countries.length === 0) return "No countries available"
-        if (type === "state" && states.length === 0) return "No states available"
-        if (type === "city" && cities.length === 0) return "No cities available"
+        if (type === "country" && (!countries || countries.length === 0)) return "No countries available"
+        if (type === "state" && (!states || states.length === 0)) return "No states available"
+        if (type === "city" && (!cities || cities.length === 0)) return "No cities available"
 
         return type === "country" ? "Select country" : type === "state" ? "Select state" : "Select city"
       }
 
-      const selectedCountry = countries.find(c => c.id === parseInt(current.country))
-      const selectedState = states.find(s => s.id === parseInt(current.state))
-      const selectedCity = cities.find(c => c.id === parseInt(current.city))
+      const selectedCountry = countries?.find(c => c.id === parseInt(current.country))
+      const selectedState = states?.find(s => s.id === parseInt(current.state))
+      const selectedCity = cities?.find(c => c.id === parseInt(current.city))
 
       return (
         <div className="space-y-3">
@@ -1345,11 +1345,22 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
     loadPhoneCountries()
   }, [])
 
-  // Fetch states when country changes
+  // Fetch states when country changes or when component mounts with existing values (edit mode)
   useEffect(() => {
     const loadStates = async () => {
       const current = value || {}
       if (current.country) {
+        // Check if this country is allowed (for location fields with restrictions)
+        const selectedCountry = countries.find(c => c.id === parseInt(current.country))
+        if (field.type === 'location' && field.validation?.allowedCountries?.length > 0) {
+          if (!selectedCountry || !field.validation.allowedCountries.includes(selectedCountry.name)) {
+            setStates([])
+            setCities([])
+            setApiError('Selected country is not allowed')
+            return
+          }
+        }
+        
         try {
           setLoadingStates(true)
           const statesData = await fetchStates(current.country)
@@ -1372,13 +1383,25 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
       }
     }
     loadStates()
-  }, [value?.country])
+  }, [value?.country, field.validation?.allowedCountries, countries.length])
 
-  // Fetch cities when state changes
+  // Fetch cities when state changes or when states are loaded with existing state value (edit mode)
   useEffect(() => {
     const loadCities = async () => {
       const current = value || {}
       if (current.state) {
+        // Check if this state is allowed (for location fields with restrictions)
+        const selectedState = states.find(s => s.id === parseInt(current.state))
+        const selectedCountry = countries.find(c => c.id === parseInt(current.country))
+        
+        if (field.type === 'location' && field.validation?.allowedStates && selectedCountry) {
+          if (!selectedState || !field.validation.allowedStates[selectedCountry.name]?.includes(selectedState.name)) {
+            setCities([])
+            setApiError('Selected state is not allowed')
+            return
+          }
+        }
+        
         try {
           setLoadingCities(true)
           const citiesData = await fetchCities(current.state)
@@ -1400,21 +1423,51 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
       }
     }
     loadCities()
-  }, [value?.state])
+  }, [value?.state, field.validation?.allowedStates, states.length])
 
-  // Filter functions for search
-  const filteredCountries = countries.filter(country =>
-    country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-    country.iso2.toLowerCase().includes(countrySearch.toLowerCase())
-  )
+  // Filter functions for search and field validation
+  const filteredCountries = countries.filter(country => {
+    // Apply field validation restrictions if they exist
+    if (field.type === 'location' && field.validation?.allowedCountries?.length > 0) {
+      if (!field.validation.allowedCountries.includes(country.name)) {
+        return false
+      }
+    }
+    
+    // Apply search filter
+    return country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+           country.iso2.toLowerCase().includes(countrySearch.toLowerCase())
+  })
 
-  const filteredStates = states.filter(state =>
-    state.name.toLowerCase().includes(stateSearch.toLowerCase())
-  )
+  const filteredStates = states.filter(state => {
+    // Apply field validation restrictions if they exist
+    if (field.type === 'location' && field.validation?.allowedStates && value?.country) {
+      const selectedCountry = countries.find(c => c.id === parseInt(value.country))
+      if (selectedCountry && field.validation.allowedStates[selectedCountry.name]) {
+        if (!field.validation.allowedStates[selectedCountry.name].includes(state.name)) {
+          return false
+        }
+      }
+    }
+    
+    // Apply search filter
+    return state.name.toLowerCase().includes(stateSearch.toLowerCase())
+  })
 
-  const filteredCities = cities.filter(city =>
-    city.name.toLowerCase().includes(citySearch.toLowerCase())
-  )
+  const filteredCities = cities.filter(city => {
+    // Apply field validation restrictions if they exist
+    if (field.type === 'location' && field.validation?.allowedCities && value?.state) {
+      const selectedState = states.find(s => s.id === parseInt(value.state))
+      if (selectedState && field.validation.allowedCities[selectedState.name]) {
+        if (!field.validation.allowedCities[selectedState.name].includes(city.name)) {
+          return false
+        }
+      }
+    }
+    
+    // Apply search filter
+    return city.name.toLowerCase().includes(citySearch.toLowerCase())
+  })
 
   const filteredPhoneCountries = phoneCountries.filter(country =>
     country.label.toLowerCase().includes(phoneCountrySearch.toLowerCase()) ||
@@ -2250,7 +2303,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
         }
 
         const handleState = (stateId) => {
-          const state = states.find(s => s.id === parseInt(stateId))
+          const state = states?.find(s => s.id === parseInt(stateId))
           onChange?.({
             ...current,
             state: stateId,
@@ -2261,7 +2314,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
         }
 
         const handleCity = (cityId) => {
-          const city = cities.find(c => c.id === parseInt(cityId))
+          const city = cities?.find(c => c.id === parseInt(cityId))
           onChange?.({
             ...current,
             city: cityId,
@@ -2277,16 +2330,16 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
             if (type === "city" && !current.state) return "Select state first"
           }
 
-          if (type === "country" && countries.length === 0) return "No countries available"
-          if (type === "state" && states.length === 0) return "No states available"
-          if (type === "city" && cities.length === 0) return "No cities available"
+          if (type === "country" && (!countries || countries.length === 0)) return "No countries available"
+          if (type === "state" && (!states || states.length === 0)) return "No states available"
+          if (type === "city" && (!cities || cities.length === 0)) return "No cities available"
 
           return type === "country" ? "Select country" : type === "state" ? "Select state" : "Select city"
         }
 
-        const selectedCountry = countries.find(c => c.id === parseInt(current.country))
-        const selectedState = states.find(s => s.id === parseInt(current.state))
-        const selectedCity = cities.find(c => c.id === parseInt(current.city))
+        const selectedCountry = countries?.find(c => c.id === parseInt(current.country))
+        const selectedState = states?.find(s => s.id === parseInt(current.state))
+        const selectedCity = cities?.find(c => c.id === parseInt(current.city))
 
         return (
           <div className="space-y-3">
@@ -2305,7 +2358,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                   <PopoverTrigger asChild>
                     <div
                       className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
-                        } ${disabled || countries.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                        } ${disabled || !countries || countries.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                     >
                       <div className="flex items-center gap-2 truncate">
                         {selectedCountry ? (
@@ -2365,7 +2418,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                   <PopoverTrigger asChild>
                     <div
                       className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
-                        } ${disabled || !current.country || states.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                        } ${disabled || !current.country || !states || states.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                     >
                       <div className="truncate">
                         {selectedState ? (
@@ -2391,7 +2444,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                       </div>
                       <CommandList>
                         <CommandEmpty>
-                          {states.length === 0 ? "No states available" : "No state found"}
+                          {!states || states.length === 0 ? "No states available" : "No state found"}
                         </CommandEmpty>
                         <CommandGroup>
                           {filteredStates.map((state) => (
@@ -2422,7 +2475,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                   <PopoverTrigger asChild>
                     <div
                       className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
-                        } ${disabled || !current.state || cities.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                        } ${disabled || !current.state || !cities || cities.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                     >
                       <div className="truncate">
                         {selectedCity ? (
@@ -2448,7 +2501,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                       </div>
                       <CommandList>
                         <CommandEmpty>
-                          {cities.length === 0 ? "No cities available" : "No city found"}
+                          {!cities || cities.length === 0 ? "No cities available" : "No city found"}
                         </CommandEmpty>
                         <CommandGroup>
                           {filteredCities.map((city) => (

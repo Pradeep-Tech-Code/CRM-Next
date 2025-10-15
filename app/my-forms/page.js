@@ -379,7 +379,7 @@ export default function MyFormsPage() {
       return
     }
     
-    const link = `${window.location.origin}/forms/${formId}`
+    const link = `${window.location.origin}/forms/${formId}?user_id=${USER_ID}`
     navigator.clipboard.writeText(link)
     toast.success("Form link copied to clipboard!")
   }
@@ -390,7 +390,7 @@ export default function MyFormsPage() {
       return
     }
     
-    const link = `${window.location.origin}/forms/${formId}`
+    const link = `${window.location.origin}/forms/${formId}?user_id=${USER_ID}`
     window.open(link, '_blank', 'noopener,noreferrer')
     toast.info("Opening form in new tab")
   }

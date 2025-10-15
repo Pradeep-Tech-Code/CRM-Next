@@ -100,7 +100,7 @@ const processFieldOptions = (field) => {
 }
 
 // Transform form values for API submission - FIXED VERSION
-const transformFormValues = (formValues, fields) => {
+const transformFormValues = (formValues, fields, phoneCountries = []) => {
   const transformedValues = {}
 
   // Helper function to recursively transform nested values using field IDs
@@ -497,34 +497,90 @@ const transformFormValues = (formValues, fields) => {
         }
         break
 
+      // case "location":
+      //   if (typeof fieldValue === 'object' && fieldValue !== null) {
+      //     const locationData = {
+      //       value: "location",
+      //       nestedValues: {
+      //         country: { value: fieldValue.country || "" },
+      //         state: { value: fieldValue.state || "" },
+      //         city: { value: fieldValue.city || "" }
+      //       }
+      //     }
+      //     transformedValues[finalFieldKey] = locationData
+      //   } else {
+      //     transformedValues[finalFieldKey] = { value: "" }
+      //   }
+      //   break
+
       case "location":
         if (typeof fieldValue === 'object' && fieldValue !== null) {
+          // Create location object in the direct format expected by API
           const locationData = {
-            value: "location",
-            nestedValues: {
-              country: { value: fieldValue.country || "" },
-              state: { value: fieldValue.state || "" },
-              city: { value: fieldValue.city || "" }
-            }
+            country: fieldValue.country || "",
+            state: fieldValue.state || "", 
+            city: fieldValue.city || ""
           }
           transformedValues[finalFieldKey] = locationData
+          
+          console.log('📍 Location field transformed:', { 
+            fieldId: finalFieldKey,
+            transformed: transformedValues[finalFieldKey] 
+          })
         } else {
-          transformedValues[finalFieldKey] = { value: "" }
+          transformedValues[finalFieldKey] = {
+            country: "",
+            state: "",
+            city: ""
+          }
         }
         break
 
+      // case "phone":
+      //   if (typeof fieldValue === 'object' && fieldValue !== null) {
+      //     const phoneData = {
+      //       value: "phone",
+      //       nestedValues: {
+      //         country: { value: fieldValue.country || "" },
+      //         number: { value: fieldValue.number || "" }
+      //       }
+      //     }
+      //     transformedValues[finalFieldKey] = phoneData
+      //   } else {
+      //     transformedValues[finalFieldKey] = { value: "" }
+      //   }
+      //   break
       case "phone":
         if (typeof fieldValue === 'object' && fieldValue !== null) {
-          const phoneData = {
-            value: "phone",
-            nestedValues: {
-              country: { value: fieldValue.country || "" },
-              number: { value: fieldValue.number || "" }
-            }
+          // Find the country code from phoneCountries with proper fallback
+          let countryCode = "+1" // Default fallback
+          let number = fieldValue.number || ""
+          
+          if (phoneCountries && Array.isArray(phoneCountries)) {
+            const phoneCountry = phoneCountries.find(c => c.code === fieldValue.country)
+            countryCode = phoneCountry?.dial || "+1"
+          } else {
+            console.warn('phoneCountries not available, using default country code +1')
           }
+          
+          // Create the phone object in the exact format expected by API
+          const phoneData = {
+            countryCode: countryCode,
+            number: number
+          }
+          
+          // Set the phone data directly (no contact_number wrapper)
           transformedValues[finalFieldKey] = phoneData
+      
+          console.log('📞 Phone field transformed:', { 
+            fieldId: finalFieldKey, 
+            transformed: transformedValues[finalFieldKey] 
+          })
         } else {
-          transformedValues[finalFieldKey] = { value: "" }
+          transformedValues[finalFieldKey] = { 
+            countryCode: "+1", 
+            number: "" 
+          }
         }
         break
 
@@ -538,7 +594,7 @@ const transformFormValues = (formValues, fields) => {
 }
 
 // Transform submission values for form display
-const transformSubmissionValues = (submissionValues, fields) => {
+const transformSubmissionValues = (submissionValues, fields, phoneCountries = []) => {
   const transformedValues = {}
 
   if (!submissionValues || typeof submissionValues !== 'object') {
@@ -628,26 +684,73 @@ const transformSubmissionValues = (submissionValues, fields) => {
     }
 
     // Handle different field types
-    if (typeof parsedValue === 'object' && parsedValue !== null && parsedValue.value !== undefined) {
-      // For simple text fields with only a value (no nested values), return just the string
-      if (!parsedValue.nestedValues || Object.keys(parsedValue.nestedValues).length === 0) {
-        // Check if this is a simple field type that expects just a string value
-        if (field.type === 'text' || field.type === 'textarea' || field.type === 'email' || field.type === 'number') {
-          return parsedValue.value
+    if (typeof parsedValue === 'object' && parsedValue !== null) {
+      // Special handling for phone fields
+      if (field.type === 'phone' && parsedValue.countryCode !== undefined) {
+        console.log(' Processing phone field:', parsedValue)
+        console.log(' Available phone countries:', phoneCountries?.length || 0)
+        
+        // Convert API phone format to form format
+        // Need to find the country code from phoneCountries by matching the dial code
+        let countryCode = ''
+        if (phoneCountries && Array.isArray(phoneCountries)) {
+          const phoneCountry = phoneCountries.find(c => c.dial === parsedValue.countryCode)
+          console.log(' Found phone country:', phoneCountry)
+          countryCode = phoneCountry?.code || ''
+        } else {
+          console.warn('📞 phoneCountries not available for phone field processing')
         }
+        
+        const result = {
+          country: countryCode,
+          number: parsedValue.number || ''
+        }
+        console.log('📞 Phone field result:', result)
+        return result
       }
       
-      // For complex fields with nested values, return the full object structure
-      const processedValue = {
-        value: parsedValue.value
+      // Special handling for location fields
+      if (field.type === 'location' && (parsedValue.country !== undefined || parsedValue.state !== undefined || parsedValue.city !== undefined)) {
+        console.log('📍 Processing location field:', parsedValue)
+        console.log('📍 Field ID:', fieldId, 'Field type:', field.type)
+        
+        // Convert API location format to form format
+        // The API stores location as { country: "101", state: "4008", city: "133024" }
+        // The form expects the same format, so we can return it as-is
+        const result = {
+          country: parsedValue.country || '',
+          state: parsedValue.state || '',
+          city: parsedValue.city || ''
+        }
+        console.log('📍 Location field result:', result)
+        return result
       }
+      
+      // Handle fields with value property
+      if (parsedValue.value !== undefined) {
+        // For simple text fields with only a value (no nested values), return just the string
+        if (!parsedValue.nestedValues || Object.keys(parsedValue.nestedValues).length === 0) {
+          // Check if this is a simple field type that expects just a string value
+          if (field.type === 'text' || field.type === 'textarea' || field.type === 'email' || field.type === 'number') {
+            return parsedValue.value
+          }
+        }
+        
+        // For complex fields with nested values, return the full object structure
+        const processedValue = {
+          value: parsedValue.value
+        }
 
-      // Process nested values from API and convert nestedValues to nestedFields
-      if (parsedValue.nestedValues) {
-        processedValue.nestedFields = transformApiNestedValuesToNestedFields(parsedValue.nestedValues)
+        // Process nested values from API and convert nestedValues to nestedFields
+        if (parsedValue.nestedValues) {
+          processedValue.nestedFields = transformApiNestedValuesToNestedFields(parsedValue.nestedValues)
+        }
+
+        return processedValue
+      } else {
+        // Direct object without value property
+        return parsedValue
       }
-
-      return processedValue
     } else {
       // Simple value or unparsed string
       return parsedValue
@@ -721,6 +824,12 @@ export default function PublicFormPage() {
   const formId = params.formId
   const token = searchParams.get('token')
   const submissionId = searchParams.get('submission_id')
+  const userIdFromUrl = searchParams.get('user_id')
+
+  // Log user ID extraction for debugging
+  console.log('🔍 User ID from URL:', userIdFromUrl)
+  console.log('🔍 Fallback USER_ID constant:', USER_ID)
+  console.log('🔍 Final reference_id will be:', userIdFromUrl || USER_ID)
 
   const [formData, setFormData] = useState(null)
   const [submissionData, setSubmissionData] = useState(null)
@@ -853,7 +962,7 @@ export default function PublicFormPage() {
         {
           organization_id: ORGANIZATION_ID,
           form_id: formId,
-          reference_id: USER_ID,
+          reference_id: userIdFromUrl || USER_ID, // Use user ID from URL, fallback to hardcoded
           submission_id: submissionId
         },
         {
@@ -1253,7 +1362,7 @@ export default function PublicFormPage() {
         formFields: formData.fields.map(f => ({ id: f.id, name: f.name, label: f.label, type: f.type }))
       })
 
-      const values = transformSubmissionValues(submissionData.values, formData.fields)
+      const values = transformSubmissionValues(submissionData.values, formData.fields, phoneCountries)
       console.log('✅ Transformed submission values for form:', values)
       return values
     }
@@ -1411,17 +1520,55 @@ export default function PublicFormPage() {
           }
           break
 
-        case "phone": {
-          const v = value || {}
-          const phoneCountry = phoneCountries.find(c => c.code === v.country) || phoneCountries[0]
-          const digits = String(v.number || "").replace(/\D/g, "")
-          const expectedLength = phoneCountry?.len || 10
+          case "phone": {
+            const v = value || {}
+            const phoneCountry = phoneCountries.find(c => c.code === v.country) || phoneCountries[0]
+            const digits = String(v.number || "").replace(/\D/g, "")
+            const expectedLength = phoneCountry?.len || 10
 
-          if (digits.length !== expectedLength) {
-            errors.push(`Phone number must be ${expectedLength} digits for ${phoneCountry.label}`)
+            if (digits.length !== expectedLength) {
+              errors.push(`Phone number must be ${expectedLength} digits for ${phoneCountry.label}`)
+            }
+            break
           }
-          break
-        }
+
+          case "location": {
+            const v = value || {}
+            
+            // Check if validation restrictions are defined
+            if (field.validation?.allowedCountries || field.validation?.allowedStates || field.validation?.allowedCities) {
+              // Validate country selection
+              if (v.country && field.validation?.allowedCountries) {
+                const selectedCountry = countries.find(c => c.id === parseInt(v.country))
+                if (selectedCountry && !field.validation.allowedCountries.includes(selectedCountry.name)) {
+                  errors.push(`Country "${selectedCountry.name}" is not allowed`)
+                }
+              }
+              
+              // Validate state selection
+              if (v.state && field.validation?.allowedStates && v.country) {
+                const selectedCountry = countries.find(c => c.id === parseInt(v.country))
+                if (selectedCountry && field.validation.allowedStates[selectedCountry.name]) {
+                  const selectedState = states.find(s => s.id === parseInt(v.state))
+                  if (selectedState && !field.validation.allowedStates[selectedCountry.name].includes(selectedState.name)) {
+                    errors.push(`State "${selectedState.name}" is not allowed for ${selectedCountry.name}`)
+                  }
+                }
+              }
+              
+              // Validate city selection
+              if (v.city && field.validation?.allowedCities && v.state) {
+                const selectedState = states.find(s => s.id === parseInt(v.state))
+                if (selectedState && field.validation.allowedCities[selectedState.name]) {
+                  const selectedCity = cities.find(c => c.id === parseInt(v.city))
+                  if (selectedCity && !field.validation.allowedCities[selectedState.name].includes(selectedCity.name)) {
+                    errors.push(`City "${selectedCity.name}" is not allowed for ${selectedState.name}`)
+                  }
+                }
+              }
+            }
+            break
+          }
 
         case "file":
           // File validation - only allow images and PDFs up to 5MB
@@ -1474,7 +1621,7 @@ export default function PublicFormPage() {
       setSubmitting(true)
       try {
         // Transform form values to match API expected format
-        const transformedValues = transformFormValues(value, formData?.fields || [])
+        const transformedValues = transformFormValues(value, formData?.fields || [], phoneCountries)
 
         if (isEditMode) {
           console.log('=== UPDATE DEBUG ===')
@@ -1504,7 +1651,7 @@ export default function PublicFormPage() {
           const updateData = {
             organization_id: ORGANIZATION_ID,
             form_id: formId,
-            reference_id: USER_ID,
+            reference_id: userIdFromUrl || USER_ID, // Use user ID from URL, fallback to hardcoded
             submission_id: submissionId,
             values: transformedValues
           }
@@ -1527,9 +1674,8 @@ export default function PublicFormPage() {
           // Create new submission
           const submissionData = {
             organization_id: ORGANIZATION_ID,
-            reference_id: USER_ID,
+            reference_id: userIdFromUrl || USER_ID, // Use user ID from URL, fallback to hardcoded
             form_id: formId,
-            reference_id: USER_ID,
             values: transformedValues
           }
 
