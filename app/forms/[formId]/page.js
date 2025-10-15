@@ -414,7 +414,8 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
                 return checkboxItem
               })
               
-              transformedValues[finalFieldKey] = { value: checkboxArray }
+              // For checkbox fields, send the array directly without wrapping in a value property
+              transformedValues[finalFieldKey] = checkboxArray
             } else {
               // Single checkbox selection
               const fieldData = { value: processedValue }
@@ -606,6 +607,7 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
   const transformApiNestedValuesToNestedFields = (nestedValues) => {
     if (!nestedValues || typeof nestedValues !== 'object') return {}
 
+    console.log('🔄 transformApiNestedValuesToNestedFields input:', nestedValues)
     const result = {}
 
     Object.keys(nestedValues).forEach(key => {
@@ -634,16 +636,19 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
         }
       } else if (typeof value === 'object' && value !== null) {
         if (value.value !== undefined) {
-          // Transform nestedValues to nestedFields structure
-          result[key] = {
-            value: value.value,
-            ...(value.nestedValues && Object.keys(value.nestedValues).length > 0 && {
-              nestedFields: transformApiNestedValuesToNestedFields(value.nestedValues)
-            })
+          // For nested fields, store the value directly, not wrapped in a value property
+          result[key] = value.value
+          
+          // If there are nested values, process them recursively
+          if (value.nestedValues && Object.keys(value.nestedValues).length > 0) {
+            const nestedResult = transformApiNestedValuesToNestedFields(value.nestedValues)
+            // Merge the nested result into the current result
+            Object.assign(result, nestedResult)
           }
         } else {
           // Direct nested object
-          result[key] = transformApiNestedValuesToNestedFields(value)
+          const nestedResult = transformApiNestedValuesToNestedFields(value)
+          Object.assign(result, nestedResult)
         }
       } else {
         // Simple value
@@ -651,6 +656,7 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
       }
     })
 
+    console.log('✅ transformApiNestedValuesToNestedFields output:', result)
     return result
   }
 
@@ -685,6 +691,33 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
 
     // Handle different field types
     if (typeof parsedValue === 'object' && parsedValue !== null) {
+      // Special handling for checkbox fields - check if this is an array (checkbox selections)
+      if (field.type === 'checkbox' && Array.isArray(parsedValue)) {
+        console.log('☑️ Processing checkbox field array:', parsedValue)
+        
+        // Extract values and nested fields from checkbox array
+        const checkboxValues = []
+        const checkboxNestedFields = {}
+        
+        parsedValue.forEach((item, index) => {
+          if (typeof item === 'object' && item !== null && item.value !== undefined) {
+            checkboxValues.push(item.value)
+            
+            // Convert nestedValues to nestedFields for this option
+            if (item.nestedValues && Object.keys(item.nestedValues).length > 0) {
+              checkboxNestedFields[index] = transformApiNestedValuesToNestedFields(item.nestedValues)
+            }
+          }
+        })
+        
+        const result = {
+          value: checkboxValues,
+          nestedFields: checkboxNestedFields
+        }
+        console.log('☑️ Checkbox field result:', result)
+        return result
+      }
+      
       // Special handling for phone fields
       if (field.type === 'phone' && parsedValue.countryCode !== undefined) {
         console.log(' Processing phone field:', parsedValue)
@@ -731,7 +764,7 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
         // For simple text fields with only a value (no nested values), return just the string
         if (!parsedValue.nestedValues || Object.keys(parsedValue.nestedValues).length === 0) {
           // Check if this is a simple field type that expects just a string value
-          if (field.type === 'text' || field.type === 'textarea' || field.type === 'email' || field.type === 'number') {
+          if (field.type === 'text' || field.type === 'textarea' || field.type === 'email' || field.type === 'number' || field.type === 'datetime') {
             return parsedValue.value
           }
         }
@@ -743,9 +776,13 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
 
         // Process nested values from API and convert nestedValues to nestedFields
         if (parsedValue.nestedValues) {
+          console.log(`🔄 Processing nested values for ${field.type} field ${fieldId}:`, parsedValue.nestedValues)
           processedValue.nestedFields = transformApiNestedValuesToNestedFields(parsedValue.nestedValues)
+          console.log(`✅ Processed nested fields for ${field.type} field ${fieldId}:`, processedValue.nestedFields)
+          console.log(`🔍 Nested fields structure:`, JSON.stringify(processedValue.nestedFields, null, 2))
         }
 
+        console.log(`✅ Final processed value for ${field.type} field ${fieldId}:`, processedValue)
         return processedValue
       } else {
         // Direct object without value property
