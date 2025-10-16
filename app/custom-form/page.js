@@ -1,16 +1,26 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { FieldPalette } from "../component/formbuilder/field-palette"
 import { FormCanvas } from "../component/formbuilder/form-canvas"
 import { FieldConfigPanel } from "../component/formbuilder/field-config-panel"
-import { FormPreview } from "../component/formbuilder/form-preview"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
-import { Eye, Code, Settings, FileText, Download, Plus, GripVertical } from "lucide-react"
+import { Eye, Code, Settings, FileText, Download, Plus, GripVertical, Trash2, AlertTriangle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragOverlay } from "@dnd-kit/core"
 import {
   arrayMove,
@@ -23,11 +33,35 @@ import { CSS } from "@dnd-kit/utilities"
 // Field types are defined in the FieldPalette component
 
 export default function CustomFormPage() {
+  const router = useRouter()
   const [fields, setFields] = useState([])
   const [selectedField, setSelectedField] = useState(null)
   const [activeTab, setActiveTab] = useState("builder")
   const [fieldPaletteCollapsed, setFieldPaletteCollapsed] = useState(false)
   const [activeId, setActiveId] = useState(null)
+  const [showClearDialog, setShowClearDialog] = useState(false)
+
+  // Restore fields from sessionStorage on component mount
+  useEffect(() => {
+    const savedFields = sessionStorage.getItem('form-preview-fields')
+    if (savedFields) {
+      try {
+        const parsedFields = JSON.parse(savedFields)
+        if (parsedFields.length > 0) {
+          setFields(parsedFields)
+        }
+      } catch (error) {
+        console.error('Error restoring fields:', error)
+      }
+    }
+  }, [])
+
+  // Save fields to sessionStorage whenever they change
+  useEffect(() => {
+    if (fields.length > 0) {
+      sessionStorage.setItem('form-preview-fields', JSON.stringify(fields))
+    }
+  }, [fields])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -214,6 +248,24 @@ export default function CustomFormPage() {
     setFieldPaletteCollapsed(!fieldPaletteCollapsed)
   }
 
+  const handleTabChange = (value) => {
+    if (value === "preview") {
+      // Navigate to preview page (fields are already saved via useEffect)
+      // Set intended tab so we know to return to custom-form
+      sessionStorage.setItem('intended-tab', 'custom-form')
+      router.push('/form-preview')
+    } else {
+      setActiveTab(value)
+    }
+  }
+
+  const handleClearForm = () => {
+    setFields([])
+    setSelectedField(null)
+    sessionStorage.removeItem('form-preview-fields')
+    setShowClearDialog(false)
+  }
+
   const regularFieldsCount = fields.filter(f => f.source !== 'table').length
   const tableFieldsCount = fields.filter(f => f.source === 'table').length
 
@@ -237,7 +289,18 @@ export default function CustomFormPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
+          {fields.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowClearDialog(true)}
+              className="gap-2 text-destructive hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+              Clear All
+            </Button>
+          )}
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-auto">
             <TabsList>
               <TabsTrigger value="builder" className="flex items-center gap-2">
                 <Settings className="h-4 w-4" />
@@ -252,6 +315,30 @@ export default function CustomFormPage() {
         </div>
       </div>
 
+      {/* Clear All Confirmation Dialog */}
+      <AlertDialog open={showClearDialog} onOpenChange={setShowClearDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Clear All Fields?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to clear all fields? This action cannot be undone and will remove all the fields you've added to the form.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleClearForm}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Clear All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Main Content */}
       <DndContext
         sensors={sensors}
@@ -260,38 +347,32 @@ export default function CustomFormPage() {
         onDragEnd={handleDragEnd}
       >
         <div className="flex-1 flex border rounded-lg overflow-hidden bg-background min-h-0">
-          {/* Field Palette - Only show in builder mode */}
-          {activeTab === "builder" && (
-            <FieldPalette
-              onAddField={addField}
-              collapsed={fieldPaletteCollapsed}
-              onToggleCollapse={toggleFieldPalette}
-            />
-          )}
+          {/* Field Palette */}
+          <FieldPalette
+            onAddField={addField}
+            collapsed={fieldPaletteCollapsed}
+            onToggleCollapse={toggleFieldPalette}
+          />
 
-          {/* Main Canvas/Preview */}
+          {/* Main Canvas */}
           <div className="flex-1 flex">
             <div className={cn(
               "flex-1 transition-all duration-300 ease-in-out",
-              activeTab === "builder" && selectedField ? "w-2/3" : "w-full"
+              selectedField ? "w-2/3" : "w-full"
             )}>
-              {activeTab === "builder" ? (
-                <FormCanvas
-                  fields={fields}
-                  selectedField={selectedField}
-                  onSelectField={setSelectedField}
-                  onDeleteField={deleteField}
-                  onMoveField={moveField}
-                  onAddField={addField}
-                  activeId={activeId}
-                />
-              ) : (
-                <FormPreview fields={fields} />
-              )}
+              <FormCanvas
+                fields={fields}
+                selectedField={selectedField}
+                onSelectField={setSelectedField}
+                onDeleteField={deleteField}
+                onMoveField={moveField}
+                onAddField={addField}
+                activeId={activeId}
+              />
             </div>
 
             {/* Configuration Panel */}
-            {activeTab === "builder" && selectedField && (
+            {selectedField && (
               <div className="w-1/3 border-l bg-card transition-all duration-300 ease-in-out animate-in slide-in-from-right">
                 <FieldConfigPanel
                   field={selectedField}

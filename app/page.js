@@ -15,6 +15,15 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("dashboard")
   const [isCollapsed, setIsCollapsed] = useState(false)
 
+  // Check for intended tab from sessionStorage (e.g., when returning from preview)
+  useEffect(() => {
+    const intendedTab = sessionStorage.getItem('intended-tab')
+    if (intendedTab) {
+      setActiveTab(intendedTab)
+      sessionStorage.removeItem('intended-tab')
+    }
+  }, [])
+
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
