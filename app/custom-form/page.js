@@ -147,9 +147,30 @@ export default function CustomFormPage() {
   }
 
   const deleteField = (fieldId) => {
+    const currentFieldIndex = fields.findIndex(field => field.id === fieldId)
+    const isSelectedField = selectedField && selectedField.id === fieldId
+
     setFields(fields.filter(field => field.id !== fieldId))
-    if (selectedField && selectedField.id === fieldId) {
-      setSelectedField(null)
+
+    if (isSelectedField) {
+      // If the deleted field was selected, find another field to select
+      const remainingFields = fields.filter(field => field.id !== fieldId)
+      
+      if (remainingFields.length > 0) {
+        // Select the next field, or the previous one if we deleted the last field
+        const nextFieldIndex = currentFieldIndex < remainingFields.length ? currentFieldIndex : currentFieldIndex - 1
+        const nextField = remainingFields[nextFieldIndex] || remainingFields[remainingFields.length - 1]
+        
+        // Add a small delay for smooth transition
+        setTimeout(() => {
+          setSelectedField(nextField)
+        }, 150)
+      } else {
+        // No fields left, close the panel
+        setTimeout(() => {
+          setSelectedField(null)
+        }, 150)
+      }
     }
   }
 
@@ -247,7 +268,7 @@ export default function CustomFormPage() {
           {/* Main Canvas/Preview */}
           <div className="flex-1 flex">
             <div className={cn(
-              "flex-1 transition-all duration-300",
+              "flex-1 transition-all duration-300 ease-in-out",
               activeTab === "builder" && selectedField ? "w-2/3" : "w-full"
             )}>
               {activeTab === "builder" ? (
@@ -267,7 +288,7 @@ export default function CustomFormPage() {
 
             {/* Configuration Panel */}
             {activeTab === "builder" && selectedField && (
-              <div className="w-1/3 border-l bg-card">
+              <div className="w-1/3 border-l bg-card transition-all duration-300 ease-in-out animate-in slide-in-from-right">
                 <FieldConfigPanel
                   field={selectedField}
                   onUpdateField={updateField}
