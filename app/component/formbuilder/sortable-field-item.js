@@ -47,18 +47,18 @@ export function SortableFieldItem({ field, selectedField, onSelectField, onDelet
     >
       <Card
         className={cn(
-          "cursor-pointer transition-all duration-200 hover:shadow-md",
+          "cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-md",
           selectedField?.id === field.id ? "ring-2 ring-primary border-primary/50" : "hover:border-primary/30",
           isDeleting && "opacity-50 scale-95 transform -translate-x-4",
         )}
         onClick={() => !isDeleting && onSelectField(field)}
+        {...attributes}
+        {...listeners}
       >
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <div
-              className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
-              {...attributes}
-              {...listeners}
+              className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <GripVertical className="h-4 w-4 text-muted-foreground" />
             </div>
