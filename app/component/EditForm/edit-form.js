@@ -220,6 +220,7 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
   const [formData, setFormData] = useState({
     form_name: "",
     description: "",
+    retry_count: "2",
     fields: []
   })
   const [saving, setSaving] = useState(false)
@@ -463,6 +464,7 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
       setFormData({
         form_name: form.form_name || "",
         description: form.description || "",
+        retry_count: form.retry_count || "2",
         fields: parsedFields
       })
 
@@ -738,6 +740,21 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                   placeholder="Enter form description"
                   rows={3}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="retry-count">Number of Edit Attempts</Label>
+                <Input
+                  id="retry-count"
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={formData.retry_count}
+                  onChange={(e) => setFormData(prev => ({ ...prev, retry_count: e.target.value }))}
+                  placeholder="Enter number of edit attempts"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Maximum number of times users can edit their form submission
+                </p>
               </div>
             </CardContent>
           </Card>

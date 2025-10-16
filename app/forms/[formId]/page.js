@@ -1164,7 +1164,20 @@ export default function PublicFormPage() {
 
     } catch (error) {
       console.error('Error fetching submission data:', error)
-      toast.error(`Unable to load submission data: ${error.message}`)
+      
+      // Check for specific error messages
+      if (error.response?.data?.error) {
+        const errorMessage = error.response.data.error
+        
+        // Handle edit limit reached error
+        if (errorMessage.includes("Edit limit reached") || errorMessage.includes("edit this form only")) {
+          toast.error(errorMessage)
+        } else {
+          toast.error(`Unable to load submission data: ${errorMessage}`)
+        }
+      } else {
+        toast.error(`Unable to load submission data: ${error.message}`)
+      }
     }
   }
 
@@ -1398,6 +1411,7 @@ export default function PublicFormPage() {
       const parsedForm = {
         form_name: apiForm.form_name || apiForm.name || 'Untitled Form',
         description: apiForm.description || '',
+        retry_count: apiForm.retry_count || '2',
         fields: parsedFields
       }
 
@@ -1431,6 +1445,7 @@ export default function PublicFormPage() {
           setFormData({
             form_name: result.form.form_name || 'Form Unavailable',
             description: 'This form is currently inactive and cannot accept submissions.',
+            retry_count: result.form.retry_count || '2',
             fields: [],
             archived: true
           })
@@ -1447,6 +1462,7 @@ export default function PublicFormPage() {
           setFormData({
             form_name: 'Error Loading Form',
             description: 'Unable to load form data',
+            retry_count: '2',
             fields: []
           })
         }
@@ -1462,6 +1478,7 @@ export default function PublicFormPage() {
         setFormData({
           form_name: 'Form Not Found',
           description: 'The requested form could not be found.',
+          retry_count: '2',
           fields: []
         })
       } else if (error.response?.status === 401) {
@@ -1469,6 +1486,7 @@ export default function PublicFormPage() {
         setFormData({
           form_name: 'Authentication Error',
           description: 'Unable to access this form due to authentication issues.',
+          retry_count: '2',
           fields: []
         })
       } else if (error.response?.status === 403) {
@@ -1476,6 +1494,7 @@ export default function PublicFormPage() {
         setFormData({
           form_name: 'Access Denied',
           description: 'You do not have permission to access this form.',
+          retry_count: '2',
           fields: []
         })
       } else {
@@ -1483,6 +1502,7 @@ export default function PublicFormPage() {
         setFormData({
           form_name: 'Error Loading Form',
           description: 'An error occurred while loading the form.',
+          retry_count: '2',
           fields: []
         })
       }
@@ -1894,7 +1914,30 @@ export default function PublicFormPage() {
 
       } catch (error) {
         console.error('Error submitting form:', error)
-        toast.error("An error occurred while submitting the form.")
+        
+        // Check for specific error messages
+        if (error.response?.data?.error) {
+          const errorMessage = error.response.data.error
+          
+          // Handle edit limit reached error
+          if (errorMessage.includes("Edit limit reached") || errorMessage.includes("edit this form only")) {
+            toast.error(errorMessage)
+          } else {
+            toast.error(errorMessage)
+          }
+        } else if (error.response?.status === 400) {
+          // Handle 400 Bad Request with specific error message
+          const errorMessage = error.response.data?.error || error.response.data?.message || "Invalid request"
+          toast.error(errorMessage)
+        } else if (error.response?.status === 403) {
+          toast.error("Access denied. You don't have permission to perform this action.")
+        } else if (error.response?.status === 404) {
+          toast.error("Form or submission not found.")
+        } else if (error.response?.status >= 500) {
+          toast.error("Server error. Please try again later.")
+        } else {
+          toast.error("An error occurred while submitting the form.")
+        }
       } finally {
         setSubmitting(false)
       }

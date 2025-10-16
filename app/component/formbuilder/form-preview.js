@@ -135,6 +135,7 @@ export function FormPreview({ fields }) {
   const [copied, setCopied] = useState(false)
   const [formName, setFormName] = useState("")
   const [formDescription, setFormDescription] = useState("")
+  const [retryCount, setRetryCount] = useState("2")
 
   // Filter out table_column type fields from preview
   const previewFields = fields.filter(field => field.type !== "table_column")
@@ -742,7 +743,8 @@ export function FormPreview({ fields }) {
         created_by: USER_ID,
         fields: regularFields.map(processFieldData),
         extraFields: leadDatabaseFields.map(processFieldData),
-        published: true
+        published: true,
+        retry_count: retryCount
       }
 
       console.log('🚀 Final API Payload:', JSON.stringify(formData, null, 2))
@@ -819,6 +821,7 @@ export function FormPreview({ fields }) {
           const completeFormData = {
             form_name: formName,
             description: formDescription,
+            retry_count: retryCount,
             previewFields: previewFields.map(field => ({
               id: field.id,
               type: field.type,
@@ -1233,6 +1236,24 @@ export function FormPreview({ fields }) {
                 placeholder="Enter form description"
                 className="bg-input"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="retry-count" className="text-sm font-medium">
+                Number of Edit Attempts
+              </Label>
+              <Input
+                id="retry-count"
+                type="number"
+                min="1"
+                max="10"
+                value={retryCount}
+                onChange={(e) => setRetryCount(e.target.value)}
+                placeholder="Enter number of edit attempts"
+                className="bg-input"
+              />
+              <p className="text-xs text-muted-foreground">
+                Maximum number of times users can edit their form submission
+              </p>
             </div>
           </CardContent>
         </Card>
