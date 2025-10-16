@@ -78,6 +78,33 @@ const createFileFromBase64 = (base64String, filename = 'uploaded_file') => {
   }
 }
 
+// Helper function to recursively process nested fields structure
+const processNestedFieldsRecursively = (nestedFields) => {
+  if (!Array.isArray(nestedFields)) return []
+
+  return nestedFields.map(nestedField => {
+    const processedField = {
+      id: nestedField.id,
+      name: nestedField.name,
+      type: nestedField.type,
+      label: nestedField.label,
+      placeholder: nestedField.placeholder || '',
+      required: nestedField.required || false,
+      validation: nestedField.validation || {},
+      options: nestedField.options || []
+    }
+
+    // Recursively process nested fields within this field
+    if (nestedField.nestedFields && Array.isArray(nestedField.nestedFields)) {
+      processedField.nestedFields = processNestedFieldsRecursively(nestedField.nestedFields)
+    } else {
+      processedField.nestedFields = []
+    }
+
+    return processedField
+  })
+}
+
 // Helper function to process field options with nested structure
 const processFieldOptions = (field) => {
   // If we have processed options with nested structure, use those
@@ -94,9 +121,63 @@ const processFieldOptions = (field) => {
       }
     })
   }
-  
-  // Fallback to regular options
-  return field.options || []
+
+
+  // Handle options that might be stored as JSON strings (from API)
+  let options = field.options || []
+
+  if (typeof options === 'string') {
+    try {
+      options = JSON.parse(options)
+    } catch (e) {
+      console.warn('Failed to parse options JSON string:', options)
+      return []
+    }
+  }
+
+  // If options is an array, process each option
+  if (Array.isArray(options)) {
+    return options.map((option, index) => {
+      if (typeof option === 'object' && option !== null) {
+        // If the option already has nestedFields, use them
+        if (option.nestedFields) {
+          return {
+            value: option.value,
+            label: option.label,
+            nestedFields: option.nestedFields || []
+          }
+        }
+
+        // If the option doesn't have nestedFields but the field has nestedFields for this index,
+        // convert the form builder structure to the expected structure
+        if (field.nestedFields && field.nestedFields[index]) {
+          return {
+            value: option.value,
+            label: option.label,
+            nestedFields: processNestedFieldsRecursively(field.nestedFields[index])
+          }
+        }
+
+        return {
+          value: option.value,
+          label: option.label,
+          nestedFields: []
+        }
+      } else {
+        // Handle string options - check if there are nested fields for this index
+        if (field.nestedFields && field.nestedFields[index]) {
+          return {
+            value: option,
+            label: option,
+            nestedFields: processNestedFieldsRecursively(field.nestedFields[index])
+          }
+        }
+        return option
+      }
+    })
+  }
+
+  return []
 }
 
 // Transform form values for API submission - FIXED VERSION
@@ -106,16 +187,16 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
   // Helper function to recursively transform nested values using field IDs
   const transformNestedValues = (nestedFields, parentValue, fieldDefinition) => {
     const result = {}
-    
+
     if (!nestedFields || typeof nestedFields !== 'object') return result
-    
+
     // First, collect all field IDs and their values, prioritizing numeric keys (which contain updated values)
     const fieldValues = {}
-    
+
     // Process numeric keys first (these contain the updated values)
     Object.keys(nestedFields).forEach(key => {
       const value = nestedFields[key]
-      
+
       // Process numeric keys (0, 1, 2, etc.) - these contain the updated values
       if (!isNaN(key) && key !== 'value') {
         // This is a numeric key, process its contents directly
@@ -128,11 +209,11 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
         return
       }
     })
-    
+
     // Then process non-numeric keys (these contain the old values)
     Object.keys(nestedFields).forEach(key => {
       const value = nestedFields[key]
-      
+
       // Skip numeric keys (already processed above)
       if (!isNaN(key) && key !== 'value') {
         return
@@ -140,12 +221,12 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
 
       // Use the key as-is (field ID) - don't try to extract field names
       const fieldId = key
-      
+
       // Only process if we haven't already processed this field ID from numeric keys
       if (fieldValues[fieldId]) {
         return
       }
-      
+
       // Process the value and store it
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
         // Handle nested object structure
@@ -156,13 +237,13 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
             // Multiple checkbox selections - create array of objects with nested values
             processedValueValue = processedValueValue.map(optionValue => {
               const checkboxItem = { value: optionValue }
-              
+
               // Find nested fields for this specific option
               if (value.nestedFields && Object.keys(value.nestedFields).length > 0) {
                 // Look for nested fields that match this option value
-                const optionNestedFields = value.nestedFields[optionValue] || 
-                                         value.nestedFields[processedValueValue.indexOf(optionValue)]
-                
+                const optionNestedFields = value.nestedFields[optionValue] ||
+                  value.nestedFields[processedValueValue.indexOf(optionValue)]
+
                 if (optionNestedFields) {
                   const processedNested = transformNestedValues(optionNestedFields, optionValue, fieldDefinition)
                   if (Object.keys(processedNested).length > 0) {
@@ -170,7 +251,7 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
                   }
                 }
               }
-              
+
               return checkboxItem
             })
           } else if (Array.isArray(processedValueValue) && processedValueValue.length === 1) {
@@ -233,7 +314,7 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
           }
           return { value: processedValue }
         }).filter(item => item.value !== undefined && item.value !== null)
-        
+
         if (processedArray.length > 0) {
           // Only use array if we have multiple items, otherwise use the single value
           if (processedArray.length === 1) {
@@ -266,10 +347,10 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
         }
       }
     })
-    
+
     // Now copy all field values to the result
     Object.assign(result, fieldValues)
-    
+
     return result
   }
 
@@ -396,13 +477,13 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
               // Multiple checkbox selections - create array of objects
               const checkboxArray = processedValue.map(optionValue => {
                 const checkboxItem = { value: optionValue }
-                
+
                 // Find nested fields for this specific option
                 if (fieldValue.nestedFields && Object.keys(fieldValue.nestedFields).length > 0) {
                   // Look for nested fields that match this option value
-                  const optionNestedFields = fieldValue.nestedFields[optionValue] || 
-                                           fieldValue.nestedFields[processedValue.indexOf(optionValue)]
-                  
+                  const optionNestedFields = fieldValue.nestedFields[optionValue] ||
+                    fieldValue.nestedFields[processedValue.indexOf(optionValue)]
+
                   if (optionNestedFields) {
                     const processedNested = transformNestedValues(optionNestedFields, optionValue, field)
                     if (Object.keys(processedNested).length > 0) {
@@ -410,23 +491,23 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
                     }
                   }
                 }
-                
+
                 return checkboxItem
               })
-              
+
               // For checkbox fields, send the array directly without wrapping in a value property
               transformedValues[finalFieldKey] = checkboxArray
             } else {
               // Single checkbox selection
               const fieldData = { value: processedValue }
-              
+
               if (fieldValue.nestedFields && Object.keys(fieldValue.nestedFields).length > 0) {
                 const processedNested = transformNestedValues(fieldValue.nestedFields, processedValue, field)
                 if (Object.keys(processedNested).length > 0) {
                   fieldData.nestedValues = processedNested
                 }
               }
-              
+
               transformedValues[finalFieldKey] = fieldData
             }
           } else {
@@ -519,14 +600,14 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
           // Create location object in the direct format expected by API
           const locationData = {
             country: fieldValue.country || "",
-            state: fieldValue.state || "", 
+            state: fieldValue.state || "",
             city: fieldValue.city || ""
           }
           transformedValues[finalFieldKey] = locationData
-          
-          console.log('📍 Location field transformed:', { 
+
+          console.log('📍 Location field transformed:', {
             fieldId: finalFieldKey,
-            transformed: transformedValues[finalFieldKey] 
+            transformed: transformedValues[finalFieldKey]
           })
         } else {
           transformedValues[finalFieldKey] = {
@@ -556,31 +637,31 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
           // Find the country code from phoneCountries with proper fallback
           let countryCode = "+1" // Default fallback
           let number = fieldValue.number || ""
-          
+
           if (phoneCountries && Array.isArray(phoneCountries)) {
             const phoneCountry = phoneCountries.find(c => c.code === fieldValue.country)
             countryCode = phoneCountry?.dial || "+1"
           } else {
             console.warn('phoneCountries not available, using default country code +1')
           }
-          
+
           // Create the phone object in the exact format expected by API
           const phoneData = {
             countryCode: countryCode,
             number: number
           }
-          
+
           // Set the phone data directly (no contact_number wrapper)
           transformedValues[finalFieldKey] = phoneData
-      
-          console.log('📞 Phone field transformed:', { 
-            fieldId: finalFieldKey, 
-            transformed: transformedValues[finalFieldKey] 
+
+          console.log('📞 Phone field transformed:', {
+            fieldId: finalFieldKey,
+            transformed: transformedValues[finalFieldKey]
           })
         } else {
-          transformedValues[finalFieldKey] = { 
-            countryCode: "+1", 
-            number: "" 
+          transformedValues[finalFieldKey] = {
+            countryCode: "+1",
+            number: ""
           }
         }
         break
@@ -612,23 +693,23 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
 
     Object.keys(nestedValues).forEach(key => {
       const value = nestedValues[key]
-      
+
       if (Array.isArray(value)) {
         // Handle checkbox arrays - convert to form's expected structure
         const checkboxValues = []
         const checkboxNestedFields = {}
-        
+
         value.forEach((item, index) => {
           if (typeof item === 'object' && item !== null && item.value !== undefined) {
             checkboxValues.push(item.value)
-            
+
             // Convert nestedValues to nestedFields for this option
             if (item.nestedValues && Object.keys(item.nestedValues).length > 0) {
               checkboxNestedFields[index] = transformApiNestedValuesToNestedFields(item.nestedValues)
             }
           }
         })
-        
+
         // Return the form's expected structure
         result[key] = {
           value: checkboxValues,
@@ -641,13 +722,13 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
             value: value.value,
             nestedFields: {}
           }
-          
+
           // If there are nested values, process them recursively
           if (value.nestedValues && Object.keys(value.nestedValues).length > 0) {
             const nestedResult = transformApiNestedValuesToNestedFields(value.nestedValues)
             fieldValue.nestedFields = nestedResult
           }
-          
+
           result[key] = fieldValue
         } else {
           // Direct nested object
@@ -667,7 +748,7 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
   // Helper function to process the main field values
   const processFieldValue = (fieldId, fieldValue, field) => {
     console.log(`🔄 Processing field ${fieldId}:`, { fieldValue, fieldType: field?.type })
-    
+
     // Handle empty strings
     if (fieldValue === "" || fieldValue === null || fieldValue === undefined) {
       // Return appropriate default based on field type
@@ -681,7 +762,7 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
         return ""
       }
     }
-    
+
     // Handle JSON strings from API
     let parsedValue = fieldValue
     if (typeof fieldValue === 'string') {
@@ -698,22 +779,22 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
       // Special handling for checkbox fields - check if this is an array (checkbox selections)
       if (field.type === 'checkbox' && Array.isArray(parsedValue)) {
         console.log('☑️ Processing checkbox field array:', parsedValue)
-        
+
         // Extract values and nested fields from checkbox array
         const checkboxValues = []
         const checkboxNestedFields = {}
-        
+
         parsedValue.forEach((item, index) => {
           if (typeof item === 'object' && item !== null && item.value !== undefined) {
             checkboxValues.push(item.value)
-            
+
             // Convert nestedValues to nestedFields for this option
             if (item.nestedValues && Object.keys(item.nestedValues).length > 0) {
               checkboxNestedFields[index] = transformApiNestedValuesToNestedFields(item.nestedValues)
             }
           }
         })
-        
+
         const result = {
           value: checkboxValues,
           nestedFields: checkboxNestedFields
@@ -721,12 +802,12 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
         console.log('☑️ Checkbox field result:', result)
         return result
       }
-      
+
       // Special handling for phone fields
       if (field.type === 'phone' && parsedValue.countryCode !== undefined) {
         console.log(' Processing phone field:', parsedValue)
         console.log(' Available phone countries:', phoneCountries?.length || 0)
-        
+
         // Convert API phone format to form format
         // Need to find the country code from phoneCountries by matching the dial code
         let countryCode = ''
@@ -737,7 +818,7 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
         } else {
           console.warn('📞 phoneCountries not available for phone field processing')
         }
-        
+
         const result = {
           country: countryCode,
           number: parsedValue.number || ''
@@ -745,12 +826,12 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
         console.log('📞 Phone field result:', result)
         return result
       }
-      
+
       // Special handling for location fields
       if (field.type === 'location' && (parsedValue.country !== undefined || parsedValue.state !== undefined || parsedValue.city !== undefined)) {
         console.log('📍 Processing location field:', parsedValue)
         console.log('📍 Field ID:', fieldId, 'Field type:', field.type)
-        
+
         // Convert API location format to form format
         // The API stores location as { country: "101", state: "4008", city: "133024" }
         // The form expects the same format, so we can return it as-is
@@ -762,7 +843,7 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
         console.log('📍 Location field result:', result)
         return result
       }
-      
+
       // Handle fields with value property
       if (parsedValue.value !== undefined) {
         // For simple text fields with only a value (no nested values), return just the string
@@ -772,7 +853,7 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
             return parsedValue.value
           }
         }
-        
+
         // For complex fields with nested values, return the full object structure
         const processedValue = {
           value: parsedValue.value
@@ -781,7 +862,7 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
         // Process nested values from API and convert nestedValues to nestedFields
         if (parsedValue.nestedValues) {
           console.log(`🔄 Processing nested values for ${field.type} field ${fieldId}:`, parsedValue.nestedValues)
-          
+
           // For fields with nested values, we need to organize them by option index
           // First, find the option index for the selected value
           let optionIndex = -1
@@ -791,9 +872,9 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
               return optValue === parsedValue.value
             })
           }
-          
+
           console.log(`🔍 Found option index ${optionIndex} for value "${parsedValue.value}"`)
-          
+
           if (optionIndex !== -1) {
             // Create the nested fields structure organized by option index
             processedValue.nestedFields = {
@@ -803,7 +884,7 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
             // Fallback to the old structure if we can't find the option index
             processedValue.nestedFields = transformApiNestedValuesToNestedFields(parsedValue.nestedValues)
           }
-          
+
           console.log(`✅ Processed nested fields for ${field.type} field ${fieldId}:`, processedValue.nestedFields)
           console.log(`🔍 Nested fields structure:`, JSON.stringify(processedValue.nestedFields, null, 2))
         }
@@ -824,10 +905,10 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
     const fieldId = field.id
     let fieldValue = submissionValues[fieldId]
 
-    console.log(`🔍 Looking for field ${fieldId} (${field.label}):`, { 
-      fieldValue, 
+    console.log(`🔍 Looking for field ${fieldId} (${field.label}):`, {
+      fieldValue,
       submissionKeys: Object.keys(submissionValues),
-      originalId: field.originalId 
+      originalId: field.originalId
     })
 
     // If not found by parsed form ID, try the original field ID from API
@@ -858,7 +939,7 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
           : field.type === "location" || field.type === "phone"
             ? {}
             : ""
-      
+
       transformedValues[fieldId] = defaultValue
     }
   })
@@ -1042,13 +1123,13 @@ export default function PublicFormPage() {
       // Handle the response format where values are JSON strings
       if (result.success && result.submission) {
         console.log('Submission data found:', result.submission)
-        
+
         // Parse any JSON strings in the values
         const parsedSubmission = {
           ...result.submission,
           values: {}
         }
-        
+
         // Parse each field value if it's a JSON string and transform nested structure
         Object.keys(result.submission.values || {}).forEach(key => {
           const value = result.submission.values[key]
@@ -1063,7 +1144,7 @@ export default function PublicFormPage() {
             parsedSubmission.values[key] = value
           }
         })
-        
+
         setSubmissionData(parsedSubmission)
         toast.success("Submission loaded for editing")
       } else if (result.data) {
@@ -1090,7 +1171,7 @@ export default function PublicFormPage() {
   // Helper function to parse nested fields
   const parseNestedFields = (nestedFieldsArray) => {
     if (!Array.isArray(nestedFieldsArray)) return []
-    
+
     return nestedFieldsArray.map(nestedField => {
       // Parse options if they exist as JSON string
       let options = []
@@ -1129,8 +1210,8 @@ export default function PublicFormPage() {
         label: nestedField.label,
         type: nestedField.type,
         required: nestedField.required === true || nestedField.required === 'true',
-        validations: typeof nestedField.validations === 'string' ? 
-          JSON.parse(nestedField.validations || '{}') : 
+        validations: typeof nestedField.validations === 'string' ?
+          JSON.parse(nestedField.validations || '{}') :
           (nestedField.validations || {}),
         hasNested: nestedField.hasNested === true || nestedField.hasNested === 'true',
         isLeadColumn: nestedField.isLeadColumn === true || nestedField.isLeadColumn === 'true',
@@ -1222,7 +1303,7 @@ export default function PublicFormPage() {
 
               return processedOption
             })
-            
+
             console.log(`✅ Final processed options for field ${fieldData.label}:`, processedOptions)
 
             // Parse validation
@@ -1583,55 +1664,55 @@ export default function PublicFormPage() {
           }
           break
 
-          case "phone": {
-            const v = value || {}
-            const phoneCountry = phoneCountries.find(c => c.code === v.country) || phoneCountries[0]
-            const digits = String(v.number || "").replace(/\D/g, "")
-            const expectedLength = phoneCountry?.len || 10
+        case "phone": {
+          const v = value || {}
+          const phoneCountry = phoneCountries.find(c => c.code === v.country) || phoneCountries[0]
+          const digits = String(v.number || "").replace(/\D/g, "")
+          const expectedLength = phoneCountry?.len || 10
 
-            if (digits.length !== expectedLength) {
-              errors.push(`Phone number must be ${expectedLength} digits for ${phoneCountry.label}`)
-            }
-            break
+          if (digits.length !== expectedLength) {
+            errors.push(`Phone number must be ${expectedLength} digits for ${phoneCountry.label}`)
           }
+          break
+        }
 
-          case "location": {
-            const v = value || {}
-            
-            // Check if validation restrictions are defined
-            if (field.validation?.allowedCountries || field.validation?.allowedStates || field.validation?.allowedCities) {
-              // Validate country selection
-              if (v.country && field.validation?.allowedCountries) {
-                const selectedCountry = countries.find(c => c.id === parseInt(v.country))
-                if (selectedCountry && !field.validation.allowedCountries.includes(selectedCountry.name)) {
-                  errors.push(`Country "${selectedCountry.name}" is not allowed`)
-                }
+        case "location": {
+          const v = value || {}
+
+          // Check if validation restrictions are defined
+          if (field.validation?.allowedCountries || field.validation?.allowedStates || field.validation?.allowedCities) {
+            // Validate country selection
+            if (v.country && field.validation?.allowedCountries) {
+              const selectedCountry = countries.find(c => c.id === parseInt(v.country))
+              if (selectedCountry && !field.validation.allowedCountries.includes(selectedCountry.name)) {
+                errors.push(`Country "${selectedCountry.name}" is not allowed`)
               }
-              
-              // Validate state selection
-              if (v.state && field.validation?.allowedStates && v.country) {
-                const selectedCountry = countries.find(c => c.id === parseInt(v.country))
-                if (selectedCountry && field.validation.allowedStates[selectedCountry.name]) {
-                  const selectedState = states.find(s => s.id === parseInt(v.state))
-                  if (selectedState && !field.validation.allowedStates[selectedCountry.name].includes(selectedState.name)) {
-                    errors.push(`State "${selectedState.name}" is not allowed for ${selectedCountry.name}`)
-                  }
-                }
-              }
-              
-              // Validate city selection
-              if (v.city && field.validation?.allowedCities && v.state) {
+            }
+
+            // Validate state selection
+            if (v.state && field.validation?.allowedStates && v.country) {
+              const selectedCountry = countries.find(c => c.id === parseInt(v.country))
+              if (selectedCountry && field.validation.allowedStates[selectedCountry.name]) {
                 const selectedState = states.find(s => s.id === parseInt(v.state))
-                if (selectedState && field.validation.allowedCities[selectedState.name]) {
-                  const selectedCity = cities.find(c => c.id === parseInt(v.city))
-                  if (selectedCity && !field.validation.allowedCities[selectedState.name].includes(selectedCity.name)) {
-                    errors.push(`City "${selectedCity.name}" is not allowed for ${selectedState.name}`)
-                  }
+                if (selectedState && !field.validation.allowedStates[selectedCountry.name].includes(selectedState.name)) {
+                  errors.push(`State "${selectedState.name}" is not allowed for ${selectedCountry.name}`)
                 }
               }
             }
-            break
+
+            // Validate city selection
+            if (v.city && field.validation?.allowedCities && v.state) {
+              const selectedState = states.find(s => s.id === parseInt(v.state))
+              if (selectedState && field.validation.allowedCities[selectedState.name]) {
+                const selectedCity = cities.find(c => c.id === parseInt(v.city))
+                if (selectedCity && !field.validation.allowedCities[selectedState.name].includes(selectedCity.name)) {
+                  errors.push(`City "${selectedCity.name}" is not allowed for ${selectedState.name}`)
+                }
+              }
+            }
           }
+          break
+        }
 
         case "file":
           // File validation - only allow images and PDFs up to 5MB
@@ -1678,7 +1759,7 @@ export default function PublicFormPage() {
     onSubmit: async ({ value }) => {
       // Debug the current form state before submission
       debugFormState(value, formData?.fields || [])
-      
+
       console.log('Form values:', value)
 
       setSubmitting(true)
@@ -1696,20 +1777,20 @@ export default function PublicFormPage() {
             type: f.type,
             label: f.label
           })))
-          
+
           // Check if nested field IDs match between form schema and values
           formData.fields.forEach(field => {
             if (field._processedOptions) {
               field._processedOptions.forEach((option, idx) => {
                 if (option.nestedFields && option.nestedFields.length > 0) {
-                  console.log(`Option "${option.value}" nested fields:`, 
+                  console.log(`Option "${option.value}" nested fields:`,
                     option.nestedFields.map(nf => ({ id: nf.id, name: nf.name }))
                   )
                 }
               })
             }
           })
-          
+
           // Log the actual submission payload before sending
           const updateData = {
             organization_id: ORGANIZATION_ID,
@@ -1873,7 +1954,7 @@ export default function PublicFormPage() {
           hasProcessedOptions: !!field._processedOptions,
           processedOptions: field._processedOptions
         })
-        
+
         // Log nested structure
         if (field._processedOptions) {
           field._processedOptions.forEach((option, optIndex) => {
@@ -2111,7 +2192,7 @@ export default function PublicFormPage() {
               >
                 {formData.fields.map((field, index) => {
                   const fieldKey = field.id || `field-${index}`
-                  
+
                   // Process the field to ensure options and nested fields are properly structured
                   const processedField = {
                     ...field,

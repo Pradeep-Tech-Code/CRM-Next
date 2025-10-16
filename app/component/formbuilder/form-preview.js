@@ -13,6 +13,109 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 
+// Helper function to process field options with nested structure
+const processFieldOptions = (field) => {
+
+  // If we have processed options with nested structure, use those
+  if (field._processedOptions && Array.isArray(field._processedOptions)) {
+    return field._processedOptions.map(option => {
+      if (typeof option === 'object' && option !== null) {
+        return {
+          value: option.value,
+          label: option.label,
+          nestedFields: option.nestedFields || []
+        }
+      } else {
+        return option
+      }
+    })
+  }
+
+  // Handle options that might be stored as JSON strings (from API)
+  let options = field.options || []
+
+  if (typeof options === 'string') {
+    try {
+      options = JSON.parse(options)
+    } catch (e) {
+      console.warn('Failed to parse options JSON string:', options)
+      return []
+    }
+  }
+
+  // If options is an array, process each option
+  if (Array.isArray(options)) {
+    return options.map((option, index) => {
+
+      if (typeof option === 'object' && option !== null) {
+        // If the option already has nestedFields, use them
+        if (option.nestedFields) {
+          return {
+            value: option.value,
+            label: option.label,
+            nestedFields: option.nestedFields || []
+          }
+        }
+
+        // If the option doesn't have nestedFields but the field has nestedFields for this index,
+        // convert the form builder structure to the expected structure
+        if (field.nestedFields && field.nestedFields[index]) {
+          return {
+            value: option.value,
+            label: option.label,
+            nestedFields: processNestedFieldsRecursively(field.nestedFields[index])
+          }
+        }
+
+        return {
+          value: option.value,
+          label: option.label,
+          nestedFields: []
+        }
+      } else {
+        // Handle string options - check if there are nested fields for this index
+        if (field.nestedFields && field.nestedFields[index]) {
+          return {
+            value: option,
+            label: option,
+            nestedFields: processNestedFieldsRecursively(field.nestedFields[index])
+          }
+        }
+        return option
+      }
+    })
+  }
+
+  return []
+}
+
+// Helper function to recursively process nested fields structure
+const processNestedFieldsRecursively = (nestedFields) => {
+  if (!Array.isArray(nestedFields)) return []
+
+  return nestedFields.map(nestedField => {
+    const processedField = {
+      id: nestedField.id,
+      name: nestedField.name,
+      type: nestedField.type,
+      label: nestedField.label,
+      placeholder: nestedField.placeholder || '',
+      required: nestedField.required || false,
+      validation: nestedField.validation || {},
+      options: processFieldOptions(nestedField) // Process options recursively
+    }
+
+    // Recursively process nested fields within this field
+    if (nestedField.nestedFields && Array.isArray(nestedField.nestedFields)) {
+      processedField.nestedFields = processNestedFieldsRecursively(nestedField.nestedFields)
+    } else {
+      processedField.nestedFields = []
+    }
+
+    return processedField
+  })
+}
+
 // API configuration
 const API_BASE_URL = 'http://10.10.15.194:3001'
 const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
@@ -49,12 +152,12 @@ export function FormPreview({ fields }) {
         if (field.type === "checkbox" || (field.type === "select" && field.validation?.multiple)) {
           acc[fieldKey] = {
             value: [],
-            nestedField: {}
+            nestedFields: {}
           }
         } else {
           acc[fieldKey] = {
             value: "",
-            nestedField: {}
+            nestedFields: {}
           }
         }
       } else if (field.type === "file") {
@@ -668,7 +771,7 @@ export function FormPreview({ fields }) {
           }
         })
       })
-      
+
       console.log(`📊 Lead Database Fields (${formData.extraFields.length}):`)
       formData.extraFields.forEach((field, fieldIndex) => {
         console.log(`Extra Field ${fieldIndex + 1}: ${field.name} (${field.type}) - isLeadColumn: ${field.isLeadColumn}`)
@@ -785,7 +888,7 @@ export function FormPreview({ fields }) {
     CA: { dial: "+1", len: 10 },
     AU: { dial: "+61", len: 9 },
   }
-  
+
   const validateNestedField = (nestedField, value) => {
     const errors = []
 
@@ -1166,18 +1269,26 @@ export function FormPreview({ fields }) {
                     },
                   }}
                 >
-                  {(fieldApi) => (
-                    <div className="space-y-1">
-                      <FieldRenderer
-                        field={field}
-                        value={fieldApi.state.value}
-                        onChange={fieldApi.handleChange}
-                        invalid={fieldApi.state.meta.errors.length > 0}
-                        error={fieldApi.state.meta.errors.length > 0 ? fieldApi.state.meta.errors[0] : undefined}
-                        hideFieldTypes={true}
-                      />
-                    </div>
-                  )}
+                  {(fieldApi) => {
+                    //Process the field to ensure options and nested fields are properly structured
+                    const processedField = {
+                      ...field,
+                      options: processFieldOptions(field)
+                    }
+
+                    return (
+                      <div className="space-y-1">
+                        <FieldRenderer
+                          field={processedField}
+                          value={fieldApi.state.value}
+                          onChange={fieldApi.handleChange}
+                          invalid={fieldApi.state.meta.errors.length > 0}
+                          error={fieldApi.state.meta.errors.length > 0 ? fieldApi.state.meta.errors[0] : undefined}
+                          hideFieldTypes={true}
+                        />
+                      </div>
+                    )
+                  }}
                 </form.Field>
               ))}
 
