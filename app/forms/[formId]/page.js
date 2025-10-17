@@ -1154,6 +1154,9 @@ export default function PublicFormPage() {
   const [lastSubmissionToken, setLastSubmissionToken] = useState(null)
   const [phoneCountries, setPhoneCountries] = useState([])
   const [formInitialized, setFormInitialized] = useState(false)
+  const [editAttemptsRemaining, setEditAttemptsRemaining] = useState(null)
+  const [editTimeExpired, setEditTimeExpired] = useState(false)
+  const [updateSuccess, setUpdateSuccess] = useState(false)
 
   useEffect(() => {
     if (formId) {
@@ -1187,6 +1190,23 @@ export default function PublicFormPage() {
       checkExistingSubmission()
     }
   }, [token, submissionId])
+
+  // Load edit attempts from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedAttempts = localStorage.getItem("EDIT_ATTEMPTS_REMAINING")
+      const savedTimeExpired = localStorage.getItem("EDIT_TIME_EXPIRED")
+      
+      if (savedAttempts !== null) {
+        setEditAttemptsRemaining(parseInt(savedAttempts))
+      }
+      if (savedTimeExpired !== null) {
+        setEditTimeExpired(savedTimeExpired === "true")
+      }
+    } catch (error) {
+      console.error('Error loading edit attempts from localStorage:', error)
+    }
+  }, [])
 
   const checkExistingSubmission = () => {
     try {
@@ -1243,16 +1263,95 @@ export default function PublicFormPage() {
       localStorage.removeItem("EDIT_TOKEN")
       localStorage.removeItem("FORM_SUBMITTED")
       localStorage.removeItem("FORM_ID")
+      localStorage.removeItem("EDIT_ATTEMPTS_REMAINING")
+      localStorage.removeItem("EDIT_TIME_EXPIRED")
 
       setSubmissionSuccess(false)
       setLastSubmissionId(null)
       setLastSubmissionToken(null)
       setSubmissionData(null)
       setIsEditMode(false)
+      setEditAttemptsRemaining(null)
+      setEditTimeExpired(false)
+      setUpdateSuccess(false)
 
       console.log('Cleared submission data from localStorage')
     } catch (error) {
       console.error('Error clearing localStorage:', error)
+    }
+  }
+
+  // Function to check edit attempts and time remaining
+  const checkEditAttempts = async (submissionId, token) => {
+    if (!submissionId || !token) return
+
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/api/submit/edit-status?token=${token}`,
+        {
+          organization_id: ORGANIZATION_ID,
+          form_id: formId,
+          reference_id: userIdFromUrl || USER_ID,
+          submission_id: submissionId
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      const result = response.data
+      console.log('Edit status API response:', result)
+      
+      if (result.success) {
+        const attemptsRemaining = result.attempts_remaining !== undefined ? result.attempts_remaining : 1
+        const timeExpired = result.time_expired || false
+        
+        setEditAttemptsRemaining(attemptsRemaining)
+        setEditTimeExpired(timeExpired)
+        
+        // Store in localStorage for persistence
+        localStorage.setItem("EDIT_ATTEMPTS_REMAINING", attemptsRemaining.toString())
+        localStorage.setItem("EDIT_TIME_EXPIRED", timeExpired.toString())
+        
+        console.log('Edit attempts status:', { attemptsRemaining, timeExpired })
+      } else {
+        // If API call fails, try to get from localStorage or default
+        const savedAttempts = localStorage.getItem("EDIT_ATTEMPTS_REMAINING")
+        const savedTimeExpired = localStorage.getItem("EDIT_TIME_EXPIRED")
+        
+        if (savedAttempts !== null) {
+          setEditAttemptsRemaining(parseInt(savedAttempts))
+        } else {
+          setEditAttemptsRemaining(1) // Default to 1 attempt
+        }
+        
+        if (savedTimeExpired !== null) {
+          setEditTimeExpired(savedTimeExpired === "true")
+        } else {
+          setEditTimeExpired(false)
+        }
+      }
+    } catch (error) {
+      console.error('Error checking edit attempts:', error)
+      
+      // Try to get from localStorage or use defaults
+      const savedAttempts = localStorage.getItem("EDIT_ATTEMPTS_REMAINING")
+      const savedTimeExpired = localStorage.getItem("EDIT_TIME_EXPIRED")
+      
+      if (savedAttempts !== null) {
+        setEditAttemptsRemaining(parseInt(savedAttempts))
+      } else {
+        setEditAttemptsRemaining(1) // Default to 1 attempt
+      }
+      
+      if (savedTimeExpired !== null) {
+        setEditTimeExpired(savedTimeExpired === "true")
+      } else {
+        setEditTimeExpired(false)
+      }
     }
   }
 
@@ -1327,6 +1426,30 @@ export default function PublicFormPage() {
         
         setSubmissionData(parsedSubmission)
         toast.success("Submission loaded for editing")
+        
+        // Check edit attempts after loading submission data
+        await checkEditAttempts(submissionId, token)
+        
+        // Fallback: If we couldn't get edit attempts from API, try to get from localStorage
+        if (editAttemptsRemaining === null) {
+          const savedAttempts = localStorage.getItem("EDIT_ATTEMPTS_REMAINING")
+          const savedTimeExpired = localStorage.getItem("EDIT_TIME_EXPIRED")
+          
+          if (savedAttempts !== null) {
+            setEditAttemptsRemaining(parseInt(savedAttempts))
+          } else {
+            // Default to 1 attempt if not found
+            setEditAttemptsRemaining(1)
+            localStorage.setItem("EDIT_ATTEMPTS_REMAINING", "1")
+          }
+          
+          if (savedTimeExpired !== null) {
+            setEditTimeExpired(savedTimeExpired === "true")
+          } else {
+            setEditTimeExpired(false)
+            localStorage.setItem("EDIT_TIME_EXPIRED", "false")
+          }
+        }
       } else if (result.data) {
         // Handle case where submission data is in result.data
         console.log('Submission data found in result.data:', result.data)
@@ -2012,8 +2135,38 @@ export default function PublicFormPage() {
 
           const result = response.data
           console.log('Update successful:', result)
-          toast.success("Form updated successfully!")
-          setSubmissionSuccess(true)
+          
+          // Update edit attempts remaining
+          let attemptsRemaining = result.attempts_remaining !== undefined ? result.attempts_remaining : null
+          const timeExpired = result.time_expired || false
+          
+          // If API doesn't provide attempts_remaining, decrement from current value
+          if (attemptsRemaining === null) {
+            const currentAttempts = editAttemptsRemaining !== null ? editAttemptsRemaining : 1
+            attemptsRemaining = Math.max(0, currentAttempts - 1)
+            console.log('API did not provide attempts_remaining, decremented from', currentAttempts, 'to', attemptsRemaining)
+          }
+          
+          setEditAttemptsRemaining(attemptsRemaining)
+          setEditTimeExpired(timeExpired)
+          
+          // Store in localStorage
+          localStorage.setItem("EDIT_ATTEMPTS_REMAINING", attemptsRemaining.toString())
+          localStorage.setItem("EDIT_TIME_EXPIRED", timeExpired.toString())
+          
+          // Show success state
+          setUpdateSuccess(true)
+          
+          // Show appropriate success message
+          if (attemptsRemaining > 0 && !timeExpired) {
+            toast.success("Your response has been updated successfully!")
+          } else if (attemptsRemaining === 0) {
+            toast.success("Your response has been updated successfully! No more edits allowed.")
+          } else if (timeExpired) {
+            toast.success("Your response has been updated successfully! Edit time has expired.")
+          } else {
+            toast.success("Your response has been updated successfully!")
+          }
         } else {
           // Create new submission
           const submissionData = {
@@ -2099,15 +2252,34 @@ export default function PublicFormPage() {
         if (error.response?.data?.error) {
           const errorMessage = error.response.data.error
           
-          // Handle edit limit reached error
-          if (errorMessage.includes("Edit limit reached") || errorMessage.includes("edit this form only")) {
+          // Handle edit limit reached error - redirect to thank you page
+          if (errorMessage.includes("Edit limit reached") || errorMessage.includes("edit this form only") || errorMessage.includes("No more edits allowed")) {
+            // Set edit attempts to 0 and show thank you page
+            setEditAttemptsRemaining(0)
+            setEditTimeExpired(true)
+            setUpdateSuccess(true)
+            localStorage.setItem("EDIT_ATTEMPTS_REMAINING", "0")
+            localStorage.setItem("EDIT_TIME_EXPIRED", "true")
             toast.error(errorMessage)
+            return // Don't show additional error handling
           } else {
             toast.error(errorMessage)
           }
         } else if (error.response?.status === 400) {
           // Handle 400 Bad Request with specific error message
           const errorMessage = error.response.data?.error || error.response.data?.message || "Invalid request"
+          
+          // Check if it's an edit limit error
+          if (errorMessage.includes("Edit limit reached") || errorMessage.includes("edit this form only") || errorMessage.includes("No more edits allowed")) {
+            setEditAttemptsRemaining(0)
+            setEditTimeExpired(true)
+            setUpdateSuccess(true)
+            localStorage.setItem("EDIT_ATTEMPTS_REMAINING", "0")
+            localStorage.setItem("EDIT_TIME_EXPIRED", "true")
+            toast.error(errorMessage)
+            return
+          }
+          
           toast.error(errorMessage)
         } else if (error.response?.status === 403) {
           toast.error("Access denied. You don't have permission to perform this action.")
@@ -2161,9 +2333,12 @@ export default function PublicFormPage() {
       formInitialized,
       submissionData: !!submissionData,
       formData: !!formData,
-      formValues: form?.state?.values
+      formValues: form?.state?.values,
+      editAttemptsRemaining,
+      editTimeExpired,
+      updateSuccess
     })
-  }, [isEditMode, formInitialized, submissionData, formData, form?.state?.values])
+  }, [isEditMode, formInitialized, submissionData, formData, form?.state?.values, editAttemptsRemaining, editTimeExpired, updateSuccess])
 
   // Debug parsed form data structure
   useEffect(() => {
@@ -2252,6 +2427,131 @@ export default function PublicFormPage() {
             </Button>
           </CardContent>
         </Card>
+      </div>
+    )
+  }
+
+  // Update Success View (Thank You page after successful update)
+  if (updateSuccess && isEditMode) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        {/* Header */}
+        <div className="bg-white/80 backdrop-blur-sm border-b border-blue-200">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+                  <Building className="h-6 w-6 text-primary-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-foreground">Slash CRM</h1>
+                  <p className="text-sm text-muted-foreground">Form Collection</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-xs">
+                Update Complete
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        {/* Thank You Content */}
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-2xl mx-auto">
+            <Card className="shadow-lg border-0">
+              <CardHeader className="text-center pb-4 border-b bg-gradient-to-r from-green-50 to-emerald-100">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
+                  <CheckCircle2 className="h-8 w-8 text-green-600" />
+                </div>
+                <CardTitle className="text-2xl font-bold text-green-700">
+                  Thank You!
+                </CardTitle>
+                <p className="text-muted-foreground mt-2">
+                  Your response has been updated successfully.
+                </p>
+              </CardHeader>
+
+              <CardContent className="p-6 text-center">
+                <div className="space-y-6">
+                  {/* Edit Attempts Information */}
+                  <div className="space-y-4">
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <h3 className="text-lg font-semibold text-blue-900 mb-2">Edit Information</h3>
+                      <div className="space-y-2 text-sm">
+                        {editAttemptsRemaining !== null && (
+                          <div className="flex items-center justify-center gap-2">
+                            <span className="text-blue-700">Edit attempts remaining:</span>
+                            <Badge variant={editAttemptsRemaining > 0 ? "default" : "destructive"} className="text-xs">
+                              {editAttemptsRemaining}
+                            </Badge>
+                          </div>
+                        )}
+                        {editTimeExpired && (
+                          <div className="text-red-600 font-medium">
+                            ⏰ Edit time has expired
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-semibold">What would you like to do next?</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {editAttemptsRemaining > 0 && !editTimeExpired 
+                        ? "You can still edit your response if needed."
+                        : "Your edit period has ended. Thank you for your submission."
+                      }
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    {editAttemptsRemaining > 0 && !editTimeExpired ? (
+                      <Button
+                        onClick={() => {
+                          setUpdateSuccess(false)
+                          // Stay in edit mode to allow further edits
+                        }}
+                        className="gap-2"
+                        size="lg"
+                      >
+                        <Edit className="h-4 w-4" />
+                        Update Form Again
+                      </Button>
+                    ) : (
+                      <div className="text-center">
+                        <p className="text-muted-foreground text-sm">
+                          {editTimeExpired 
+                            ? "Edit time has expired. No further edits are allowed."
+                            : "No edit attempts remaining. Thank you for your submission."
+                          }
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Privacy Notice */}
+                <div className="mt-8 p-4 bg-muted/50 rounded-lg">
+                  <p className="text-xs text-muted-foreground">
+                    Your information is secure and will only be used for the intended purpose.
+                    We respect your privacy.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-blue-200 mt-12">
+          <div className="container mx-auto px-4 py-6">
+            <div className="text-center text-sm text-muted-foreground">
+              <p>Powered by Slash CRM • Secure Form Collection</p>
+              <p className="mt-1">© 2025 Slash CRM. All rights reserved.</p>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
@@ -2398,9 +2698,22 @@ export default function PublicFormPage() {
                 <p className="text-muted-foreground mt-2">{formData.description}</p>
               )}
               {isEditMode && (
-                <p className="text-sm text-blue-600 mt-1">
-                  You are editing an existing submission. Make your changes and click "Update Form" to save.
-                </p>
+                <div className="space-y-2">
+                  <p className="text-sm text-blue-600">
+                    You are editing an existing submission. Make your changes and click "Update Form" to save.
+                  </p>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Edit attempts remaining:</span>
+                    <Badge variant={editAttemptsRemaining > 0 ? "default" : "destructive"} className="text-xs">
+                      {editAttemptsRemaining !== null ? editAttemptsRemaining : "Loading..."}
+                    </Badge>
+                    {editTimeExpired && (
+                      <Badge variant="destructive" className="text-xs">
+                        ⏰ Time Expired
+                      </Badge>
+                    )}
+                  </div>
+                </div>
               )}
             </CardHeader>
 
@@ -2468,34 +2781,45 @@ export default function PublicFormPage() {
                   </div>
 
                   <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
-                    {([canSubmit, isSubmitting]) => (
-                      <Button
-                        type="submit"
-                        disabled={!canSubmit || submitting}
-                        className="gap-2 min-w-32"
-                      >
-                        {submitting || isSubmitting ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            {isEditMode ? "Updating..." : "Submitting..."}
-                          </>
-                        ) : (
-                          <>
-                            {isEditMode ? (
-                              <>
-                                <Save className="h-4 w-4" />
-                                Update Form
-                              </>
-                            ) : (
-                              <>
-                                <Send className="h-4 w-4" />
-                                Submit Form
-                              </>
-                            )}
-                          </>
-                        )}
-                      </Button>
-                    )}
+                    {([canSubmit, isSubmitting]) => {
+                      // Check if update should be disabled
+                      const isUpdateDisabled = isEditMode && (
+                        editAttemptsRemaining === 0 || 
+                        editTimeExpired || 
+                        !canSubmit || 
+                        submitting
+                      )
+                      
+                      return (
+                        <Button
+                          type="submit"
+                          disabled={isUpdateDisabled}
+                          className="gap-2 min-w-32"
+                        >
+                          {submitting || isSubmitting ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                              {isEditMode ? "Updating..." : "Submitting..."}
+                            </>
+                          ) : (
+                            <>
+                              {isEditMode ? (
+                                <>
+                                  <Save className="h-4 w-4" />
+                                  {editAttemptsRemaining === 0 ? "No Edits Left" : 
+                                   editTimeExpired ? "Time Expired" : "Update Form"}
+                                </>
+                              ) : (
+                                <>
+                                  <Send className="h-4 w-4" />
+                                  Submit Form
+                                </>
+                              )}
+                            </>
+                          )}
+                        </Button>
+                      )
+                    }}
                   </form.Subscribe>
                 </div>
               </form>

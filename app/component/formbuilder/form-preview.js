@@ -1399,9 +1399,6 @@ export function FormPreview({ fields }) {
                     {copied ? "Copied!" : "Copy"}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground mb-3">
-                  ✅ User ID ({USER_ID.substring(0, 8)}...) is included in the link for lead attribution
-                </p>
                 <div className="flex gap-2">
                   <Button
                     onClick={openFormInNewTab}
