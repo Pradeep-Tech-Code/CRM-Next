@@ -515,11 +515,19 @@ export default function MyFormsPage() {
         console.log('🔍 Debug - First field nestedFields:', parsedFields[0]?.nestedFields)
         console.log('🔍 Debug - First field options:', parsedFields[0]?.options)
       
-      setEditingForm({
-        ...formDetails,
-        parsedFields
-      })
-      setEditDialogOpen(true)
+      // Store the form data in localStorage to pass to form builder
+      const formBuilderData = {
+        formId: formDetails.form_id,
+        formName: formDetails.form_name,
+        description: formDetails.description,
+        fields: parsedFields,
+        isEditMode: true
+      }
+      
+      localStorage.setItem('formBuilderData', JSON.stringify(formBuilderData))
+      
+      // Redirect to form builder
+      window.location.href = '/custom-form'
       
     } catch (error) {
       console.error('Error loading form for editing:', error)

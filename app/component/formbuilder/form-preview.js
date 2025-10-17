@@ -129,7 +129,7 @@ const getAuthToken = () => {
 
 const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwNTA2OTYzLCJleHAiOjE3NjA1OTMzNjN9.SEAwwoCusaotsc_lhb3nh0Fq5tIOWIHtbMYCG1vZ2jU'
 
-export function FormPreview({ fields }) {
+export function FormPreview({ fields, isEditMode = false }) {
   const [generatedLink, setGeneratedLink] = useState(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -1321,40 +1321,42 @@ export function FormPreview({ fields }) {
                   required
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={handleGenerateLink}
-                    disabled={isGenerating || previewFields.length === 0}
-                    className="gap-2"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <ExternalLink className="h-4 w-4" />
-                        Generate Link
-                      </>
-                    )}
-                  </Button>
-                  <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
-                    {([canSubmit, isSubmitting]) => (
-                      <Button type="submit" disabled={true} className="gap-2">
-                        <Send className="h-4 w-4" />
-                        {isSubmitting ? "Submitting..." : "Submit Form"}
-                      </Button>
-                    )}
-                  </form.Subscribe>
-                </div>
+                {!isEditMode && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handleGenerateLink}
+                      disabled={isGenerating || previewFields.length === 0}
+                      className="gap-2"
+                    >
+                      {isGenerating ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <ExternalLink className="h-4 w-4" />
+                          Generate Link
+                        </>
+                      )}
+                    </Button>
+                    <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+                      {([canSubmit, isSubmitting]) => (
+                        <Button type="submit" disabled={true} className="gap-2">
+                          <Send className="h-4 w-4" />
+                          {isSubmitting ? "Submitting..." : "Submit Form"}
+                        </Button>
+                      )}
+                    </form.Subscribe>
+                  </div>
+                )}
               </div>
             </form>
 
             {/* Generated Link Section */}
-            {generatedLink && (
+            {!isEditMode && generatedLink && (
               <div className="mt-6 p-4 border rounded-lg bg-muted/50">
                 <Label className="text-sm font-medium mb-2 flex items-center gap-2">
                   <ExternalLink className="h-4 w-4" />
