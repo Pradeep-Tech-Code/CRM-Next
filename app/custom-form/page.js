@@ -61,15 +61,89 @@ export default function CustomFormPage() {
         console.log('🔍 Loading form data from localStorage:', data)
         
         if (data.isEditMode && data.fields) {
-          setFields(data.fields)
+          console.log('🔍 Raw loaded fields:', data.fields)
+          console.log('🔍 First field structure:', data.fields[0])
+          console.log('🔍 First field options:', data.fields[0]?.options)
+          console.log('🔍 First field nestedFields:', data.fields[0]?.nestedFields)
+          
+          // Process nested fields from options to field.nestedFields structure
+          const processedFields = data.fields.map(field => {
+            if (field.type === 'select' && field.options && Array.isArray(field.options)) {
+              const nestedFields = {}
+              
+              // Recursive function to extract nested fields from any level
+              const extractNestedFieldsRecursively = (nestedFieldsArray) => {
+                return nestedFieldsArray.map(nestedField => {
+                  const processedNestedField = {
+                    id: nestedField.id,
+                    name: nestedField.name,
+                    type: nestedField.type,
+                    label: nestedField.label,
+                    placeholder: nestedField.placeholder || '',
+                    required: nestedField.required === true || nestedField.required === 'true' || false,
+                    options: [],
+                    validation: nestedField.validations || {},
+                    nestedFields: {}
+                  }
+                  
+                  // Process options if they exist
+                  if (nestedField.options && Array.isArray(nestedField.options)) {
+                    processedNestedField.options = nestedField.options.map(opt => {
+                      if (typeof opt === 'object' && opt.value) {
+                        return {
+                          value: opt.value,
+                          label: opt.label || opt.value,
+                          nestedFields: opt.nestedFields || []
+                        }
+                      }
+                      return typeof opt === 'string' ? opt : (opt.value || opt.label || 'Option')
+                    })
+                    
+                    // Process sub-nested fields from options recursively
+                    const subNestedFields = {}
+                    nestedField.options.forEach((subOption, subOptionIndex) => {
+                      if (typeof subOption === 'object' && subOption.nestedFields && Array.isArray(subOption.nestedFields) && subOption.nestedFields.length > 0) {
+                        subNestedFields[subOptionIndex] = extractNestedFieldsRecursively(subOption.nestedFields)
+                      }
+                    })
+                    
+                    // Only set nestedFields if there are actual nested fields
+                    if (Object.keys(subNestedFields).length > 0) {
+                      processedNestedField.nestedFields = subNestedFields
+                    }
+                  }
+                  
+                  return processedNestedField
+                })
+              }
+              
+              field.options.forEach((option, optionIndex) => {
+                if (typeof option === 'object' && option.nestedFields && Array.isArray(option.nestedFields) && option.nestedFields.length > 0) {
+                  console.log('🔍 Processing nested fields for option', optionIndex, ':', option.nestedFields)
+                  nestedFields[optionIndex] = extractNestedFieldsRecursively(option.nestedFields)
+                }
+              })
+              
+              console.log('🔍 Extracted nestedFields for field:', field.label, nestedFields)
+              
+              return {
+                ...field,
+                nestedFields: nestedFields
+              }
+            }
+            return field
+          })
+          
+          console.log('🔍 Processed fields with nested fields:', processedFields)
+          
+          setFields(processedFields)
           setIsEditMode(true)
           setEditFormData(data)
           
           // Don't clear localStorage - keep it for persistence across refreshes
           // localStorage.removeItem('formBuilderData')
           
-          console.log('🔍 Loaded fields for editing:', data.fields)
-          console.log('🔍 First field nestedFields:', data.fields[0]?.nestedFields)
+          console.log('🔍 Loaded fields for editing:', processedFields)
         }
       } catch (error) {
         console.error('Error parsing form builder data:', error)
@@ -110,13 +184,32 @@ export default function CustomFormPage() {
   // Save fields to localStorage when in edit mode (for persistence across refreshes)
   useEffect(() => {
     if (isEditMode && editFormData && fields.length > 0) {
+      console.log('🔍 Saving fields to localStorage in edit mode:', fields)
       const formBuilderData = {
         ...editFormData,
         fields: fields
       }
       localStorage.setItem('formBuilderData', JSON.stringify(formBuilderData))
+      console.log('🔍 Saved to localStorage:', formBuilderData)
     }
   }, [fields, isEditMode, editFormData])
+
+  // Additional effect to save fields immediately after any field update in edit mode
+  useEffect(() => {
+    if (isEditMode && editFormData && fields.length > 0) {
+      // Use a timeout to ensure the state has been updated
+      const timeoutId = setTimeout(() => {
+        console.log('🔍 Additional save to localStorage triggered:', fields)
+        const formBuilderData = {
+          ...editFormData,
+          fields: fields
+        }
+        localStorage.setItem('formBuilderData', JSON.stringify(formBuilderData))
+      }, 100)
+      
+      return () => clearTimeout(timeoutId)
+    }
+  }, [fields])
 
   // Cleanup localStorage when component unmounts (only if not in edit mode)
   useEffect(() => {
@@ -241,11 +334,29 @@ export default function CustomFormPage() {
   }
 
   const updateField = (fieldId, updates) => {
-    setFields(fields.map(field =>
+    console.log('🔍 updateField called:', { fieldId, updates })
+    console.log('🔍 Current fields before update:', fields)
+    
+    const updatedFields = fields.map(field =>
       field.id === fieldId ? { ...field, ...updates } : field
-    ))
+    )
+    
+    console.log('🔍 Updated fields after update:', updatedFields)
+    
+    // Force a deep update by creating a new array reference
+    setFields([...updatedFields])
     if (selectedField && selectedField.id === fieldId) {
       setSelectedField({ ...selectedField, ...updates })
+    }
+    
+    // Immediately save to localStorage if in edit mode
+    if (isEditMode && editFormData) {
+      const formBuilderData = {
+        ...editFormData,
+        fields: [...updatedFields]
+      }
+      localStorage.setItem('formBuilderData', JSON.stringify(formBuilderData))
+      console.log('🔍 Immediately saved to localStorage after update:', formBuilderData)
     }
   }
 

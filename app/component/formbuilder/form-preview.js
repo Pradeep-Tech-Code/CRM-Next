@@ -12,6 +12,7 @@ import axios from "axios"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import { useEffect } from "react"
 
 // Helper function to process field options with nested structure
 const processFieldOptions = (field) => {
@@ -94,6 +95,12 @@ const processNestedFieldsRecursively = (nestedFields) => {
   if (!Array.isArray(nestedFields)) return []
 
   return nestedFields.map(nestedField => {
+    console.log('🔍 processNestedFieldsRecursively - processing field:', { 
+      id: nestedField.id, 
+      label: nestedField.label, 
+      type: nestedField.type 
+    })
+    
     const processedField = {
       id: nestedField.id,
       name: nestedField.name,
@@ -129,13 +136,22 @@ const getAuthToken = () => {
 
 const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwNTA2OTYzLCJleHAiOjE3NjA1OTMzNjN9.SEAwwoCusaotsc_lhb3nh0Fq5tIOWIHtbMYCG1vZ2jU'
 
-export function FormPreview({ fields, isEditMode = false }) {
+export function FormPreview({ fields, isEditMode = false, formData = null }) {
   const [generatedLink, setGeneratedLink] = useState(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
   const [formName, setFormName] = useState("")
   const [formDescription, setFormDescription] = useState("")
   const [retryCount, setRetryCount] = useState("2")
+
+  // Populate form metadata when in edit mode
+  useEffect(() => {
+    if (isEditMode && formData) {
+      setFormName(formData.formName || "")
+      setFormDescription(formData.description || "")
+      setRetryCount(formData.max_retry_count?.toString() || "2")
+    }
+  }, [isEditMode, formData])
 
   // Filter out table_column type fields from preview
   const previewFields = fields.filter(field => field.type !== "table_column")
@@ -1294,7 +1310,26 @@ export function FormPreview({ fields, isEditMode = false }) {
                     //Process the field to ensure options and nested fields are properly structured
                     const processedField = {
                       ...field,
-                      options: processFieldOptions(field)
+                      options: processFieldOptions(field),
+                      // Preserve the original nestedFields structure for FieldRenderer
+                      nestedFields: field.nestedFields || {}
+                    }
+
+                    // Auto-select the first option that has nested fields for preview
+                    const currentValue = fieldApi.state.value
+                    if (!currentValue && processedField.options && processedField.options.length > 0) {
+                      const firstOptionWithNestedFields = processedField.options.find(option => 
+                        option.nestedFields && option.nestedFields.length > 0
+                      )
+                      if (firstOptionWithNestedFields) {
+                        // Auto-select the first option with nested fields
+                        setTimeout(() => {
+                          fieldApi.handleChange({
+                            value: firstOptionWithNestedFields.value,
+                            nestedFields: {}
+                          })
+                        }, 0)
+                      }
                     }
 
                     return (

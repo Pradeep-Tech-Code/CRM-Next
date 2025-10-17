@@ -60,11 +60,109 @@ export default function FormPreviewPage() {
         console.log('🔍 Updating existing form:', editFormData.formId)
         console.log('🔍 Fields to update:', fields)
         
-        // TODO: Implement actual update API call
-        alert(`Update functionality will be implemented for form: ${editFormData.formName}`)
+        // Generate the same payload structure as Generate Link
+        const API_BASE_URL = 'http://10.10.15.194:3001'
+        const ORGANIZATION_ID = 'c8c72c21-7b5c-435a-912a-803105e7ecc9'
+        const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
+        const USER_ID = 'c2a985ce-d385-4349-8f0c-d46e63027ce4'
+        const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwNTA2OTYzLCJleHAiOjE3NjA1OTMzNjN9.SEAwwoCusaotsc_lhb3nh0Fq5tIOWIHtbMYCG1vZ2jU'
+        
+        // Process fields the same way as Generate Link
+        const processFieldData = (field) => {
+          const processedField = {
+            id: field.id,
+            name: field.name,
+            type: field.type,
+            label: field.label,
+            placeholder: field.placeholder || '',
+            required: field.required === true || field.required === 'true' || false,
+            options: [],
+            validation: field.validation || {},
+            isLeadColumn: field.source === 'table' || false,
+            tableColumnId: field.tableColumnId || null,
+            tableColumnName: field.tableColumnName || null,
+            hasNested: false
+          }
+          
+          // Process options and nested fields
+          if (field.options && Array.isArray(field.options)) {
+            processedField.options = field.options.map((option, optionIndex) => {
+              if (typeof option === 'object' && option.value) {
+                const processedOption = {
+                  value: option.value,
+                  label: option.label || option.value,
+                  nestedFields: []
+                }
+                
+                // Check for nested fields in two places:
+                // 1. In option.nestedFields (from API)
+                // 2. In field.nestedFields[optionIndex] (from form builder edit mode)
+                let nestedFieldsToProcess = []
+                
+                if (option.nestedFields && Array.isArray(option.nestedFields) && option.nestedFields.length > 0) {
+                  nestedFieldsToProcess = option.nestedFields
+                } else if (field.nestedFields && field.nestedFields[optionIndex] && Array.isArray(field.nestedFields[optionIndex])) {
+                  nestedFieldsToProcess = field.nestedFields[optionIndex]
+                }
+                
+                if (nestedFieldsToProcess.length > 0) {
+                  processedOption.nestedFields = nestedFieldsToProcess.map(processFieldData)
+                  processedField.hasNested = true
+                }
+                
+                return processedOption
+              }
+              return option
+            })
+          }
+          
+          return processedField
+        }
+        
+        // Combine all fields into a single fields array
+        const allFields = fields.map(processFieldData)
+        
+        // Prepare the update payload
+        const updatePayload = {
+          organization_id: ORGANIZATION_ID,
+          form_id: editFormData.formId,
+          table_id: TABLE_ID,
+          form_name: editFormData.formName,
+          description: editFormData.description,
+          created_by: USER_ID,
+          fields: allFields,
+          retry_count: editFormData.max_retry_count || 2
+        }
+        
+        console.log('🚀 Update API Payload:', JSON.stringify(updatePayload, null, 2))
+        
+        // Send update request
+        const response = await fetch(`${API_BASE_URL}/api/forms/update`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updatePayload)
+        })
+        
+        const result = await response.json()
+        console.log('✅ Update API Response:', result)
+        
+        if (result.success) {
+          toast.success(`Form "${editFormData.formName}" updated successfully!`)
+          // Clear localStorage and navigate to My Forms
+          localStorage.removeItem('formBuilderData')
+          sessionStorage.setItem('intended-tab', 'custom-form')
+          // Navigate to home page
+          router.push('/')
+        } else {
+          toast.error(`Failed to update form: ${result.message || 'Unknown error'}`)
+        }
       }
     } catch (error) {
-      console.error('Error saving form:', error)
+      console.error('Error updating form:', error)
+      toast.error(`Error updating form: ${error.message}`)
     }
   }
 
@@ -104,7 +202,11 @@ export default function FormPreviewPage() {
       </div>
 
       {/* Form Preview Content */}
-      <FormPreview fields={fields} isEditMode={isEditMode} />
+      <FormPreview 
+        fields={fields} 
+        isEditMode={isEditMode} 
+        formData={editFormData}
+      />
     </div>
   )
 }

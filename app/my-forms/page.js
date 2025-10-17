@@ -430,9 +430,12 @@ export default function MyFormsPage() {
             if (Array.isArray(parsedOptions)) {
               // Extract options and nested fields from the complex structure
               options = parsedOptions.map((option, optionIndex) => {
+                console.log('🔍 Processing option', optionIndex, ':', option)
                 if (typeof option === 'object' && option.value) {
+                  console.log('🔍 Option has nestedFields:', option.nestedFields)
                   // If this option has nested fields, extract them recursively
                   if (option.nestedFields && Array.isArray(option.nestedFields) && option.nestedFields.length > 0) {
+                    console.log('🔍 Extracting nested fields for option', optionIndex)
                     const parseNestedFields = (nestedFieldsArray) => {
                       return nestedFieldsArray.map(nestedField => {
                         const parsedNestedField = {
@@ -452,7 +455,11 @@ export default function MyFormsPage() {
                           console.log('🔍 Parsing nested field options:', nestedField.options)
                           parsedNestedField.options = nestedField.options.map(opt => {
                             if (typeof opt === 'object' && opt.value) {
-                              return opt.value || opt.label || 'Option'
+                              return {
+                                value: opt.value,
+                                label: opt.label || opt.value,
+                                nestedFields: opt.nestedFields || []
+                              }
                             }
                             return typeof opt === 'string' ? opt : (opt.value || opt.label || 'Option')
                           })
@@ -476,10 +483,19 @@ export default function MyFormsPage() {
                     }
                     
                     nestedFields[optionIndex] = parseNestedFields(option.nestedFields)
+                    console.log('🔍 Stored nested fields for option', optionIndex, ':', nestedFields[optionIndex])
+                  } else {
+                    console.log('🔍 No nested fields found for option', optionIndex)
                   }
-                  return option.value || option.label || 'Option'
+                  return {
+                    value: option.value,
+                    label: option.label || option.value,
+                    nestedFields: option.nestedFields || []
+                  }
+                } else {
+                  console.log('🔍 Option is not an object or missing value:', option)
+                  return typeof option === 'string' ? option : (option.value || option.label || 'Option')
                 }
-                return typeof option === 'string' ? option : (option.value || option.label || 'Option')
               })
               console.log('🔍 Final options array:', options)
             } else {
@@ -489,6 +505,16 @@ export default function MyFormsPage() {
             options = parsedField.options.split(',').map(opt => opt.trim()).filter(opt => opt)
           }
         }
+        
+        console.log('🔍 Parsed field:', {
+          id: parsedField.id || parsedField.name || `field-${Date.now()}`,
+          name: parsedField.name || parsedField.id || `field-${Date.now()}`,
+          type: parsedField.type || 'text',
+          label: parsedField.label || parsedField.name || 'Field',
+          options: options,
+          nestedFields: nestedFields
+        })
+        console.log('🔍 Final nestedFields structure:', nestedFields)
         
         return {
           id: parsedField.id || parsedField.name || `field-${Date.now()}`,

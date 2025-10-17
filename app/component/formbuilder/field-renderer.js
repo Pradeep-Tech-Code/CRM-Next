@@ -33,6 +33,8 @@ const isImageFile = (file) => {
 
 const renderNestedFields = (field, selectedOptions, onChange, parentValue, disabled, invalid, locationData, depth = 0, processedIds = new Set(), hideFieldTypes = false) => {
   
+  console.log('🔍 renderNestedFields called with:', { fieldLabel: field.label, fieldType: field.type, selectedOptions, parentValue, depth })
+  
   // Generate a unique key for this field if id is undefined
   const fieldKey = field.id || `field-${field.label}-${depth}-${Date.now()}`
   
@@ -46,6 +48,10 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
   currentProcessedIds.add(fieldKey)
 
   const nestedFieldsToShow = []
+  
+  console.log('🔍 renderNestedFields - field options:', field.options)
+  console.log('🔍 renderNestedFields - field.nestedFields:', field.nestedFields)
+  console.log('🔍 renderNestedFields - selectedOptions:', selectedOptions)
 
   // Helper function to find option by value
   const findOptionByValue = (value) => {
@@ -172,9 +178,21 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
     }
   }
   
+  console.log('🔍 renderNestedFields - nestedFieldsToShow collected:', nestedFieldsToShow)
+  console.log('🔍 renderNestedFields - nestedFieldsToShow details:', nestedFieldsToShow.map(f => ({ 
+    id: f.id, 
+    label: f.label, 
+    type: f.type, 
+    hasNestedFields: f.nestedFields ? Object.keys(f.nestedFields).length : 0,
+    optionsWithNestedFields: f.options ? f.options.filter(opt => opt.nestedFields && opt.nestedFields.length > 0).length : 0
+  })))
+  
   if (nestedFieldsToShow.length === 0) {
+    console.log('🔍 renderNestedFields - No nested fields to show, returning null')
     return null
   }
+  
+  console.log('🔍 renderNestedFields - About to render', nestedFieldsToShow.length, 'nested fields')
 
   const borderColor = depth === 0 ? 'border-primary/20' : depth === 1 ? 'border-blue-300/30' : 'border-green-300/30'
   const dotColor = depth === 0 ? 'bg-primary' : depth === 1 ? 'bg-blue-500' : 'bg-green-500'
@@ -190,6 +208,7 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
       </div>
       <div className="space-y-4">
         {nestedFieldsToShow.map((nestedField) => {
+          console.log('🔍 renderNestedFields - Rendering nested field:', nestedField.label, nestedField.id, 'type:', nestedField.type)
           const nestedFieldId = nestedField.uniqueKey || `${fieldKey}_${nestedField.optionIndex}_${nestedField.id}`
           
           // Get the nested value from parentValue - handle both old and new structures
@@ -2066,6 +2085,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
 
                 {Array.isArray(value?.value) && value.value?.includes(optionValue) && field.nestedFields && field.nestedFields[index] && (
                   <div className="ml-6 space-y-3">
+                    {console.log('🔍 FieldRenderer rendering nested fields for option', index, ':', field.nestedFields[index])}
                     {renderNestedFields(field, [optionValue], onChange, value, disabled, invalid, {
                       countries,
                       states,
