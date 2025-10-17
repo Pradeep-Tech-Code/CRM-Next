@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { FormPreview } from "../component/formbuilder/form-preview"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 import { ArrowLeft, FileText } from "lucide-react"
 
 export default function FormPreviewPage() {
@@ -69,6 +70,14 @@ export default function FormPreviewPage() {
         
         // Process fields the same way as Generate Link
         const processFieldData = (field) => {
+          console.log('🔍 processFieldData - processing field:', { 
+            id: field.id, 
+            label: field.label, 
+            type: field.type,
+            hasNestedFields: field.nestedFields ? Object.keys(field.nestedFields).length : 0,
+            optionsCount: field.options ? field.options.length : 0
+          })
+          
           const processedField = {
             id: field.id,
             name: field.name,
@@ -106,8 +115,27 @@ export default function FormPreviewPage() {
                 }
                 
                 if (nestedFieldsToProcess.length > 0) {
+                  console.log('🔍 Found nested fields for option', optionIndex, ':', nestedFieldsToProcess.length, 'fields')
                   processedOption.nestedFields = nestedFieldsToProcess.map(processFieldData)
                   processedField.hasNested = true
+                  console.log('🔍 Set hasNested = true for field:', field.label)
+                }
+                
+                return processedOption
+              } else if (typeof option === 'string') {
+                // Handle string options - check if there are nested fields for this index
+                const processedOption = {
+                  value: option,
+                  label: option,
+                  nestedFields: []
+                }
+                
+                // Check for nested fields in field.nestedFields[optionIndex] (from form builder edit mode)
+                if (field.nestedFields && field.nestedFields[optionIndex] && Array.isArray(field.nestedFields[optionIndex])) {
+                  console.log('🔍 Found nested fields for string option', optionIndex, ':', field.nestedFields[optionIndex].length, 'fields')
+                  processedOption.nestedFields = field.nestedFields[optionIndex].map(processFieldData)
+                  processedField.hasNested = true
+                  console.log('🔍 Set hasNested = true for field:', field.label)
                 }
                 
                 return processedOption
@@ -120,7 +148,9 @@ export default function FormPreviewPage() {
         }
         
         // Combine all fields into a single fields array
+        console.log('🔍 Raw fields before processing:', fields)
         const allFields = fields.map(processFieldData)
+        console.log('🔍 Processed fields:', allFields)
         
         // Prepare the update payload
         const updatePayload = {
@@ -153,7 +183,7 @@ export default function FormPreviewPage() {
           toast.success(`Form "${editFormData.formName}" updated successfully!`)
           // Clear localStorage and navigate to My Forms
           localStorage.removeItem('formBuilderData')
-          sessionStorage.setItem('intended-tab', 'custom-form')
+          sessionStorage.setItem('intended-tab', 'my-forms')
           // Navigate to home page
           router.push('/')
         } else {
