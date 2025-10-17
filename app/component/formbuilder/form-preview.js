@@ -94,6 +94,30 @@ const processNestedFieldsRecursively = (nestedFields) => {
   if (!Array.isArray(nestedFields)) return []
 
   return nestedFields.map(nestedField => {
+    // Process validation object properly for nested fields
+    let validation = {}
+    if (nestedField.validation) {
+      if (typeof nestedField.validation === 'string') {
+        try {
+          validation = JSON.parse(nestedField.validation)
+        } catch (e) {
+          console.warn('Failed to parse nested field validation as JSON:', nestedField.validation)
+          validation = {}
+        }
+      } else if (typeof nestedField.validation === 'object') {
+        validation = nestedField.validation
+      }
+    }
+
+    // For location fields, ensure validation has proper structure
+    if (nestedField.type === 'location') {
+      validation = {
+        allowedCountries: validation.allowedCountries || [],
+        allowedStates: validation.allowedStates || {},
+        ...validation
+      }
+    }
+
     const processedField = {
       id: nestedField.id,
       name: nestedField.name,
@@ -101,7 +125,7 @@ const processNestedFieldsRecursively = (nestedFields) => {
       label: nestedField.label,
       placeholder: nestedField.placeholder || '',
       required: nestedField.required || false,
-      validation: nestedField.validation || {},
+      validation: validation,
       options: processFieldOptions(nestedField) // Process options recursively
     }
 

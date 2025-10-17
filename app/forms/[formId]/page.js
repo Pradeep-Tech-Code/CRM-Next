@@ -298,10 +298,16 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
             fieldValues[fieldId] = processedValue
           }
         } else {
-          // Direct nested object - process recursively
-          const processedNested = transformNestedValues(value, parentValue, fieldDefinition)
-          if (Object.keys(processedNested).length > 0) {
-            fieldValues[fieldId] = processedNested
+          // Check if this is a location field (has country, state, city properties)
+          if (value.country !== undefined || value.state !== undefined || value.city !== undefined) {
+            // This is a location field - send the location object directly without wrapping
+            fieldValues[fieldId] = value
+          } else {
+            // Direct nested object - process recursively
+            const processedNested = transformNestedValues(value, parentValue, fieldDefinition)
+            if (Object.keys(processedNested).length > 0) {
+              fieldValues[fieldId] = processedNested
+            }
           }
         }
       } else if (Array.isArray(value)) {
@@ -808,9 +814,15 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
             result[key] = fieldValue
           }
         } else {
-          // Direct nested object
-          const nestedResult = transformApiNestedValuesToNestedFields(value)
-          Object.assign(result, nestedResult)
+          // Check if this is a location field (has country, state, city properties)
+          if (value.country !== undefined || value.state !== undefined || value.city !== undefined) {
+            // This is a location field - store it directly without recursive processing
+            result[key] = value
+          } else {
+            // Direct nested object - process recursively
+            const nestedResult = transformApiNestedValuesToNestedFields(value)
+            Object.assign(result, nestedResult)
+          }
         }
       } else {
         // Simple value - check if it's a base64 file string

@@ -401,7 +401,7 @@ export function FieldConfigPanel({ field, onUpdateField }) {
   }
 
   // Memoized recursive component to render nested field configurations
-  const NestedFieldConfig = memo(({ nestedField, path = [], fieldId, nestedFields, onUpdateField, debouncedUpdateField, toggleNestedFields, setExpandedNestedFields }) => {
+  const NestedFieldConfig = memo(({ nestedField, path = [], fieldId, nestedFields, onUpdateField, debouncedUpdateField, toggleNestedFields, setExpandedNestedFields, countries, statesByCountry, citiesByState, loadingStates, loadingCities, manualCityInput, setManualCityInput, showManualCityInput, setShowManualCityInput, loadStatesForCountry, loadCitiesForStateByName }) => {
     const depth = path.length / 2
     const uniqueKey = path.join('-')
     
@@ -707,6 +707,17 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                               debouncedUpdateField={debouncedUpdateField}
                               toggleNestedFields={toggleNestedFields}
                               setExpandedNestedFields={setExpandedNestedFields}
+                              countries={countries}
+                              statesByCountry={statesByCountry}
+                              citiesByState={citiesByState}
+                              loadingStates={loadingStates}
+                              loadingCities={loadingCities}
+                              manualCityInput={manualCityInput}
+                              setManualCityInput={setManualCityInput}
+                              showManualCityInput={showManualCityInput}
+                              setShowManualCityInput={setShowManualCityInput}
+                              loadStatesForCountry={loadStatesForCountry}
+                              loadCitiesForStateByName={loadCitiesForStateByName}
                             />
                           ))}
                           {!hasNestedFields && (
@@ -732,6 +743,370 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                   Add Option
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Location Configuration for nested fields */}
+          {nestedField.type === "location" && (
+            <div className="space-y-3 pt-2 border-t border-border/50">
+              <Label className="text-xs font-medium text-muted-foreground">Location Restrictions</Label>
+              
+              {/* Allowed Countries */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Allowed Countries</Label>
+                <div className="space-y-1">
+                  {nestedField.validation?.allowedCountries?.map((countryName, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                      <span className="text-xs">{countryName}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          const currentAllowed = nestedField.validation?.allowedCountries || []
+                          const newAllowed = currentAllowed.filter(c => c !== countryName)
+                          
+                          // Also remove states and cities for this country
+                          const newAllowedStates = { ...nestedField.validation?.allowedStates }
+                          const newAllowedCities = { ...nestedField.validation?.allowedCities }
+                          delete newAllowedStates[countryName]
+                          
+                          // Remove cities for states of this country
+                          Object.keys(newAllowedCities).forEach(state => {
+                            if (newAllowedStates[state]) {
+                              delete newAllowedCities[state]
+                            }
+                          })
+                          
+                          handleFieldUpdate({
+                            validation: {
+                              ...nestedField.validation,
+                              allowedCountries: newAllowed,
+                              allowedStates: newAllowedStates,
+                              allowedCities: newAllowedCities
+                            }
+                          })
+                        }}
+                        className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+                      >
+                        <X className="h-2 w-2" />
+                      </Button>
+                    </div>
+                  ))}
+                  
+                  <Select onValueChange={(countryId) => {
+                    const country = countries.find(c => c.id === parseInt(countryId))
+                    if (country) {
+                      const currentAllowed = nestedField.validation?.allowedCountries || []
+                      if (!currentAllowed.includes(country.name)) {
+                        handleFieldUpdate({
+                          validation: {
+                            ...nestedField.validation,
+                            allowedCountries: [...currentAllowed, country.name]
+                          }
+                        })
+                      }
+                    }
+                  }}>
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue placeholder="Add country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {countries
+                        .filter(country => !nestedField.validation?.allowedCountries?.includes(country.name))
+                        .map(country => (
+                          <SelectItem key={country.id} value={country.id.toString()}>
+                            {country.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Allowed States */}
+              {nestedField.validation?.allowedCountries?.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Allowed States</Label>
+                  {nestedField.validation.allowedCountries.map(countryName => {
+                    const country = countries.find(c => c.name === countryName)
+                    if (!country) return null
+                    
+                    return (
+                      <div key={countryName} className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs text-muted-foreground">{countryName}</Label>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => loadStatesForCountry(country.id)}
+                            disabled={loadingStates[country.id]}
+                            className="h-6 text-xs"
+                          >
+                            {loadingStates[country.id] ? "Loading..." : "Load States"}
+                          </Button>
+                        </div>
+                        
+                        <div className="space-y-1">
+                          {(nestedField.validation?.allowedStates?.[countryName] || []).map((stateName, index) => (
+                            <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                              <span className="text-xs">{stateName}</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  const currentAllowedStates = nestedField.validation?.allowedStates || {}
+                                  const countryStates = (currentAllowedStates[countryName] || []).filter(s => s !== stateName)
+                                  
+                                  // Also remove cities for this state
+                                  const newAllowedCities = { ...nestedField.validation?.allowedCities }
+                                  delete newAllowedCities[stateName]
+                                  
+                                  handleFieldUpdate({
+                                    validation: {
+                                      ...nestedField.validation,
+                                      allowedStates: {
+                                        ...currentAllowedStates,
+                                        [countryName]: countryStates
+                                      },
+                                      allowedCities: newAllowedCities
+                                    }
+                                  })
+                                }}
+                                className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+                              >
+                                <X className="h-2 w-2" />
+                              </Button>
+                            </div>
+                          ))}
+                          
+                          {statesByCountry[country.id]?.length > 0 && (
+                            <Select onValueChange={(stateId) => {
+                              const state = statesByCountry[country.id].find(s => s.id === parseInt(stateId))
+                              if (state) {
+                                const currentAllowedStates = nestedField.validation?.allowedStates || {}
+                                const countryStates = currentAllowedStates[countryName] || []
+                                
+                                if (!countryStates.includes(state.name)) {
+                                  handleFieldUpdate({
+                                    validation: {
+                                      ...nestedField.validation,
+                                      allowedStates: {
+                                        ...currentAllowedStates,
+                                        [countryName]: [...countryStates, state.name]
+                                      }
+                                    }
+                                  })
+                                }
+                              }
+                            }}>
+                              <SelectTrigger className="h-6 text-xs">
+                                <SelectValue placeholder="Add state" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {statesByCountry[country.id]
+                                  .filter(state => !nestedField.validation?.allowedStates?.[countryName]?.includes(state.name))
+                                  .map(state => (
+                                    <SelectItem key={state.id} value={state.id.toString()}>
+                                      {state.name}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Allowed Cities */}
+              {Object.keys(nestedField.validation?.allowedStates || {}).length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Allowed Cities</Label>
+                  {Object.entries(nestedField.validation?.allowedStates || {}).map(([countryName, stateNames]) => 
+                    stateNames.map(stateName => {
+                      const country = countries.find(c => c.name === countryName)
+                      if (!country) return null
+                      
+                      // Find the state object from the loaded states for this country
+                      const state = statesByCountry[country.id]?.find(s => s.name === stateName)
+                      
+                      return (
+                        <div key={`${countryName}-${stateName}`} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs text-muted-foreground">{stateName}, {countryName}</Label>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => loadCitiesForStateByName(stateName, countryName)}
+                              disabled={state ? loadingCities[state.id] : false}
+                              className="h-6 text-xs"
+                            >
+                              {state && loadingCities[state.id] ? "Loading..." : "Load Cities"}
+                            </Button>
+                          </div>
+                          
+                          <div className="space-y-1">
+                            {(nestedField.validation?.allowedCities?.[stateName] || []).map((cityName, index) => (
+                              <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                                <span className="text-xs">{cityName}</span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    const currentAllowedCities = nestedField.validation?.allowedCities || {}
+                                    const stateCities = (currentAllowedCities[stateName] || []).filter(c => c !== cityName)
+                                    
+                                    handleFieldUpdate({
+                                      validation: {
+                                        ...nestedField.validation,
+                                        allowedCities: {
+                                          ...currentAllowedCities,
+                                          [stateName]: stateCities
+                                        }
+                                      }
+                                    })
+                                  }}
+                                  className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+                                >
+                                  <X className="h-2 w-2" />
+                                </Button>
+                              </div>
+                            ))}
+                            
+                            {state && citiesByState[state.id]?.length > 0 && (
+                              <Select onValueChange={(cityId) => {
+                                const city = citiesByState[state.id].find(c => c.id === parseInt(cityId))
+                                if (city) {
+                                  const currentAllowedCities = nestedField.validation?.allowedCities || {}
+                                  const stateCities = currentAllowedCities[stateName] || []
+                                  
+                                  if (!stateCities.includes(city.name)) {
+                                    handleFieldUpdate({
+                                      validation: {
+                                        ...nestedField.validation,
+                                        allowedCities: {
+                                          ...currentAllowedCities,
+                                          [stateName]: [...stateCities, city.name]
+                                        }
+                                      }
+                                    })
+                                  }
+                                }
+                              }}>
+                                <SelectTrigger className="h-6 text-xs">
+                                  <SelectValue placeholder="Add city" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {citiesByState[state.id]
+                                    .filter(city => !nestedField.validation?.allowedCities?.[stateName]?.includes(city.name))
+                                    .map(city => (
+                                      <SelectItem key={city.id} value={city.id.toString()}>
+                                        {city.name}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            
+                            {/* Manual city input fallback */}
+                            <div className="space-y-1">
+                              {state && !showManualCityInput[state.id] ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setShowManualCityInput(prev => ({ ...prev, [state.id]: true }))}
+                                  className="h-6 text-xs"
+                                >
+                                  Add City Manually
+                                </Button>
+                              ) : state && showManualCityInput[state.id] ? (
+                                <div className="flex gap-1">
+                                  <Input
+                                    value={manualCityInput}
+                                    onChange={(e) => setManualCityInput(e.target.value)}
+                                    placeholder="Enter city name"
+                                    className="h-6 text-xs"
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        if (!manualCityInput.trim()) return
+                                        
+                                        const currentAllowedCities = nestedField.validation?.allowedCities || {}
+                                        const stateCities = currentAllowedCities[stateName] || []
+                                        
+                                        if (!stateCities.includes(manualCityInput.trim())) {
+                                          handleFieldUpdate({
+                                            validation: {
+                                              ...nestedField.validation,
+                                              allowedCities: {
+                                                ...currentAllowedCities,
+                                                [stateName]: [...stateCities, manualCityInput.trim()]
+                                              }
+                                            }
+                                          })
+                                        }
+                                        
+                                        setManualCityInput("")
+                                        setShowManualCityInput(prev => ({ ...prev, [state.id]: false }))
+                                      } else if (e.key === 'Escape') {
+                                        setShowManualCityInput(prev => ({ ...prev, [state.id]: false }))
+                                        setManualCityInput("")
+                                      }
+                                    }}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      if (!manualCityInput.trim()) return
+                                      
+                                      const currentAllowedCities = nestedField.validation?.allowedCities || {}
+                                      const stateCities = currentAllowedCities[stateName] || []
+                                      
+                                      if (!stateCities.includes(manualCityInput.trim())) {
+                                        handleFieldUpdate({
+                                          validation: {
+                                            ...nestedField.validation,
+                                            allowedCities: {
+                                              ...currentAllowedCities,
+                                              [stateName]: [...stateCities, manualCityInput.trim()]
+                                            }
+                                          }
+                                        })
+                                      }
+                                      
+                                      setManualCityInput("")
+                                      setShowManualCityInput(prev => ({ ...prev, [state.id]: false }))
+                                    }}
+                                    className="h-6 px-2 text-xs"
+                                  >
+                                    Add
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setShowManualCityInput(prev => ({ ...prev, [state.id]: false }))
+                                      setManualCityInput("")
+                                    }}
+                                    className="h-6 px-2 text-xs"
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-muted-foreground">
+                                  Load cities first to add manually
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -946,6 +1321,17 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                                   debouncedUpdateField={debouncedUpdateField}
                                   toggleNestedFields={toggleNestedFields}
                                   setExpandedNestedFields={setExpandedNestedFields}
+                                  countries={countries}
+                                  statesByCountry={statesByCountry}
+                                  citiesByState={citiesByState}
+                                  loadingStates={loadingStates}
+                                  loadingCities={loadingCities}
+                                  manualCityInput={manualCityInput}
+                                  setManualCityInput={setManualCityInput}
+                                  showManualCityInput={showManualCityInput}
+                                  setShowManualCityInput={setShowManualCityInput}
+                                  loadStatesForCountry={loadStatesForCountry}
+                                  loadCitiesForStateByName={loadCitiesForStateByName}
                                 />
                               ))}
 

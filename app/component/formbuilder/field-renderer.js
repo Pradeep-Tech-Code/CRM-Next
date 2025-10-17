@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Check, ChevronsUpDown, Search, AlertCircle, Info, X } from "lucide-react"
 import { fetchCountries, fetchStates, fetchCities, fetchPhoneCountries } from "@/lib/constants/location-api"
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { Database } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
@@ -24,6 +24,491 @@ const formatFileSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
+// Custom hook for location data management
+const useLocationData = (currentValue, validation = {}) => {
+  const [countries, setCountries] = useState([])
+  const [states, setStates] = useState([])
+  const [cities, setCities] = useState([])
+  const [loadingStates, setLoadingStates] = useState(false)
+  const [loadingCities, setLoadingCities] = useState(false)
+  const [apiError, setApiError] = useState(null)
+
+  // State for search functionality
+  const [countrySearch, setCountrySearch] = useState("")
+  const [stateSearch, setStateSearch] = useState("")
+  const [citySearch, setCitySearch] = useState("")
+
+  // State for popover open/close
+  const [countryOpen, setCountryOpen] = useState(false)
+  const [stateOpen, setStateOpen] = useState(false)
+  const [cityOpen, setCityOpen] = useState(false)
+
+  // Load countries on mount
+  useEffect(() => {
+    const loadCountries = async () => {
+      try {
+        console.log('🌍 Loading countries for location field...')
+        const countriesData = await fetchCountries()
+        console.log('🌍 Countries loaded:', countriesData.length, 'countries')
+        setCountries(countriesData)
+        if (countriesData.length === 0) {
+          setApiError('No countries data available')
+        } else {
+          setApiError(null)
+        }
+      } catch (error) {
+        console.error('Failed to load countries:', error)
+        setApiError('Failed to load countries data')
+      }
+    }
+    loadCountries()
+  }, [])
+
+  // Load states when country changes
+  useEffect(() => {
+    const loadStates = async () => {
+      if (currentValue?.country) {
+        // Check if this country is allowed (for location fields with restrictions)
+        const selectedCountry = countries.find(c => c.name === currentValue.country)
+        if (validation.allowedCountries && validation.allowedCountries.length > 0) {
+          if (!selectedCountry || !validation.allowedCountries.includes(selectedCountry.name)) {
+            setStates([])
+            setCities([])
+            setApiError('Selected country is not allowed')
+            return
+          }
+        }
+        
+        try {
+          setLoadingStates(true)
+          console.log('🏛️ Loading states for country:', selectedCountry.name, 'ID:', selectedCountry.id)
+          const statesData = await fetchStates(selectedCountry.id)
+          console.log('🏛️ States loaded:', statesData.length, 'states')
+          setStates(statesData)
+          if (statesData.length === 0) {
+            setApiError(`No states available for selected country`)
+          } else {
+            setApiError(null)
+          }
+        } catch (error) {
+          console.error('Failed to load states:', error)
+          setApiError('Failed to load states data')
+          setStates([])
+        } finally {
+          setLoadingStates(false)
+        }
+      } else {
+        setStates([])
+        setCities([])
+      }
+    }
+    loadStates()
+  }, [currentValue?.country, validation.allowedCountries, countries.length])
+
+  // Load cities when state changes
+  useEffect(() => {
+    const loadCities = async () => {
+      if (currentValue?.state) {
+        // Check if this state is allowed (for location fields with restrictions)
+        const selectedState = states.find(s => s.name === currentValue.state)
+        const selectedCountry = countries.find(c => c.name === currentValue.country)
+        
+        if (validation.allowedStates && selectedCountry) {
+          if (!selectedState || !validation.allowedStates[selectedCountry.name]?.includes(selectedState.name)) {
+            setCities([])
+            setApiError('Selected state is not allowed')
+            return
+          }
+        }
+        
+        try {
+          setLoadingCities(true)
+          const citiesData = await fetchCities(selectedState.id)
+          setCities(citiesData)
+          if (citiesData.length === 0) {
+            setApiError(`No cities available for selected state`)
+          } else {
+            setApiError(null)
+          }
+        } catch (error) {
+          console.error('Failed to load cities:', error)
+          setApiError('Failed to load cities data')
+          setCities([])
+        } finally {
+          setLoadingCities(false)
+        }
+      } else {
+        setCities([])
+      }
+    }
+    loadCities()
+  }, [currentValue?.state, validation.allowedStates, states.length])
+
+  // Filter functions for search and field validation
+  const filteredCountries = countries.filter(country => {
+    // Apply field validation restrictions if they exist
+    if (validation.allowedCountries && validation.allowedCountries.length > 0) {
+      if (!validation.allowedCountries.includes(country.name)) {
+        return false
+      }
+    }
+    
+    // Apply search filter
+    return country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+           country.iso2.toLowerCase().includes(countrySearch.toLowerCase())
+  })
+
+  const filteredStates = states.filter(state => {
+    // Apply field validation restrictions if they exist
+    if (validation.allowedStates && currentValue?.country) {
+      const selectedCountry = countries.find(c => c.name === currentValue.country)
+      if (selectedCountry && validation.allowedStates[selectedCountry.name]) {
+        if (!validation.allowedStates[selectedCountry.name].includes(state.name)) {
+          return false
+        }
+      }
+    }
+    
+    // Apply search filter
+    return state.name.toLowerCase().includes(stateSearch.toLowerCase())
+  })
+
+  const filteredCities = cities.filter(city => {
+    // Apply field validation restrictions if they exist
+    if (validation.allowedCities && currentValue?.state) {
+      const selectedState = states.find(s => s.name === currentValue.state)
+      if (selectedState && validation.allowedCities[selectedState.name]) {
+        if (!validation.allowedCities[selectedState.name].includes(city.name)) {
+          return false
+        }
+      }
+    }
+    
+    // Apply search filter
+    return city.name.toLowerCase().includes(citySearch.toLowerCase())
+  })
+
+  return {
+    // Data
+    countries: filteredCountries,
+    states: filteredStates,
+    cities: filteredCities,
+    allCountries: countries,
+    allStates: states,
+    allCities: cities,
+    
+    // Loading states
+    loadingStates,
+    loadingCities,
+    apiError,
+    
+    // Search states
+    countrySearch,
+    stateSearch,
+    citySearch,
+    setCountrySearch,
+    setStateSearch,
+    setCitySearch,
+    
+    // Popover states
+    countryOpen,
+    stateOpen,
+    cityOpen,
+    setCountryOpen,
+    setStateOpen,
+    setCityOpen
+  }
+}
+
+// Reusable Location Field Component
+const LocationField = ({ current, validation, onChange, invalid, error, disabled }) => {
+  console.log('🔍 LocationField Debug:', {
+    current,
+    validation,
+    allowedCountries: validation?.allowedCountries,
+    allowedCountriesLength: validation?.allowedCountries?.length,
+    allowedStates: validation?.allowedStates
+  })
+  
+  const locationData = useLocationData(current, validation)
+
+  const handleCountry = (countryId) => {
+    console.log('🌍 Country Selected:', countryId)
+    const country = locationData.countries.find(c => c.id === parseInt(countryId))
+    const newValue = {
+      country: country?.name, // Send only the country name, not ID
+      state: undefined,
+      city: undefined
+    }
+    console.log('🌍 Country New Value:', newValue)
+    onChange?.(newValue)
+    locationData.setCountryOpen(false)
+  }
+
+  const handleState = (stateId) => {
+    console.log('🏛️ State Selected:', stateId)
+    const state = locationData.states?.find(s => s.id === parseInt(stateId))
+    const newValue = {
+      ...current,
+      state: state?.name, // Send only the state name, not ID
+      city: undefined
+    }
+    console.log('🏛️ State New Value:', newValue)
+    onChange?.(newValue)
+    locationData.setStateOpen(false)
+  }
+
+  const handleCity = (cityId) => {
+    console.log('🏙️ City Selected:', cityId)
+    const city = locationData.cities?.find(c => c.id === parseInt(cityId))
+    const newValue = {
+      ...current,
+      city: city?.name // Send only the city name, not ID
+    }
+    console.log('🏙️ City New Value:', newValue)
+    onChange?.(newValue)
+    locationData.setCityOpen(false)
+  }
+
+  const getLocationPlaceholder = (type) => {
+    if (invalid && error) {
+      if (type === "country") return error
+      if (type === "state" && !current.country) return "Select country first"
+      if (type === "city" && !current.state) return "Select state first"
+    }
+
+    if (type === "country" && (!locationData.countries || locationData.countries.length === 0)) return "No countries available"
+    if (type === "state" && (!locationData.states || locationData.states.length === 0)) return "No states available"
+    if (type === "city" && (!locationData.cities || locationData.cities.length === 0)) return "No cities available"
+
+    return type === "country" ? "Select country" : type === "state" ? "Select state" : "Select city"
+  }
+
+  const selectedCountry = locationData.countries?.find(c => c.name === current.country)
+  const selectedState = locationData.states?.find(s => s.name === current.state)
+  const selectedCity = locationData.cities?.find(c => c.name === current.city)
+
+  return (
+    <div className="space-y-3">
+      {locationData.apiError && (
+        <div className="flex items-center gap-2 text-amber-600 text-xs bg-amber-50 p-2 rounded-md">
+          <AlertCircle className="h-3 w-3" />
+          <span>{locationData.apiError}</span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Country Select with Search */}
+        <div>
+          <Label className="text-xs text-muted-foreground">Country</Label>
+          <Popover open={locationData.countryOpen} onOpenChange={locationData.setCountryOpen}>
+            <PopoverTrigger asChild>
+              <div
+                className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                  } ${disabled || locationData.countries.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <div className="flex items-center gap-2 truncate">
+                  {selectedCountry ? (
+                    <>
+                      <span>{selectedCountry.emoji}</span>
+                      <span className="truncate">{selectedCountry.name}</span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {getLocationPlaceholder("country")}
+                    </span>
+                  )}
+                </div>
+                <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+              </div>
+            </PopoverTrigger>
+            <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
+              <Command shouldFilter={false}>
+                <div className="flex items-center border-b px-3">
+                  <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                  <CommandInput
+                    placeholder="Search countries..."
+                    value={locationData.countrySearch}
+                    onValueChange={locationData.setCountrySearch}
+                  />
+                </div>
+                <CommandList>
+                  <CommandEmpty>No country found.</CommandEmpty>
+                  <CommandGroup>
+                    {locationData.countries.map((country) => (
+                      <CommandItem
+                        key={country.id}
+                        value={country.name}
+                        onSelect={() => handleCountry(String(country.id))}
+                        className="cursor-pointer"
+                      >
+                        <Check
+                          className={`mr-2 h-4 w-4 ${current.country === country.name ? "opacity-100" : "opacity-0"
+                            }`}
+                        />
+                        <span className="mr-2">{country.emoji}</span>
+                        <span>{country.name}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">({country.iso2})</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {/* State Select with Search */}
+        <div>
+          <Label className="text-xs text-muted-foreground">State</Label>
+          <Popover open={locationData.stateOpen} onOpenChange={locationData.setStateOpen}>
+            <PopoverTrigger asChild>
+              <div
+                className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                  } ${disabled || !current.country || locationData.states.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <div className="truncate">
+                  {selectedState ? (
+                    selectedState.name
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {locationData.loadingStates ? "Loading..." : getLocationPlaceholder("state")}
+                    </span>
+                  )}
+                </div>
+                <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+              </div>
+            </PopoverTrigger>
+            <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
+              <Command shouldFilter={false}>
+                <div className="flex items-center border-b px-3">
+                  <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                  <CommandInput
+                    placeholder="Search states..."
+                    value={locationData.stateSearch}
+                    onValueChange={locationData.setStateSearch}
+                  />
+                </div>
+                <CommandList>
+                  <CommandEmpty>
+                    {locationData.states.length === 0 ? "No states available" : "No state found"}
+                  </CommandEmpty>
+                  <CommandGroup>
+                    {locationData.states.map((state) => (
+                      <CommandItem
+                        key={state.id}
+                        value={state.name}
+                        onSelect={() => handleState(String(state.id))}
+                        className="cursor-pointer"
+                      >
+                        <Check
+                          className={`mr-2 h-4 w-4 ${current.state === state.name ? "opacity-100" : "opacity-0"
+                            }`}
+                        />
+                        {state.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {/* City Select with Search */}
+        <div>
+          <Label className="text-xs text-muted-foreground">City</Label>
+          <Popover open={locationData.cityOpen} onOpenChange={locationData.setCityOpen}>
+            <PopoverTrigger asChild>
+              <div
+                className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
+                  } ${disabled || !current.state || locationData.cities.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <div className="truncate">
+                  {selectedCity ? (
+                    selectedCity.name
+                  ) : (
+                    <span className="text-muted-foreground">
+                      {locationData.loadingCities ? "Loading..." : getLocationPlaceholder("city")}
+                    </span>
+                  )}
+                </div>
+                <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
+              </div>
+            </PopoverTrigger>
+            <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
+              <Command shouldFilter={false}>
+                <div className="flex items-center border-b px-3">
+                  <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                  <CommandInput
+                    placeholder="Search cities..."
+                    value={locationData.citySearch}
+                    onValueChange={locationData.setCitySearch}
+                  />
+                </div>
+                <CommandList>
+                  <CommandEmpty>
+                    {locationData.cities.length === 0 ? "No cities available" : "No city found"}
+                  </CommandEmpty>
+                  <CommandGroup>
+                    {locationData.cities.map((city) => (
+                      <CommandItem
+                        key={city.id}
+                        value={city.name}
+                        onSelect={() => handleCity(String(city.id))}
+                        className="cursor-pointer"
+                      >
+                        <Check
+                          className={`mr-2 h-4 w-4 ${current.city === city.name ? "opacity-100" : "opacity-0"
+                            }`}
+                        />
+                        {city.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+
+      {/* Information message when no data available */}
+      {(locationData.countries.length === 0 || locationData.states.length === 0 || locationData.cities.length === 0) && (
+        <div className="flex items-center gap-2 text-blue-600 text-xs bg-blue-50 p-2 rounded-md">
+          <Info className="h-3 w-3" />
+          <span>
+            {locationData.countries.length === 0 && "No allowed countries available based on field restrictions. "}
+            {locationData.states.length === 0 && current.country && "No allowed states available for selected country. "}
+            {locationData.cities.length === 0 && current.state && "No allowed cities available for selected state."}
+          </span>
+        </div>
+      )}
+
+      {(current.country || current.state || current.city) && !disabled && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => onChange?.({ country: "", state: "", city: "" })}
+            className="text-gray-400 hover:text-gray-600 transition-colors text-sm"
+            aria-label="Clear location"
+          >
+            <X className="h-4 w-4 inline mr-1" />
+            Clear location
+          </button>
+        </div>
+      )}
+
+      {invalid && error && !current.country && (
+        <div className="text-xs text-red-500 font-medium">
+          {error}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 // Helper function to check if file is an image
 const isImageFile = (file) => {
   return file && file.type && typeof file.type === 'string' &&
@@ -31,7 +516,7 @@ const isImageFile = (file) => {
       file.name.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|svg)$/))
 }
 
-const renderNestedFields = (field, selectedOptions, onChange, parentValue, disabled, invalid, locationData, depth = 0, processedIds = new Set(), hideFieldTypes = false) => {
+const renderNestedFields = (field, selectedOptions, onChange, parentValue, disabled, invalid, error, locationData, depth = 0, processedIds = new Set(), hideFieldTypes = false) => {
   
   // Generate a unique key for this field if id is undefined
   const fieldKey = field.id || `field-${field.label}-${depth}-${Date.now()}`
@@ -193,14 +678,46 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
           const nestedFieldId = nestedField.uniqueKey || `${fieldKey}_${nestedField.optionIndex}_${nestedField.id}`
           
           // Get the nested value from parentValue - handle both old and new structures
-          let nestedValue = ""
+          let nestedValue = null
+          console.log('🔍 Getting nested value for:', {
+            fieldId: nestedField.id,
+            optionIndex: nestedField.optionIndex,
+            parentValue: parentValue,
+            nestedFields: parentValue?.nestedFields,
+            optionNestedFields: parentValue?.nestedFields?.[nestedField.optionIndex]
+          })
+
           if (parentValue?.nestedFields?.[nestedField.optionIndex]?.[nestedField.id] !== undefined) {
             nestedValue = parentValue.nestedFields[nestedField.optionIndex][nestedField.id]
+            console.log('✅ Found nested value in option index:', nestedValue)
           } else if (parentValue?.nestedFields?.[nestedField.id] !== undefined) {
             nestedValue = parentValue.nestedFields[nestedField.id]
+            console.log('✅ Found nested value by field ID:', nestedValue)
           } else if (parentValue?.[nestedField.id] !== undefined) {
             nestedValue = parentValue[nestedField.id]
+            console.log('✅ Found nested value in parent:', nestedValue)
+          } else {
+            console.log('❌ No nested value found, using empty object')
+            // For location fields, start with empty object
+            if (nestedField.type === "location" || nestedField.type === "phone") {
+              nestedValue = {}
+            } else if (["select", "checkbox", "radio"].includes(nestedField.type)) {
+              nestedValue = {
+                value: nestedField.type === "checkbox" || (nestedField.type === "select" && nestedField.validation?.multiple) ? [] : "",
+                nestedFields: {}
+              }
+            } else {
+              nestedValue = ""
+            }
           }
+
+          // Debug the final nested value
+          console.log('🔍 Final nested value for rendering:', {
+            fieldId: nestedField.id,
+            fieldType: nestedField.type,
+            nestedValue: nestedValue,
+            nestedValueType: typeof nestedValue
+          })
 
           // For select/radio/checkbox fields, ensure the nested value has the correct structure
           if (["select", "radio", "checkbox"].includes(nestedField.type)) {
@@ -235,11 +752,17 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
               }
             }
           } else {
-            // For other field types (text, textarea, file, etc.)
+            // For other field types (text, textarea, file, location, etc.)
             if (typeof nestedValue === 'object' && nestedValue !== null) {
               // Special handling for file fields - keep the file object as-is
               if (nestedField.type === 'file' && (nestedValue.name || nestedValue.base64)) {
                 // This is a file object, keep it as-is
+                nestedValue = nestedValue
+              } else if (nestedField.type === 'location' && (nestedValue.country || nestedValue.state || nestedValue.city)) {
+                // This is a location object, keep it as-is
+                nestedValue = nestedValue
+              } else if (nestedField.type === 'phone' && (nestedValue.country || nestedValue.number)) {
+                // This is a phone object, keep it as-is
                 nestedValue = nestedValue
               } else if (nestedValue.value !== undefined) {
                 // If it's an object with a value property, extract the value
@@ -254,6 +777,13 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
           }
 
           const handleNestedChange = (value) => {
+            console.log('🔄 Nested Field Change:', {
+              fieldId: nestedField.id,
+              optionIndex: nestedField.optionIndex,
+              currentParentValue: parentValue,
+              newValue: value
+            })
+
             const currentNestedFields = parentValue?.nestedFields || {}
             const optionNestedFields = currentNestedFields[nestedField.optionIndex] || {}
 
@@ -265,10 +795,13 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
               }
             }
 
-            onChange({
+            const newParentValue = {
               ...parentValue,
               nestedFields: updatedNestedFields
-            })
+            }
+
+            console.log('🔄 Updated Parent Value:', newParentValue)
+            onChange(newParentValue)
           }
 
           return (
@@ -286,7 +819,7 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
               </div>
               
               {/* Render the nested field input */}
-              {renderNestedFieldInput(nestedField, nestedValue, handleNestedChange, disabled, invalid, {
+              {renderNestedFieldInput(nestedField, nestedValue, handleNestedChange, disabled, invalid, error, {
                 countries: locationData?.countries || [],
                 states: locationData?.states || [],
                 cities: locationData?.cities || [],
@@ -363,6 +896,7 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
                     nestedValue, 
                     disabled, 
                     invalid, 
+                    error,
                     {
                       countries: locationData?.countries || [],
                       states: locationData?.states || [],
@@ -407,7 +941,7 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
   )
 }
 
-const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid, {
+const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid, error, {
   countries = [],
   states = [],
   cities = [],
@@ -437,6 +971,71 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
   filteredCities = [],
   filteredPhoneCountries = []
 }, depth = 0, processedIds = new Set()) => {
+
+  // Fix: Ensure value is properly handled for location fields
+  let safeValue = value
+  if (nestedField.type === "location" && typeof value === 'string' && value === '[object Object]') {
+    console.warn('⚠️ Fixing stringified object value for location field:', value)
+    safeValue = {}
+  } else if (nestedField.type === "location" && typeof value === 'string' && value.startsWith('{')) {
+    try {
+      safeValue = JSON.parse(value)
+      console.log('✅ Parsed location value from JSON string:', safeValue)
+    } catch (e) {
+      console.warn('❌ Failed to parse location value as JSON:', value)
+      safeValue = {}
+    }
+  } else if (nestedField.type === "location" && (value === null || value === undefined || value === '')) {
+    safeValue = {}
+  }
+
+  // Use safeValue instead of value for the rest of the function
+  const current = safeValue || {}
+
+  // Parse validation for nested fields - handle both object and string formats
+  let validation = {}
+  if (nestedField.validations) {
+    if (typeof nestedField.validations === 'string') {
+      try {
+        validation = JSON.parse(nestedField.validations)
+      } catch (e) {
+        console.warn('Failed to parse nested field validations as JSON:', nestedField.validations)
+      }
+    } else if (typeof nestedField.validations === 'object') {
+      validation = nestedField.validations
+    }
+  } else if (nestedField.validation) {
+    if (typeof nestedField.validation === 'string') {
+      try {
+        validation = JSON.parse(nestedField.validation)
+      } catch (e) {
+        console.warn('Failed to parse nested field validation as JSON:', nestedField.validation)
+      }
+    } else if (typeof nestedField.validation === 'object') {
+      validation = nestedField.validation
+    }
+  }
+
+  // For location fields, ensure validation has proper structure
+  if (nestedField.type === 'location') {
+    validation = {
+      allowedCountries: validation.allowedCountries || [],
+      allowedStates: validation.allowedStates || {},
+      ...validation
+    }
+  }
+
+  console.log('🔍 Nested Field Validation Debug:', {
+    fieldId: nestedField.id,
+    fieldLabel: nestedField.label,
+    fieldType: nestedField.type,
+    rawValidations: nestedField.validations,
+    rawValidation: nestedField.validation,
+    parsedValidation: validation,
+    allowedCountries: validation.allowedCountries,
+    allowedCountriesLength: validation.allowedCountries?.length,
+    allowedStates: validation.allowedStates
+  })
   switch (nestedField.type) {
     case "text":
     case "email":
@@ -448,8 +1047,8 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
             onChange={(e) => onChange(e.target.value)}
             disabled={disabled}
             placeholder={nestedField.placeholder}
-            minLength={nestedField.validation?.minLength}
-            maxLength={nestedField.validation?.maxLength}
+            minLength={validation?.minLength}
+            maxLength={validation?.maxLength}
             className={`pr-8 ${invalid ? "border-red-500" : ""}`}
           />
           {value && !disabled && (
@@ -473,8 +1072,8 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
             onChange={(e) => onChange(e.target.value)}
             disabled={disabled}
             placeholder={nestedField.placeholder}
-            min={nestedField.validation?.min}
-            max={nestedField.validation?.max}
+            min={validation?.min}
+            max={validation?.max}
             className={`pr-8 ${invalid ? "border-red-500" : ""}`}
           />
           {value && !disabled && (
@@ -497,8 +1096,8 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
             onChange={(e) => onChange(e.target.value)}
             disabled={disabled}
             placeholder={nestedField.placeholder}
-            minLength={nestedField.validation?.minLength}
-            maxLength={nestedField.validation?.maxLength}
+            minLength={validation?.minLength}
+            maxLength={validation?.maxLength}
             className={`pr-8 ${invalid ? "border-red-500" : ""}`}
           />
           {value && !disabled && (
@@ -514,7 +1113,7 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
         </div>
       )
     case "select":
-      if (nestedField.validation?.multiple) {
+      if (validation?.multiple) {
         const selectedValues = Array.isArray(value?.value) ? value.value : []
         const currentNestedFields = value?.nestedFields || {}
 
@@ -820,8 +1419,8 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
         }
 
         // File type validation
-        if (nestedField.validation?.accept) {
-          const acceptedTypes = nestedField.validation.accept.split(",").map((type) => type.trim())
+        if (validation?.accept) {
+          const acceptedTypes = validation.accept.split(",").map((type) => type.trim())
           const fileName = file.name || ""
           const fileType = file.type || ""
 
@@ -837,7 +1436,7 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
           })
 
           if (!isAccepted) {
-            alert(`File type not allowed. Accepted types: ${nestedField.validation.accept}`)
+            alert(`File type not allowed. Accepted types: ${validation.accept}`)
             e.target.value = ''
             onChange(null)
             return
@@ -845,10 +1444,10 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
         }
 
         // File size validation
-        if (nestedField.validation?.maxSize) {
-          const maxSizeBytes = nestedField.validation.maxSize * 1024 * 1024 // Convert MB to bytes
+        if (validation?.maxSize) {
+          const maxSizeBytes = validation.maxSize * 1024 * 1024 // Convert MB to bytes
           if (file.size > maxSizeBytes) {
-            alert(`File size must be less than ${nestedField.validation.maxSize}MB.`)
+            alert(`File size must be less than ${validation.maxSize}MB.`)
             e.target.value = ''
             onChange(null)
             return
@@ -890,7 +1489,7 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
             disabled={disabled}
             className={`bg-input file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 ${invalid ? "border-red-500" : ""
               }`}
-            accept={nestedField.validation?.accept || ".jpg,.jpeg,.png,.gif,.webp,.svg,.pdf"}
+            accept={validation?.accept || ".jpg,.jpeg,.png,.gif,.webp,.svg,.pdf"}
           />
           {value && value.name && (
             <div className="p-3 border border-green-200 bg-green-50 rounded-md">
@@ -992,6 +1591,8 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           placeholder={nestedField.placeholder}
+          min={validation?.min}
+          max={validation?.max}
           className={invalid ? "border-red-500" : ""}
         />
       )
@@ -1142,261 +1743,26 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
     }
 
     case "location": {
-      const current = value || {}
+      console.log('🔍 Nested Location Field Debug:', {
+        fieldId: nestedField.id,
+        fieldLabel: nestedField.label,
+        originalValue: value,
+        safeValue: safeValue,
+        current: current,
+        validation: validation
+      })
 
-      const handleCountry = (countryId) => {
-        const country = countries.find(c => c.id === parseInt(countryId))
-        onChange?.({
-          country: countryId,
-          country_name: country?.name,
-          state: undefined,
-          city: undefined
-        })
-        setCountryOpen(false)
-      }
-
-      const handleState = (stateId) => {
-        const state = states?.find(s => s.id === parseInt(stateId))
-        onChange?.({
-          ...current,
-          state: stateId,
-          state_name: state?.name,
-          city: undefined
-        })
-        setStateOpen(false)
-      }
-
-      const handleCity = (cityId) => {
-        const city = cities?.find(c => c.id === parseInt(cityId))
-        onChange?.({
-          ...current,
-          city: cityId,
-          city_name: city?.name
-        })
-        setCityOpen(false)
-      }
-
-      const getLocationPlaceholder = (type) => {
-        if (invalid && error) {
-          if (type === "country") return error
-          if (type === "state" && !current.country) return "Select country first"
-          if (type === "city" && !current.state) return "Select state first"
-        }
-
-        if (type === "country" && (!countries || countries.length === 0)) return "No countries available"
-        if (type === "state" && (!states || states.length === 0)) return "No states available"
-        if (type === "city" && (!cities || cities.length === 0)) return "No cities available"
-
-        return type === "country" ? "Select country" : type === "state" ? "Select state" : "Select city"
-      }
-
-      const selectedCountry = countries?.find(c => c.id === parseInt(current.country))
-      const selectedState = states?.find(s => s.id === parseInt(current.state))
-      const selectedCity = cities?.find(c => c.id === parseInt(current.city))
-
+      // Use the same LocationField component for nested fields
       return (
-        <div className="space-y-3">
-          {apiError && (
-            <div className="flex items-center gap-2 text-amber-600 text-xs bg-amber-50 p-2 rounded-md">
-              <AlertCircle className="h-3 w-3" />
-              <span>{apiError}</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Country Select with Search */}
-            <div>
-              <Label className="text-xs text-muted-foreground">Country</Label>
-              <Popover open={countryOpen} onOpenChange={setCountryOpen}>
-                <PopoverTrigger asChild>
-                  <div
-                    className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
-                      } ${disabled || countries.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      {selectedCountry ? (
-                        <>
-                          <span>{selectedCountry.emoji}</span>
-                          <span className="truncate">{selectedCountry.name}</span>
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          {getLocationPlaceholder("country")}
-                        </span>
-                      )}
-                    </div>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
-                  </div>
-                </PopoverTrigger>
-                <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
-                  <Command shouldFilter={false}>
-                    <div className="flex items-center border-b px-3">
-                      <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                      <CommandInput
-                        placeholder="Search countries..."
-                        value={countrySearch}
-                        onValueChange={setCountrySearch}
-                      />
-                    </div>
-                    <CommandList>
-                      <CommandEmpty>No country found.</CommandEmpty>
-                      <CommandGroup>
-                        {filteredCountries.map((country) => (
-                          <CommandItem
-                            key={country.id}
-                            value={country.name}
-                            onSelect={() => handleCountry(String(country.id))}
-                            className="cursor-pointer"
-                          >
-                            <Check
-                              className={`mr-2 h-4 w-4 ${current.country === String(country.id) ? "opacity-100" : "opacity-0"
-                                }`}
-                            />
-                            <span className="mr-2">{country.emoji}</span>
-                            <span>{country.name}</span>
-                            <span className="ml-2 text-xs text-muted-foreground">({country.iso2})</span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            {/* State Select with Search */}
-            <div>
-              <Label className="text-xs text-muted-foreground">State</Label>
-              <Popover open={stateOpen} onOpenChange={setStateOpen}>
-                <PopoverTrigger asChild>
-                  <div
-                    className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
-                      } ${disabled || !current.country || states.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                  >
-                    <div className="truncate">
-                      {selectedState ? (
-                        selectedState.name
-                      ) : (
-                        <span className="text-muted-foreground">
-                          {loadingStates ? "Loading..." : getLocationPlaceholder("state")}
-                        </span>
-                      )}
-                    </div>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
-                  </div>
-                </PopoverTrigger>
-                <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
-                  <Command shouldFilter={false}>
-                    <div className="flex items-center border-b px-3">
-                      <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                      <CommandInput
-                        placeholder="Search states..."
-                        value={stateSearch}
-                        onValueChange={setStateSearch}
-                      />
-                    </div>
-                    <CommandList>
-                      <CommandEmpty>
-                        {states.length === 0 ? "No states available" : "No state found"}
-                      </CommandEmpty>
-                      <CommandGroup>
-                        {filteredStates.map((state) => (
-                          <CommandItem
-                            key={state.id}
-                            value={state.name}
-                            onSelect={() => handleState(String(state.id))}
-                            className="cursor-pointer"
-                          >
-                            <Check
-                              className={`mr-2 h-4 w-4 ${current.state === String(state.id) ? "opacity-100" : "opacity-0"
-                                }`}
-                            />
-                            {state.name}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            {/* City Select with Search */}
-            <div>
-              <Label className="text-xs text-muted-foreground">City</Label>
-              <Popover open={cityOpen} onOpenChange={setCityOpen}>
-                <PopoverTrigger asChild>
-                  <div
-                    className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
-                      } ${disabled || !current.state || cities.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                  >
-                    <div className="truncate">
-                      {selectedCity ? (
-                        selectedCity.name
-                      ) : (
-                        <span className="text-muted-foreground">
-                          {loadingCities ? "Loading..." : getLocationPlaceholder("city")}
-                        </span>
-                      )}
-                    </div>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
-                  </div>
-                </PopoverTrigger>
-                <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
-                  <Command shouldFilter={false}>
-                    <div className="flex items-center border-b px-3">
-                      <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                      <CommandInput
-                        placeholder="Search cities..."
-                        value={citySearch}
-                        onValueChange={setCitySearch}
-                      />
-                    </div>
-                    <CommandList>
-                      <CommandEmpty>
-                        {cities.length === 0 ? "No cities available" : "No city found"}
-                      </CommandEmpty>
-                      <CommandGroup>
-                        {filteredCities.map((city) => (
-                          <CommandItem
-                            key={city.id}
-                            value={city.name}
-                            onSelect={() => handleCity(String(city.id))}
-                            className="cursor-pointer"
-                          >
-                            <Check
-                              className={`mr-2 h-4 w-4 ${current.city === String(city.id) ? "opacity-100" : "opacity-0"
-                                }`}
-                            />
-                            {city.name}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-
-          {/* Information message when no data available */}
-          {(countries.length === 0 || states.length === 0 || cities.length === 0) && (
-            <div className="flex items-center gap-2 text-blue-600 text-xs bg-blue-50 p-2 rounded-md">
-              <Info className="h-3 w-3" />
-              <span>
-                {countries.length === 0 && "Countries data not available. "}
-                {states.length === 0 && current.country && "States data not available for selected country. "}
-                {cities.length === 0 && current.state && "Cities data not available for selected state."}
-              </span>
-            </div>
-          )}
-
-          {invalid && error && !current.country && (
-            <div className="text-xs text-red-500 font-medium">
-              {error}
-            </div>
-          )}
-        </div>
+        <LocationField 
+          key={`nested-location-${nestedField.id}`}
+          current={current}
+          validation={validation}
+          onChange={onChange}
+          invalid={invalid}
+          error={error}
+          disabled={disabled}
+        />
       )
     }
 
@@ -1489,10 +1855,20 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
     const loadStates = async () => {
       const current = value || {}
       if (current.country) {
+        // Find the country by name (since current.country contains the country name, not ID)
+        const selectedCountry = countries.find(c => c.name === current.country)
+        
+        if (!selectedCountry) {
+          console.warn('Country not found in countries list:', current.country)
+          setStates([])
+          setCities([])
+          setApiError('Selected country not found')
+          return
+        }
+        
         // Check if this country is allowed (for location fields with restrictions)
-        const selectedCountry = countries.find(c => c.id === parseInt(current.country))
         if (field.type === 'location' && field.validation?.allowedCountries?.length > 0) {
-          if (!selectedCountry || !field.validation.allowedCountries.includes(selectedCountry.name)) {
+          if (!field.validation.allowedCountries.includes(selectedCountry.name)) {
             setStates([])
             setCities([])
             setApiError('Selected country is not allowed')
@@ -1502,7 +1878,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
         
         try {
           setLoadingStates(true)
-          const statesData = await fetchStates(current.country)
+          // Pass the country ID, not the country name
+          const statesData = await fetchStates(selectedCountry.id)
           setStates(statesData)
           if (statesData.length === 0) {
             setApiError(`No states available for selected country`)
@@ -1529,12 +1906,20 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
     const loadCities = async () => {
       const current = value || {}
       if (current.state) {
-        // Check if this state is allowed (for location fields with restrictions)
-        const selectedState = states.find(s => s.id === parseInt(current.state))
+        // Find the state by name (since current.state contains the state name, not ID)
+        const selectedState = states.find(s => s.name === current.state)
         const selectedCountry = countries.find(c => c.id === parseInt(current.country))
         
+        if (!selectedState) {
+          console.warn('State not found in states list:', current.state)
+          setCities([])
+          setApiError('Selected state not found')
+          return
+        }
+        
+        // Check if this state is allowed (for location fields with restrictions)
         if (field.type === 'location' && field.validation?.allowedStates && selectedCountry) {
-          if (!selectedState || !field.validation.allowedStates[selectedCountry.name]?.includes(selectedState.name)) {
+          if (!field.validation.allowedStates[selectedCountry.name]?.includes(selectedState.name)) {
             setCities([])
             setApiError('Selected state is not allowed')
             return
@@ -1543,7 +1928,8 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
         
         try {
           setLoadingCities(true)
-          const citiesData = await fetchCities(current.state)
+          // Pass the state ID, not the state name
+          const citiesData = await fetchCities(selectedState.id)
           setCities(citiesData)
           if (citiesData.length === 0) {
             setApiError(`No cities available for selected state`)
@@ -1904,36 +2290,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 </PopoverContent>
               </Popover>
 
-              {renderNestedFields(field, selectedValues, onChange, value, disabled, invalid, {
-                countries,
-                states,
-                cities,
-                phoneCountries,
-                loadingStates,
-                loadingCities,
-                loadingPhoneCountries,
-                apiError,
-                countrySearch,
-                stateSearch,
-                citySearch,
-                phoneCountrySearch,
-                countryOpen,
-                stateOpen,
-                cityOpen,
-                phoneCountryOpen,
-                setCountrySearch,
-                setStateSearch,
-                setCitySearch,
-                setPhoneCountrySearch,
-                setCountryOpen,
-                setStateOpen,
-                setCityOpen,
-                setPhoneCountryOpen,
-                filteredCountries,
-                filteredStates,
-                filteredCities,
-                filteredPhoneCountries
-              }, 0, new Set(), hideFieldTypes)}
+              {renderNestedFields(field, selectedValues, onChange, value, disabled, invalid, error, locationData, 0, new Set(), hideFieldTypes)}
             </div>
           )
         } else {
@@ -1983,36 +2340,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                 </SelectContent>
               </Select>
 
-              {renderNestedFields(field, value?.value, onChange, value, disabled, invalid, {
-                countries,
-                states,
-                cities,
-                phoneCountries,
-                loadingStates,
-                loadingCities,
-                loadingPhoneCountries,
-                apiError,
-                countrySearch,
-                stateSearch,
-                citySearch,
-                phoneCountrySearch,
-                countryOpen,
-                stateOpen,
-                cityOpen,
-                phoneCountryOpen,
-                setCountrySearch,
-                setStateSearch,
-                setCitySearch,
-                setPhoneCountrySearch,
-                setCountryOpen,
-                setStateOpen,
-                setCityOpen,
-                setPhoneCountryOpen,
-                filteredCountries,
-                filteredStates,
-                filteredCities,
-                filteredPhoneCountries
-              }, 0, new Set(), hideFieldTypes)}
+              {renderNestedFields(field, value?.value, onChange, value, disabled, invalid, error, locationData, 0, new Set(), hideFieldTypes)}
             </div>
           )
         }
@@ -2066,36 +2394,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
 
                 {Array.isArray(value?.value) && value.value?.includes(optionValue) && field.nestedFields && field.nestedFields[index] && (
                   <div className="ml-6 space-y-3">
-                    {renderNestedFields(field, [optionValue], onChange, value, disabled, invalid, {
-                      countries,
-                      states,
-                      cities,
-                      phoneCountries,
-                      loadingStates,
-                      loadingCities,
-                      loadingPhoneCountries,
-                      apiError,
-                      countrySearch,
-                      stateSearch,
-                      citySearch,
-                      phoneCountrySearch,
-                      countryOpen,
-                      stateOpen,
-                      cityOpen,
-                      phoneCountryOpen,
-                      setCountrySearch,
-                      setStateSearch,
-                      setCitySearch,
-                      setPhoneCountrySearch,
-                      setCountryOpen,
-                      setStateOpen,
-                      setCityOpen,
-                      setPhoneCountryOpen,
-                      filteredCountries,
-                      filteredStates,
-                      filteredCities,
-                      filteredPhoneCountries
-                    }, 0, new Set(), hideFieldTypes)}
+                    {renderNestedFields(field, [optionValue], onChange, value, disabled, invalid, error, locationData, 0, new Set(), hideFieldTypes)}
                   </div>
                 )}
               </div>
@@ -2151,36 +2450,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
 
                       {value?.value === optionValue && field.nestedFields && field.nestedFields[index] && (
                         <div className="ml-6 space-y-3">
-                          {renderNestedFields(field, optionValue, onChange, value, disabled, invalid, {
-                          countries,
-                          states,
-                          cities,
-                          phoneCountries,
-                          loadingStates,
-                          loadingCities,
-                          loadingPhoneCountries,
-                          apiError,
-                          countrySearch,
-                          stateSearch,
-                          citySearch,
-                          phoneCountrySearch,
-                          countryOpen,
-                          stateOpen,
-                          cityOpen,
-                          phoneCountryOpen,
-                          setCountrySearch,
-                          setStateSearch,
-                          setCitySearch,
-                          setPhoneCountrySearch,
-                          setCountryOpen,
-                          setStateOpen,
-                          setCityOpen,
-                          setPhoneCountryOpen,
-                          filteredCountries,
-                          filteredStates,
-                          filteredCities,
-                          filteredPhoneCountries
-                        }, 0, new Set(), hideFieldTypes)}
+                          {renderNestedFields(field, optionValue, onChange, value, disabled, invalid, error, locationData, 0, new Set(), hideFieldTypes)}
                       </div>
                     )}
                   </div>
@@ -2209,7 +2479,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
               <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={() => onChange?.({ country: undefined, state: undefined, city: undefined })}
+                  onClick={() => onChange?.({ country: "", state: "", city: "" })}
                   className="text-gray-400 hover:text-gray-600 transition-colors text-sm"
                   aria-label="Clear location"
                 >
@@ -2521,273 +2791,16 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
       case "location": {
         const current = value || {}
 
-        const handleCountry = (countryId) => {
-          const country = countries.find(c => c.id === parseInt(countryId))
-          onChange?.({
-            country: countryId,
-            country_name: country?.name,
-            state: undefined,
-            city: undefined
-          })
-          setCountryOpen(false)
-        }
-
-        const handleState = (stateId) => {
-          const state = states?.find(s => s.id === parseInt(stateId))
-          onChange?.({
-            ...current,
-            state: stateId,
-            state_name: state?.name,
-            city: undefined
-          })
-          setStateOpen(false)
-        }
-
-        const handleCity = (cityId) => {
-          const city = cities?.find(c => c.id === parseInt(cityId))
-          onChange?.({
-            ...current,
-            city: cityId,
-            city_name: city?.name
-          })
-          setCityOpen(false)
-        }
-
-        const getLocationPlaceholder = (type) => {
-          if (invalid && error) {
-            if (type === "country") return error
-            if (type === "state" && !current.country) return "Select country first"
-            if (type === "city" && !current.state) return "Select state first"
-          }
-
-          if (type === "country" && (!countries || countries.length === 0)) return "No countries available"
-          if (type === "state" && (!states || states.length === 0)) return "No states available"
-          if (type === "city" && (!cities || cities.length === 0)) return "No cities available"
-
-          return type === "country" ? "Select country" : type === "state" ? "Select state" : "Select city"
-        }
-
-        const selectedCountry = countries?.find(c => c.id === parseInt(current.country))
-        const selectedState = states?.find(s => s.id === parseInt(current.state))
-        const selectedCity = cities?.find(c => c.id === parseInt(current.city))
-
+        // Use the same LocationField component for main fields
         return (
-          <div className="space-y-3">
-            {apiError && (
-              <div className="flex items-center gap-2 text-amber-600 text-xs bg-amber-50 p-2 rounded-md">
-                <AlertCircle className="h-3 w-3" />
-                <span>{apiError}</span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Country Select with Search */}
-              <div>
-                <Label className="text-xs text-muted-foreground">Country</Label>
-                <Popover open={countryOpen} onOpenChange={setCountryOpen}>
-                  <PopoverTrigger asChild>
-                    <div
-                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
-                        } ${disabled || !countries || countries.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        {selectedCountry ? (
-                          <>
-                            <span>{selectedCountry.emoji}</span>
-                            <span className="truncate">{selectedCountry.name}</span>
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground">
-                            {getLocationPlaceholder("country")}
-                          </span>
-                        )}
-                      </div>
-                      <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
-                    </div>
-                  </PopoverTrigger>
-                  <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
-                    <Command shouldFilter={false}>
-                      <div className="flex items-center border-b px-3">
-                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                        <CommandInput
-                          placeholder="Search countries..."
-                          value={countrySearch}
-                          onValueChange={setCountrySearch}
-                        />
-                      </div>
-                      <CommandList>
-                        <CommandEmpty>No country found.</CommandEmpty>
-                        <CommandGroup>
-                          {filteredCountries.map((country) => (
-                            <CommandItem
-                              key={country.id}
-                              value={country.name}
-                              onSelect={() => handleCountry(String(country.id))}
-                              className="cursor-pointer"
-                            >
-                              <Check
-                                className={`mr-2 h-4 w-4 ${current.country === String(country.id) ? "opacity-100" : "opacity-0"
-                                  }`}
-                              />
-                              <span className="mr-2">{country.emoji}</span>
-                              <span>{country.name}</span>
-                              <span className="ml-2 text-xs text-muted-foreground">({country.iso2})</span>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              {/* State Select with Search */}
-              <div>
-                <Label className="text-xs text-muted-foreground">State</Label>
-                <Popover open={stateOpen} onOpenChange={setStateOpen}>
-                  <PopoverTrigger asChild>
-                    <div
-                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
-                        } ${disabled || !current.country || !states || states.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                    >
-                      <div className="truncate">
-                        {selectedState ? (
-                          selectedState.name
-                        ) : (
-                          <span className="text-muted-foreground">
-                            {loadingStates ? "Loading..." : getLocationPlaceholder("state")}
-                          </span>
-                        )}
-                      </div>
-                      <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
-                    </div>
-                  </PopoverTrigger>
-                  <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
-                    <Command shouldFilter={false}>
-                      <div className="flex items-center border-b px-3">
-                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                        <CommandInput
-                          placeholder="Search states..."
-                          value={stateSearch}
-                          onValueChange={setStateSearch}
-                        />
-                      </div>
-                      <CommandList>
-                        <CommandEmpty>
-                          {!states || states.length === 0 ? "No states available" : "No state found"}
-                        </CommandEmpty>
-                        <CommandGroup>
-                          {filteredStates.map((state) => (
-                            <CommandItem
-                              key={state.id}
-                              value={state.name}
-                              onSelect={() => handleState(String(state.id))}
-                              className="cursor-pointer"
-                            >
-                              <Check
-                                className={`mr-2 h-4 w-4 ${current.state === String(state.id) ? "opacity-100" : "opacity-0"
-                                  }`}
-                              />
-                              {state.name}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              {/* City Select with Search */}
-              <div>
-                <Label className="text-xs text-muted-foreground">City</Label>
-                <Popover open={cityOpen} onOpenChange={setCityOpen}>
-                  <PopoverTrigger asChild>
-                    <div
-                      className={`flex h-10 w-full items-center justify-between rounded-md border bg-input px-3 py-2 text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50 ${invalid ? "border-red-500 text-red-500" : "border-input text-foreground"
-                        } ${disabled || !current.state || !cities || cities.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                    >
-                      <div className="truncate">
-                        {selectedCity ? (
-                          selectedCity.name
-                        ) : (
-                          <span className="text-muted-foreground">
-                            {loadingCities ? "Loading..." : getLocationPlaceholder("city")}
-                          </span>
-                        )}
-                      </div>
-                      <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50 flex-shrink-0" />
-                    </div>
-                  </PopoverTrigger>
-                  <PopoverContent className="p-0 w-72 bg-background text-foreground border border-border shadow-md" align="start">
-                    <Command shouldFilter={false}>
-                      <div className="flex items-center border-b px-3">
-                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
-                        <CommandInput
-                          placeholder="Search cities..."
-                          value={citySearch}
-                          onValueChange={setCitySearch}
-                        />
-                      </div>
-                      <CommandList>
-                        <CommandEmpty>
-                          {!cities || cities.length === 0 ? "No cities available" : "No city found"}
-                        </CommandEmpty>
-                        <CommandGroup>
-                          {filteredCities.map((city) => (
-                            <CommandItem
-                              key={city.id}
-                              value={city.name}
-                              onSelect={() => handleCity(String(city.id))}
-                              className="cursor-pointer"
-                            >
-                              <Check
-                                className={`mr-2 h-4 w-4 ${current.city === String(city.id) ? "opacity-100" : "opacity-0"
-                                  }`}
-                              />
-                              {city.name}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-
-            {/* Information message when no data available */}
-            {(countries.length === 0 || states.length === 0 || cities.length === 0) && (
-              <div className="flex items-center gap-2 text-blue-600 text-xs bg-blue-50 p-2 rounded-md">
-                <Info className="h-3 w-3" />
-                <span>
-                  {countries.length === 0 && "Countries data not available. "}
-                  {states.length === 0 && current.country && "States data not available for selected country. "}
-                  {cities.length === 0 && current.state && "Cities data not available for selected state."}
-                </span>
-              </div>
-            )}
-
-            {(current.country || current.state || current.city) && !disabled && (
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => onChange?.({ country: undefined, state: undefined, city: undefined })}
-                  className="text-gray-400 hover:text-gray-600 transition-colors text-sm"
-                  aria-label="Clear location"
-                >
-                  <X className="h-4 w-4 inline mr-1" />
-                  Clear location
-                </button>
-              </div>
-            )}
-
-            {invalid && error && !current.country && (
-              <div className="text-xs text-red-500 font-medium">
-                {error}
-              </div>
-            )}
-          </div>
+          <LocationField 
+            current={current}
+            validation={field.validation || {}}
+            onChange={onChange}
+            invalid={invalid}
+            error={error}
+            disabled={disabled}
+          />
         )
       }
 
