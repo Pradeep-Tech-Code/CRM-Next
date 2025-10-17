@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Database, Loader2, Search, Check } from "lucide-react"
+import { Database, Loader2, Search, Check, RefreshCw } from "lucide-react"
 import axios from "axios"
 import { toast } from "sonner"
 
@@ -16,11 +16,20 @@ export function TableColumnSelector({ field, onUpdateField }) {
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedColumns, setSelectedColumns] = useState([])
+  const [autoFetched, setAutoFetched] = useState(false)
+
+  // Auto-fetch columns when component mounts
+  useEffect(() => {
+    if (!autoFetched) {
+      fetchTableColumns()
+      setAutoFetched(true)
+    }
+  }, [autoFetched])
 
   // API configuration
   const API_BASE_URL = 'http://10.10.15.194:3001'
   const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
-  const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwNTA2OTYzLCJleHAiOjE3NjA1OTMzNjN9.SEAwwoCusaotsc_lhb3nh0Fq5tIOWIHtbMYCG1vZ2jU'
+  const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwNjEzOTQ4LCJleHAiOjE3NjA3MDAzNDh9.hOeMrr90mh14DFAiOuDTIDDoiSp-VOw4YUkBE0MooZA'
 
   // Fetch table columns
   const fetchTableColumns = async () => {
@@ -169,36 +178,42 @@ export function TableColumnSelector({ field, onUpdateField }) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Button Container with Better Layout */}
-          <div className="flex flex-col sm:flex-row gap-3 items-stretch">
-            <Button 
-              onClick={fetchTableColumns} 
-              disabled={loading}
-              className="flex-1 min-w-0"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Loading...
-                </>
-              ) : (
-                <>
-                  <Database className="h-4 w-4 mr-2" />
-                  Get Table Columns
-                </>
-              )}
-            </Button>
-            
-            {selectedColumns.length > 0 && (
-              <Button 
-                onClick={addColumnsAsFields}
-                variant="default"
-                className="sm:w-auto w-full flex-shrink-0 whitespace-nowrap"
-              >
-                Add {selectedColumns.length} {selectedColumns.length === 1 ? 'Column' : 'Columns'}
-              </Button>
-            )}
-          </div>
+           {/* Button Container */}
+           <div className="flex justify-between items-center">
+             {selectedColumns.length > 0 && (
+               <Button 
+                 onClick={addColumnsAsFields}
+                 variant="default"
+                 size="sm"
+                 className="gap-2"
+               >
+                 Add {selectedColumns.length} {selectedColumns.length === 1 ? 'Column' : 'Columns'}
+               </Button>
+             )}
+             
+             <Button 
+               onClick={() => {
+                 fetchTableColumns()
+                 setSelectedColumns([])
+               }} 
+               disabled={loading}
+               size="sm"
+               variant="outline"
+               className="gap-2"
+             >
+               {loading ? (
+                 <>
+                   <Loader2 className="h-3 w-3 animate-spin" />
+                   Loading...
+                 </>
+               ) : (
+                 <>
+                   <RefreshCw className="h-3 w-3" />
+                   Refresh Columns
+                 </>
+               )}
+             </Button>
+           </div>
 
           {tableColumns.length > 0 && (
             <>
@@ -287,13 +302,14 @@ export function TableColumnSelector({ field, onUpdateField }) {
             </>
           )}
 
-          {tableColumns.length === 0 && !loading && (
-            <div className="text-center py-8 text-muted-foreground">
-              <Database className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-              <p>Click "Get Table Columns" to load columns from your table</p>
-              <p className="text-sm mt-2">Columns will be converted to appropriate form field types</p>
-            </div>
-          )}
+           {tableColumns.length === 0 && !loading && (
+             <div className="text-center py-8 text-muted-foreground">
+               <Database className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+               <p>Click "Refresh Columns" to load columns from your table</p>
+               <p className="text-sm mt-2">Columns will be converted to appropriate form field types</p>
+               <p className="text-xs mt-1 text-muted-foreground/70">Refresh also clears all selected columns</p>
+             </div>
+           )}
         </CardContent>
       </Card>
 

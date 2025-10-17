@@ -275,8 +275,25 @@ export function FieldConfigPanel({ field, onUpdateField }) {
 
   const removeOption = (index) => {
     const currentOptions = field.options || []
+    const currentNestedFields = field.nestedFields || {}
+    
+    // Create new nested fields structure without the removed option
+    const newNestedFields = {}
+    Object.keys(currentNestedFields).forEach(key => {
+      const optionIndex = parseInt(key)
+      if (optionIndex < index) {
+        // Keep nested fields for options before the removed one
+        newNestedFields[key] = currentNestedFields[key]
+      } else if (optionIndex > index) {
+        // Shift nested fields for options after the removed one
+        newNestedFields[optionIndex - 1] = currentNestedFields[key]
+      }
+      // Skip the removed option (optionIndex === index)
+    })
+    
     onUpdateField(field.id, {
       options: currentOptions.filter((_, i) => i !== index),
+      nestedFields: newNestedFields
     })
   }
 
@@ -384,7 +401,7 @@ export function FieldConfigPanel({ field, onUpdateField }) {
   }
 
   // Memoized recursive component to render nested field configurations
-  const NestedFieldConfig = memo(({ nestedField, path = [], fieldId, nestedFields, onUpdateField, debouncedUpdateField }) => {
+  const NestedFieldConfig = memo(({ nestedField, path = [], fieldId, nestedFields, onUpdateField, debouncedUpdateField, toggleNestedFields, setExpandedNestedFields }) => {
     const depth = path.length / 2
     const uniqueKey = path.join('-')
     
@@ -461,7 +478,13 @@ export function FieldConfigPanel({ field, onUpdateField }) {
         optionIndex
       )
       onUpdateField(fieldId, { nestedFields: updatedNestedFields })
-    }, [nestedFields, path, fieldId, onUpdateField])
+      // Ensure the nested fields section is open (don't toggle)
+      const optionKey = `${uniqueKey}-opt-${optionIndex}`
+      setExpandedNestedFields(prev => ({
+        ...prev,
+        [optionKey]: true
+      }))
+    }, [nestedFields, path, fieldId, onUpdateField, uniqueKey])
 
     const updateOption = useCallback((optionIndex, newValue) => {
       const currentOptions = nestedField.options || []
@@ -473,9 +496,28 @@ export function FieldConfigPanel({ field, onUpdateField }) {
 
     const removeOptionAtIndex = useCallback((optionIndex) => {
       const currentOptions = nestedField.options || []
+      const currentNestedFields = nestedField.nestedFields || {}
+      
+      // Create new nested fields structure without the removed option
+      const newNestedFields = {}
+      Object.keys(currentNestedFields).forEach(key => {
+        const optIndex = parseInt(key)
+        if (optIndex < optionIndex) {
+          // Keep nested fields for options before the removed one
+          newNestedFields[key] = currentNestedFields[key]
+        } else if (optIndex > optionIndex) {
+          // Shift nested fields for options after the removed one
+          newNestedFields[optIndex - 1] = currentNestedFields[key]
+        }
+        // Skip the removed option (optIndex === optionIndex)
+      })
+      
       const newOptions = currentOptions.filter((_, idx) => idx !== optionIndex)
-      handleFieldUpdate({ options: newOptions })
-    }, [nestedField.options, handleFieldUpdate])
+      handleFieldUpdate({ 
+        options: newOptions,
+        nestedFields: newNestedFields
+      })
+    }, [nestedField.options, nestedField.nestedFields, handleFieldUpdate])
 
     const addNewOption = useCallback(() => {
       const currentOptions = nestedField.options || []
@@ -663,6 +705,8 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                               nestedFields={field.nestedFields}
                               onUpdateField={onUpdateField}
                               debouncedUpdateField={debouncedUpdateField}
+                              toggleNestedFields={toggleNestedFields}
+                              setExpandedNestedFields={setExpandedNestedFields}
                             />
                           ))}
                           {!hasNestedFields && (
@@ -876,6 +920,11 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                                   index
                                 )
                                 onUpdateField(field.id, { nestedFields: updatedNestedFields })
+                                // Ensure the nested fields section is open (don't toggle)
+                                setExpandedNestedFields(prev => ({
+                                  ...prev,
+                                  [rootKey]: true
+                                }))
                               }}
                               className="h-7 text-xs gap-1 hover:bg-accent/50 flex-shrink-0"
                             >
@@ -895,6 +944,8 @@ export function FieldConfigPanel({ field, onUpdateField }) {
                                   nestedFields={field.nestedFields}
                                   onUpdateField={onUpdateField}
                                   debouncedUpdateField={debouncedUpdateField}
+                                  toggleNestedFields={toggleNestedFields}
+                                  setExpandedNestedFields={setExpandedNestedFields}
                                 />
                               ))}
 
