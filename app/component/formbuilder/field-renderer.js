@@ -15,6 +15,22 @@ import { useState, useEffect } from "react"
 import { Database } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
+// Helper function to format file size
+const formatFileSize = (bytes) => {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+// Helper function to check if file is an image
+const isImageFile = (file) => {
+  return file && file.type && typeof file.type === 'string' &&
+    (file.type.startsWith('image/') ||
+      file.name.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|svg)$/))
+}
+
 const renderNestedFields = (field, selectedOptions, onChange, parentValue, disabled, invalid, locationData, depth = 0, processedIds = new Set(), hideFieldTypes = false) => {
   
   // Generate a unique key for this field if id is undefined
@@ -219,10 +235,14 @@ const renderNestedFields = (field, selectedOptions, onChange, parentValue, disab
               }
             }
           } else {
-            // For other field types (text, textarea, etc.), ensure we have a string value
+            // For other field types (text, textarea, file, etc.)
             if (typeof nestedValue === 'object' && nestedValue !== null) {
-              // If it's an object, try to extract the value or convert to string
-              if (nestedValue.value !== undefined) {
+              // Special handling for file fields - keep the file object as-is
+              if (nestedField.type === 'file' && (nestedValue.name || nestedValue.base64)) {
+                // This is a file object, keep it as-is
+                nestedValue = nestedValue
+              } else if (nestedValue.value !== undefined) {
+                // If it's an object with a value property, extract the value
                 nestedValue = nestedValue.value
               } else {
                 // If it's an object without a value property, convert to string
@@ -873,21 +893,93 @@ const renderNestedFieldInput = (nestedField, value, onChange, disabled, invalid,
             accept={nestedField.validation?.accept || ".jpg,.jpeg,.png,.gif,.webp,.svg,.pdf"}
           />
           {value && value.name && (
-            <div className="p-2 border border-green-200 bg-green-50 rounded-md text-xs">
+            <div className="p-3 border border-green-200 bg-green-50 rounded-md">
               <div className="flex items-center justify-between">
-                <span className="font-medium">{value.name}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChange(null)
-                    const fileInput = document.querySelector('input[type="file"]')
-                    if (fileInput) fileInput.value = ''
-                  }}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  Remove
-                </button>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-8 h-8 flex items-center justify-center rounded ${value.type === 'application/pdf' || value.name.toLowerCase().endsWith('.pdf')
+                    ? 'bg-red-100 text-red-600'
+                    : 'bg-blue-100 text-blue-600'
+                    }`}>
+                    {value.type === 'application/pdf' || value.name.toLowerCase().endsWith('.pdf') ? (
+                      <span className="text-xs font-bold">PDF</span>
+                    ) : (
+                      <span className="text-xs">IMG</span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 truncate max-w-xs">
+                      {value.name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatFileSize(value.size || 0)} • {value.type || 'Unknown type'}
+                    </p>
+                    <p className="text-xs text-green-600">
+                      ✓ Ready to upload ({formatFileSize(value.base64?.length || 0)} as base64)
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {/* Preview button for images and PDFs */}
+                  {(value.type?.includes('image/') || value.type === 'application/pdf') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (value.base64) {
+                          const newWindow = window.open()
+                          if (value.type.includes('image/')) {
+                            newWindow.document.write(`
+                              <html>
+                                <head><title>${value.name}</title></head>
+                                <body style="margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f5f5f5;">
+                                  <img src="${value.base64}" style="max-width: 90vw; max-height: 90vh; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />
+                                </body>
+                              </html>
+                            `)
+                          } else if (value.type === 'application/pdf') {
+                            newWindow.document.write(`
+                              <html>
+                                <head><title>${value.name}</title></head>
+                                <body style="margin: 0;">
+                                  <embed src="${value.base64}" type="application/pdf" width="100%" height="100%" style="min-height: 100vh;" />
+                                </body>
+                              </html>
+                            `)
+                          }
+                        }
+                      }}
+                      className="px-3 py-1 text-sm text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md border border-transparent hover:border-green-200 transition-colors"
+                    >
+                      Preview
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange(null)
+                      const fileInput = document.querySelector('input[type="file"]')
+                      if (fileInput) fileInput.value = ''
+                    }}
+                    className="px-3 py-1 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md border border-transparent hover:border-red-200 transition-colors"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
+
+              {/* Image preview for image files */}
+              {value.type?.includes('image/') && value.base64 && (
+                <div className="mt-2">
+                  <img
+                    src={value.base64}
+                    alt="Preview"
+                    className="max-h-32 max-w-full rounded border"
+                    onError={(e) => {
+                      console.error('Error loading image preview')
+                      e.target.style.display = 'none'
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2215,23 +2307,23 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
           return ".jpg,.jpeg,.png,.gif,.webp,.svg,.pdf"
         }
 
-        // Format file size for display
-        const formatFileSize = (bytes) => {
-          if (bytes === 0) return '0 Bytes'
-          const k = 1024
-          const sizes = ['Bytes', 'KB', 'MB', 'GB']
-          const i = Math.floor(Math.log(bytes) / Math.log(k))
-          return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-        }
 
-        // Check if file is an image (with safe access)
-        const isImageFile = (file) => {
-          return file && file.type && typeof file.type === 'string' &&
-            (file.type.startsWith('image/') ||
-              file.name.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|svg)$/))
-        }
 
         const fileValue = value || null
+
+        // Debug logging for file fields
+        console.log('🔍 FieldRenderer file field debug:', {
+          fieldId: field.id,
+          fieldLabel: field.label,
+          fieldType: field.type,
+          value: value,
+          fileValue: fileValue,
+          hasName: fileValue && fileValue.name,
+          hasBase64: fileValue && fileValue.base64,
+          isFileObject: fileValue && typeof fileValue === 'object' && fileValue.name && fileValue.base64,
+          valueStructure: value ? Object.keys(value) : 'no value',
+          fileValueStructure: fileValue ? Object.keys(fileValue) : 'no fileValue'
+        })
 
         return (
           <div className="space-y-2">
@@ -2271,6 +2363,41 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                       </p>
                     </div>
                   </div>
+                  <div className="flex gap-2">
+                    {/* Preview button for images and PDFs */}
+                    {(fileValue.type?.includes('image/') || fileValue.type === 'application/pdf') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (fileValue.base64) {
+                            const newWindow = window.open()
+                            if (fileValue.type.includes('image/')) {
+                              newWindow.document.write(`
+                                <html>
+                                  <head><title>${fileValue.name}</title></head>
+                                  <body style="margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f5f5f5;">
+                                    <img src="${fileValue.base64}" style="max-width: 90vw; max-height: 90vh; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />
+                                  </body>
+                                </html>
+                              `)
+                            } else if (fileValue.type === 'application/pdf') {
+                              newWindow.document.write(`
+                                <html>
+                                  <head><title>${fileValue.name}</title></head>
+                                  <body style="margin: 0;">
+                                    <embed src="${fileValue.base64}" type="application/pdf" width="100%" height="100%" style="min-height: 100vh;" />
+                                  </body>
+                                </html>
+                              `)
+                            }
+                          }
+                        }}
+                        className="px-3 py-1 text-sm text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md border border-transparent hover:border-green-200 transition-colors"
+                      >
+                        Preview
+                      </button>
+                    )}
+                    
                   <button
                     type="button"
                     onClick={() => {
@@ -2283,6 +2410,7 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                   >
                     Remove
                   </button>
+                  </div>
                 </div>
 
                 {/* Image preview for image files - with safe access */}
@@ -2299,6 +2427,61 @@ export function FieldRenderer({ field, value, onChange, disabled = false, invali
                     />
                   </div>
                 )}
+              </div>
+            )}
+            
+            {/* Fallback display for base64 strings that weren't converted to file objects */}
+            {!fileValue && value && typeof value === 'string' && value.startsWith('data:') && (
+              <div className="p-3 border border-yellow-200 bg-yellow-50 rounded-md">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 flex items-center justify-center rounded bg-yellow-100 text-yellow-600">
+                      <span className="text-xs">FILE</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        File detected (base64 format)
+                      </p>
+                      <p className="text-xs text-yellow-600">
+                        ⚠️ File object conversion needed
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Try to convert the base64 string to a file object
+                      try {
+                        const matches = value.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.*)$/)
+                        if (matches && matches.length === 3) {
+                          const mimeType = matches[1]
+                          const base64Data = matches[2]
+                          const extension = mimeType.split('/')[1] || 'bin'
+                          const filename = `file.${extension}`
+                          const size = Math.floor((base64Data.length * 3) / 4)
+                          
+                          const fileObject = {
+                            name: filename,
+                            type: mimeType,
+                            size: size,
+                            base64: value,
+                            previewUrl: value,
+                            lastModified: Date.now(),
+                            isFromBase64: true
+                          }
+                          
+                          console.log('🔄 Converting base64 to file object:', fileObject)
+                          onChange?.(fileObject)
+                        }
+                      } catch (error) {
+                        console.error('Error converting base64 to file object:', error)
+                      }
+                    }}
+                    className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md border border-transparent hover:border-blue-200 transition-colors"
+                  >
+                    Convert
+                  </button>
+                </div>
               </div>
             )}
 

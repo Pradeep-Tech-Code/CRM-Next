@@ -42,7 +42,7 @@ const isBase64File = (str) => {
 }
 
 // Create a proper file object from base64
-const createFileFromBase64 = (base64String, filename = 'uploaded_file') => {
+const createFileFromBase64 = (base64String, filename = 'uploaded_file', originalType = null, originalSize = null, originalLastModified = null) => {
   if (!base64String) return null
 
   try {
@@ -56,20 +56,19 @@ const createFileFromBase64 = (base64String, filename = 'uploaded_file') => {
     const mimeType = matches[1]
     const base64Data = matches[2]
 
-    // Get file extension from mime type
-    const extension = mimeType.split('/')[1] || 'bin'
-    const finalFilename = filename.includes('.') ? filename : `${filename}.${extension}`
-
-    // Calculate approximate size
-    const size = Math.floor((base64Data.length * 3) / 4)
+    // Use original metadata if provided, otherwise use extracted/default values
+    const finalFilename = filename.includes('.') ? filename : `${filename}.${mimeType.split('/')[1] || 'bin'}`
+    const finalType = originalType || mimeType
+    const finalSize = originalSize || Math.floor((base64Data.length * 3) / 4)
+    const finalLastModified = originalLastModified || Date.now()
 
     return {
       name: finalFilename,
-      type: mimeType,
-      size: size,
+      type: finalType,
+      size: finalSize,
       base64: base64String,
       previewUrl: base64String,
-      lastModified: Date.now(),
+      lastModified: finalLastModified,
       isFromBase64: true // Flag to identify base64-originated files
     }
   } catch (error) {
@@ -227,8 +226,28 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
         return
       }
 
+      // Check if this is a direct base64 file string (direct file data)
+      if (typeof value === 'string' && value.startsWith('data:')) {
+        // This is a direct base64 file string - convert to the same format as non-nested file fields
+        fieldValues[fieldId] = { value: value }
+        return
+      }
+
       // Process the value and store it
       if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        // Check if this is a file field with base64 data (from nested field structure)
+        if (value.base64 && typeof value.base64 === 'string' && value.base64.startsWith('data:')) {
+          // This is a file field - preserve the original file structure
+          fieldValues[fieldId] = {
+            value: value.base64,
+            name: value.name || 'uploaded_file',
+            type: value.type || 'application/octet-stream',
+            size: value.size || 0,
+            lastModified: value.lastModified || Date.now()
+          }
+          return
+        }
+        
         // Handle nested object structure
         if (value.value !== undefined) {
           // Handle checkbox fields with multiple selections
@@ -289,6 +308,18 @@ const transformFormValues = (formValues, fields, phoneCountries = []) => {
         // Handle array of nested values (like multiple checkboxes)
         const processedArray = value.map(item => {
           if (typeof item === 'object' && item !== null) {
+            // Check if this is a file field with base64 data
+            if (item.base64 && typeof item.base64 === 'string' && item.base64.startsWith('data:')) {
+              // This is a file field - preserve the original file structure
+              return {
+                value: item.base64,
+                name: item.name || 'uploaded_file',
+                type: item.type || 'application/octet-stream',
+                size: item.size || 0,
+                lastModified: item.lastModified || Date.now()
+              }
+            }
+            
             // Ensure value is not wrapped in array
             let processedValue = item.value
             if (Array.isArray(processedValue) && processedValue.length === 1) {
@@ -701,7 +732,30 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
 
         value.forEach((item, index) => {
           if (typeof item === 'object' && item !== null && item.value !== undefined) {
-            checkboxValues.push(item.value)
+            // Check if this is a file field with base64 data
+            if (typeof item.value === 'string' && item.value.startsWith('data:')) {
+              // This is a file field - create a file object from base64 with original metadata
+              // Extract original metadata from nested structure
+              const originalName = item.name?.value || item.name || `nested_file_${key}_${index}`
+              const originalType = item.type?.value || item.type
+              const originalSize = item.size?.value || item.size
+              const originalLastModified = item.lastModified?.value || item.lastModified
+              
+              const fileObject = createFileFromBase64(
+                item.value, 
+                originalName,
+                originalType,
+                originalSize,
+                originalLastModified
+              )
+              if (fileObject) {
+                checkboxValues.push(fileObject)
+              } else {
+                checkboxValues.push(item.value)
+              }
+            } else {
+              checkboxValues.push(item.value)
+            }
 
             // Convert nestedValues to nestedFields for this option
             if (item.nestedValues && Object.keys(item.nestedValues).length > 0) {
@@ -717,27 +771,60 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
         }
       } else if (typeof value === 'object' && value !== null) {
         if (value.value !== undefined) {
-          // For nested fields, maintain the proper structure for select/radio/checkbox fields
-          const fieldValue = {
-            value: value.value,
-            nestedFields: {}
-          }
+          // Check if this is a file field with base64 data
+          if (typeof value.value === 'string' && value.value.startsWith('data:')) {
+            // This is a file field - create a file object from base64 with original metadata
+            // Extract original metadata from nested structure
+            const originalName = value.name?.value || value.name || `nested_file_${key}`
+            const originalType = value.type?.value || value.type
+            const originalSize = value.size?.value || value.size
+            const originalLastModified = value.lastModified?.value || value.lastModified
+            
+            const fileObject = createFileFromBase64(
+              value.value, 
+              originalName,
+              originalType,
+              originalSize,
+              originalLastModified
+            )
+            if (fileObject) {
+              result[key] = fileObject
+            } else {
+              result[key] = value.value
+            }
+          } else {
+            // For nested fields, maintain the proper structure for select/radio/checkbox fields
+            const fieldValue = {
+              value: value.value,
+              nestedFields: {}
+            }
 
-          // If there are nested values, process them recursively
-          if (value.nestedValues && Object.keys(value.nestedValues).length > 0) {
-            const nestedResult = transformApiNestedValuesToNestedFields(value.nestedValues)
-            fieldValue.nestedFields = nestedResult
-          }
+            // If there are nested values, process them recursively
+            if (value.nestedValues && Object.keys(value.nestedValues).length > 0) {
+              const nestedResult = transformApiNestedValuesToNestedFields(value.nestedValues)
+              fieldValue.nestedFields = nestedResult
+            }
 
-          result[key] = fieldValue
+            result[key] = fieldValue
+          }
         } else {
           // Direct nested object
           const nestedResult = transformApiNestedValuesToNestedFields(value)
           Object.assign(result, nestedResult)
         }
       } else {
-        // Simple value
-        result[key] = value
+        // Simple value - check if it's a base64 file string
+        if (typeof value === 'string' && value.startsWith('data:')) {
+          // This is a direct base64 file string - create a file object
+          const fileObject = createFileFromBase64(value, `nested_file_${key}`)
+          if (fileObject) {
+            result[key] = fileObject
+          } else {
+            result[key] = value
+          }
+        } else {
+          result[key] = value
+        }
       }
     })
 
@@ -770,6 +857,21 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
         parsedValue = JSON.parse(fieldValue)
       } catch (e) {
         // If JSON parsing fails, treat as simple string value
+        // Special handling for file fields - convert base64 strings to file objects
+        if (field.type === 'file' && fieldValue.startsWith('data:')) {
+          console.log('📁 Processing file field with base64 data (simple string):', fieldId)
+          
+          // Create a file object from base64 string
+          const fileObject = createFileFromBase64(fieldValue, field.label || field.name || 'uploaded_file')
+          if (fileObject) {
+            console.log('✅ Created file object:', fileObject)
+            return fileObject
+          } else {
+            console.log('❌ Failed to create file object from base64')
+            return null
+          }
+        }
+        
         return fieldValue
       }
     }
@@ -846,6 +948,21 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
 
       // Handle fields with value property
       if (parsedValue.value !== undefined) {
+        // Special handling for file fields with base64 data in value property
+        if (field.type === 'file' && typeof parsedValue.value === 'string' && parsedValue.value.startsWith('data:')) {
+          console.log('📁 Processing file field with base64 data in value property:', fieldId)
+          
+          // Create a file object from base64 string
+          const fileObject = createFileFromBase64(parsedValue.value, field.label || field.name || 'uploaded_file')
+          if (fileObject) {
+            console.log('✅ Created file object from value property:', fileObject)
+            return fileObject
+          } else {
+            console.log('❌ Failed to create file object from value property')
+            return null
+          }
+        }
+        
         // For simple text fields with only a value (no nested values), return just the string
         if (!parsedValue.nestedValues || Object.keys(parsedValue.nestedValues).length === 0) {
           // Check if this is a simple field type that expects just a string value
@@ -897,6 +1014,21 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
       }
     } else {
       // Simple value or unparsed string
+      // Special handling for file fields - convert base64 strings to file objects
+      if (field.type === 'file' && typeof parsedValue === 'string' && parsedValue.startsWith('data:')) {
+        console.log('📁 Processing file field with base64 data:', fieldId)
+        
+        // Create a file object from base64 string
+        const fileObject = createFileFromBase64(parsedValue, field.label || field.name || 'uploaded_file')
+        if (fileObject) {
+          console.log('✅ Created file object:', fileObject)
+          return fileObject
+        } else {
+          console.log('❌ Failed to create file object from base64')
+          return null
+        }
+      }
+      
       return parsedValue
     }
   }
@@ -905,10 +1037,13 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
     const fieldId = field.id
     let fieldValue = submissionValues[fieldId]
 
-    console.log(`🔍 Looking for field ${fieldId} (${field.label}):`, {
+    console.log(`🔍 Looking for field ${fieldId} (${field.label}) [${field.type}]:`, {
       fieldValue,
+      fieldValueType: typeof fieldValue,
+      isBase64: typeof fieldValue === 'string' && fieldValue?.startsWith('data:'),
       submissionKeys: Object.keys(submissionValues),
-      originalId: field.originalId
+      originalId: field.originalId,
+      isFileField: field.type === 'file'
     })
 
     // If not found by parsed form ID, try the original field ID from API
@@ -929,6 +1064,12 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
 
     if (fieldValue !== undefined && fieldValue !== null) {
       const processedValue = processFieldValue(fieldId, fieldValue, field)
+      console.log(`✅ Processed value for field ${fieldId} (${field.type}):`, {
+        originalValue: fieldValue,
+        processedValue: processedValue,
+        processedType: typeof processedValue,
+        isFileObject: processedValue && typeof processedValue === 'object' && processedValue.name && processedValue.base64
+      })
       transformedValues[fieldId] = processedValue
     } else {
       // Set appropriate defaults
@@ -945,6 +1086,22 @@ const transformSubmissionValues = (submissionValues, fields, phoneCountries = []
   })
 
   console.log('Final transformed values for form:', transformedValues)
+  
+  // Debug: Check for file fields specifically
+  const fileFields = fields.filter(f => f.type === 'file')
+  if (fileFields.length > 0) {
+    console.log('📁 File fields found:', fileFields.map(f => ({ id: f.id, label: f.label })))
+    fileFields.forEach(field => {
+      const value = transformedValues[field.id]
+      console.log(`📁 File field ${field.id} (${field.label}):`, {
+        hasValue: !!value,
+        valueType: typeof value,
+        isFileObject: value && typeof value === 'object' && value.name && value.base64,
+        value: value
+      })
+    })
+  }
+  
   return transformedValues
 }
 
@@ -1145,6 +1302,17 @@ export default function PublicFormPage() {
           }
         })
 
+        console.log('📝 Setting submission data:', parsedSubmission)
+        console.log('📝 Submission values:', parsedSubmission.values)
+        
+        // Debug file fields in submission data
+        Object.keys(parsedSubmission.values || {}).forEach(key => {
+          const value = parsedSubmission.values[key]
+          if (typeof value === 'string' && value.startsWith('data:')) {
+            console.log(`📁 Found base64 file in submission: ${key}`, value.substring(0, 100) + '...')
+          }
+        })
+        
         setSubmissionData(parsedSubmission)
         toast.success("Submission loaded for editing")
       } else if (result.data) {

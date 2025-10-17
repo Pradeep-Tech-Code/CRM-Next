@@ -28,7 +28,7 @@ const isBase64File = (str) => {
 }
 
 // Create a proper file object from base64
-const createFileFromBase64 = (base64String, filename = 'uploaded_file') => {
+const createFileFromBase64 = (base64String, filename = 'uploaded_file', originalType = null, originalSize = null, originalLastModified = null) => {
   if (!base64String) return null
   
   try {
@@ -42,20 +42,19 @@ const createFileFromBase64 = (base64String, filename = 'uploaded_file') => {
     const mimeType = matches[1]
     const base64Data = matches[2]
     
-    // Get file extension from mime type
-    const extension = mimeType.split('/')[1] || 'bin'
-    const finalFilename = filename.includes('.') ? filename : `${filename}.${extension}`
-    
-    // Calculate approximate size
-    const size = Math.floor((base64Data.length * 3) / 4)
+    // Use original metadata if provided, otherwise use extracted/default values
+    const finalFilename = filename.includes('.') ? filename : `${filename}.${mimeType.split('/')[1] || 'bin'}`
+    const finalType = originalType || mimeType
+    const finalSize = originalSize || Math.floor((base64Data.length * 3) / 4)
+    const finalLastModified = originalLastModified || Date.now()
     
     return {
       name: finalFilename,
-      type: mimeType,
-      size: size,
+      type: finalType,
+      size: finalSize,
       base64: base64String,
       previewUrl: base64String,
-      lastModified: Date.now(),
+      lastModified: finalLastModified,
       isFromBase64: true // Flag to identify base64-originated files
     }
   } catch (error) {
@@ -175,16 +174,6 @@ const FilePreview = ({ file, onRemove, onDownload, fieldLabel, isExisting = fals
               Preview
             </Button>
           )}
-          
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onDownload}
-            className="flex items-center gap-1"
-          >
-            <Download className="h-3 w-3" />
-            Download
-          </Button>
           
           <Button
             size="sm"
@@ -395,9 +384,31 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
               // Detect field type based on structure
               let fieldType = 'text'
               let options = []
+              let fieldValue = value.value || ''
               
+              // Check if this is a file field (base64 string)
+              if (typeof fieldValue === 'string' && fieldValue.startsWith('data:')) {
+                fieldType = 'file'
+                // Create a file object from base64 for display with original metadata
+                // Extract original metadata from nested structure
+                const originalName = value.name?.value || value.name || `nested_file_${key}`
+                const originalType = value.type?.value || value.type
+                const originalSize = value.size?.value || value.size
+                const originalLastModified = value.lastModified?.value || value.lastModified
+                
+                const fileObject = createFileFromBase64(
+                  fieldValue, 
+                  originalName,
+                  originalType,
+                  originalSize,
+                  originalLastModified
+                )
+                if (fileObject) {
+                  fieldValue = fileObject
+                }
+              }
               // If it has nestedValues, it might be a select/checkbox/radio
-              if (value.nestedValues && Object.keys(value.nestedValues).length > 0) {
+              else if (value.nestedValues && Object.keys(value.nestedValues).length > 0) {
                 fieldType = 'select' // Default to select for nested structures
                 // Extract options from the nestedValues keys or values
                 options = Object.values(value.nestedValues).map(nestedValue => 
@@ -411,9 +422,11 @@ export default function EditFormDialog({ form, open, onOpenChange, onSave }) {
                 label: `Nested Field ${nestedIndex + 1}`,
                 placeholder: '',
                 required: false,
-                value: value.value || '',
+                value: fieldValue,
                 options: options,
-                nestedFields: {}
+                nestedFields: {},
+                // Store the original file object if it's a file field
+                ...(fieldType === 'file' && typeof fieldValue === 'object' && { existingFile: fieldValue })
               }
               
               // If this nested field has its own nestedValues, process them recursively

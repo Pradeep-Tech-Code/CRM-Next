@@ -20,7 +20,7 @@ export function TableColumnSelector({ field, onUpdateField }) {
   // API configuration
   const API_BASE_URL = 'http://10.10.15.194:3001'
   const TABLE_ID = '040e899d-583a-454e-92e6-d0d5a8095587'
-  const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwNTA2OTYzLCJleHAiOjE3NjA1OTMzNjN9.SEAwwoCusaotsc_lhb3nh0Fq5tIOWIHtbMYCG1vZ2jU'
+  const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYwNjIxMTUyLCJleHAiOjE3NjA3MDc1NTJ9.N0dO_kYlI5luDKJ9FCj1BGagjlu2-gbXLzK2_-oQgD4'
 
   // Fetch table columns
   const fetchTableColumns = async () => {
