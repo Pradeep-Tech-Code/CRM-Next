@@ -36,6 +36,11 @@ export function SortableFieldItem({ field, selectedField, onSelectField, onDelet
     zIndex: isDragging ? 1000 : 'auto',
   }
 
+  // Don't render table_column fields as they are configuration-only
+  if (field.type === "table_column") {
+    return null
+  }
+
   return (
     <div
       ref={setNodeRef}
