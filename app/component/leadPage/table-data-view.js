@@ -415,9 +415,9 @@ export default function TableDataView({ table, onBack }) {
             hasAnyNestedData = parsed.nestedValues && Object.keys(parsed.nestedValues).length > 0
           }
           
-          if (hasAnyNestedData || isMulti) {
-            // Show modal button for multi-select or if has nested data
-            console.log(`Showing modal for ${column.column_name}`)
+          // Only show modal button if there's actual nested data
+          if (hasAnyNestedData) {
+            console.log(`Showing modal for ${column.column_name} (has nested data)`)
             return (
               <button
                 onClick={() => openNestedModal(value, column, record?.record_id)}
@@ -443,6 +443,24 @@ export default function TableDataView({ table, onBack }) {
             hasColumn: !!column,
             hasNestedCapability: column ? hasNestedData(column) : false
           })
+          
+          // If it's a simple JSON structure, render the value normally
+          // This includes:
+          // - {"value":"sim"} - no nestedValues property
+          // - {"value":"Option 1","nestedValues":{}} - empty nestedValues
+          if (!isMulti && parsed.value !== undefined) {
+            // Check if nestedValues is empty or doesn't exist
+            const hasEmptyOrNoNestedValues = !parsed.nestedValues || 
+              (typeof parsed.nestedValues === 'object' && Object.keys(parsed.nestedValues).length === 0)
+            
+            if (hasEmptyOrNoNestedValues) {
+              return (
+                <span className="truncate max-w-[200px]">
+                  {Array.isArray(parsed.value) ? parsed.value.join(' → ') : parsed.value}
+                </span>
+              )
+            }
+          }
         }
       } catch (error) {
         console.log(`Error parsing JSON for ${column?.column_name}:`, error)
