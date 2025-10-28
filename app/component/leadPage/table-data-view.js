@@ -27,7 +27,7 @@ import axios from "axios"
 
 // API Configuration
 const API_BASE_URL = 'http://10.10.15.194:3001'
-const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYxNTQ1NTU4LCJleHAiOjE3NjE2MzE5NTh9.KG9CGv2EvC-DmEiGnS9ob6Ab1hQSStI6tT6dklvbhvM'
+const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYxNjMyNTExLCJleHAiOjE3NjE3MTg5MTF9.tN9meQw-_-rAo1vD_t6PusExQrLXCO3r0BoBgj0pJ3o'
 
 export default function TableDataView({ table, onBack }) {
   const [columns, setColumns] = useState([])
@@ -736,26 +736,80 @@ export default function TableDataView({ table, onBack }) {
 
   // Function to handle field value change
   const handleFieldChange = (fieldId, newValue, path = []) => {
+    console.log('[handleFieldChange] Called with:', { fieldId, newValue, path })
+    
     setEditableFormData(prevData => {
       const newData = JSON.parse(JSON.stringify(prevData)) // Deep clone
       
+      console.log('[handleFieldChange] prevData:', prevData)
+      console.log('[handleFieldChange] Starting navigation with path:', path)
+      
       // Navigate to the correct nested level
       let current = newData
-      for (const pathItem of path) {
+      for (let i = 0; i < path.length; i++) {
+        const pathItem = path[i]
+        console.log(`[handleFieldChange] Step ${i}: Looking for ${pathItem} in:`, Object.keys(current))
+        
         if (current[pathItem]) {
+          console.log(`[handleFieldChange] Found ${pathItem}, navigating to its nestedData`)
+          console.log(`[handleFieldChange] nestedData exists:`, !!current[pathItem].nestedData)
+          
+          if (!current[pathItem].nestedData) {
+            console.warn(`[handleFieldChange] nestedData missing for ${pathItem}, creating empty object`)
+            current[pathItem].nestedData = {}
+          }
+          
           current = current[pathItem].nestedData
+        } else {
+          console.error(`[handleFieldChange] Path item ${pathItem} not found!`)
+          return prevData // Return unchanged
         }
       }
+      
+      console.log('[handleFieldChange] After navigation, current level has keys:', Object.keys(current))
+      console.log('[handleFieldChange] Looking for field:', fieldId)
       
       if (current[fieldId]) {
+        const oldValue = current[fieldId].value
+        console.log(`[handleFieldChange] Found field ${fieldId}, updating value from "${oldValue}" to "${newValue}"`)
         current[fieldId].value = newValue
         
-        // Clear nested data if value changes (user selected different option)
-        if (current[fieldId].fieldDef.hasNested) {
-          current[fieldId].nestedData = {}
+        // If field has nested data and value changed, initialize nested structure for new selection
+        if (current[fieldId].fieldDef.hasNested && oldValue !== newValue) {
+          console.log('[handleFieldChange] Field has nested, initializing nested structure for new selection')
+          
+          // Find the newly selected option
+          const selectedOption = current[fieldId].fieldDef.options?.find(
+            opt => opt.value === newValue || opt.label === newValue
+          )
+          
+          if (selectedOption && selectedOption.nestedFields && selectedOption.nestedFields.length > 0) {
+            console.log('[handleFieldChange] Selected option has nested fields:', selectedOption.nestedFields.map(f => f.id))
+            
+            // Initialize nested structure for the newly selected option
+            const newNestedData = {}
+            selectedOption.nestedFields.forEach(nestedField => {
+              newNestedData[nestedField.id] = {
+                fieldDef: nestedField,
+                value: '',
+                nestedData: {}
+              }
+              console.log(`[handleFieldChange] Initialized nested field: ${nestedField.id}`)
+            })
+            
+            current[fieldId].nestedData = newNestedData
+            console.log('[handleFieldChange] Initialized nested data with keys:', Object.keys(newNestedData))
+          } else {
+            console.log('[handleFieldChange] Selected option has no nested fields, clearing nested data')
+            current[fieldId].nestedData = {}
+          }
         }
+      } else {
+        console.error(`[handleFieldChange] Field ${fieldId} not found at this level!`)
+        console.error('[handleFieldChange] Available fields:', Object.keys(current))
       }
       
+      console.log('[handleFieldChange] Returning updated data:', newData)
       return newData
     })
   }
@@ -787,7 +841,12 @@ export default function TableDataView({ table, onBack }) {
               {fieldDef.type === 'select' && (
                 <select
                   value={value || ''}
-                  onChange={(e) => handleFieldChange(fieldId, e.target.value, path)}
+                  onChange={(e) => {
+                    console.log(`[Select onChange] Field: ${fieldId}, Level: ${level}, Path:`, path)
+                    console.log(`[Select onChange] Old value: "${value}", New value: "${e.target.value}"`)
+                    console.log(`[Select onChange] fieldDef.hasNested:`, fieldDef.hasNested)
+                    handleFieldChange(fieldId, e.target.value, path)
+                  }}
                   disabled={!isEditMode}
                   className={`w-full px-3 py-2 border rounded-md text-sm ${
                     isEditMode 
@@ -939,19 +998,24 @@ export default function TableDataView({ table, onBack }) {
                   if (selectedOption && selectedOption.nestedFields && selectedOption.nestedFields.length > 0) {
                     // Show nested fields from the selected option
                     const nestedFieldsToShow = {}
+                    
                     selectedOption.nestedFields.forEach(nestedField => {
+                      // Always prioritize existing data if available
                       if (nestedData && nestedData[nestedField.id]) {
                         nestedFieldsToShow[nestedField.id] = nestedData[nestedField.id]
-                      } else if (isEditMode) {
-                        // Create empty field structure for edit mode
+                      } 
+                      // In edit mode, show all nested fields for selected option (create empty if doesn't exist)
+                      else if (isEditMode) {
                         nestedFieldsToShow[nestedField.id] = {
                           fieldDef: nestedField,
                           value: '',
                           nestedData: {}
                         }
                       }
+                      // In view mode, only show fields that have data (already handled above)
                     })
                     
+                    // Show card if there are fields to display
                     if (Object.keys(nestedFieldsToShow).length > 0) {
                       return (
                         <Card className="mt-3 bg-gradient-to-br from-primary/5 to-transparent border-primary/20">
