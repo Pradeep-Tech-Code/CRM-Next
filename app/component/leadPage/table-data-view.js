@@ -775,33 +775,88 @@ export default function TableDataView({ table, onBack }) {
         current[fieldId].value = newValue
         
         // If field has nested data and value changed, initialize nested structure for new selection
-        if (current[fieldId].fieldDef.hasNested && oldValue !== newValue) {
+        if (current[fieldId].fieldDef.hasNested && JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
           console.log('[handleFieldChange] Field has nested, initializing nested structure for new selection')
           
-          // Find the newly selected option
-          const selectedOption = current[fieldId].fieldDef.options?.find(
-            opt => opt.value === newValue || opt.label === newValue
-          )
-          
-          if (selectedOption && selectedOption.nestedFields && selectedOption.nestedFields.length > 0) {
-            console.log('[handleFieldChange] Selected option has nested fields:', selectedOption.nestedFields.map(f => f.id))
-            
-            // Initialize nested structure for the newly selected option
+          // Handle checkbox/multi-select (array values)
+          if (Array.isArray(newValue)) {
+            console.log('[handleFieldChange] Handling array value (checkbox/multi-select)')
             const newNestedData = {}
-            selectedOption.nestedFields.forEach(nestedField => {
-              newNestedData[nestedField.id] = {
-                fieldDef: nestedField,
-                value: '',
-                nestedData: {}
+            const oldNestedData = current[fieldId].nestedData || {}
+            
+            newValue.forEach((selectedValue, arrayIndex) => {
+              const selectedOption = current[fieldId].fieldDef.options?.find(
+                opt => opt.value === selectedValue || opt.label === selectedValue
+              )
+              
+              if (selectedOption && selectedOption.nestedFields && selectedOption.nestedFields.length > 0) {
+                console.log(`[handleFieldChange] Array item ${arrayIndex} (${selectedValue}) has nested fields:`, selectedOption.nestedFields.map(f => f.id))
+                
+                // Check if this selection existed before (preserve data if possible)
+                const oldMatchingIndex = Array.isArray(oldValue) 
+                  ? oldValue.findIndex(v => v === selectedValue)
+                  : -1
+                
+                // Initialize nested fields for this array item with index prefix
+                selectedOption.nestedFields.forEach(nestedField => {
+                  const prefixedFieldId = `${arrayIndex}_${nestedField.id}`
+                  const oldPrefixedFieldId = oldMatchingIndex >= 0 
+                    ? `${oldMatchingIndex}_${nestedField.id}`
+                    : null
+                  
+                  // Try to preserve existing data if this option was already selected
+                  if (oldPrefixedFieldId && oldNestedData[oldPrefixedFieldId]) {
+                    console.log(`[handleFieldChange] Preserving data for ${prefixedFieldId} from ${oldPrefixedFieldId}`)
+                    newNestedData[prefixedFieldId] = {
+                      ...oldNestedData[oldPrefixedFieldId],
+                      _arrayIndex: arrayIndex,
+                      _arrayValue: selectedValue
+                    }
+                  } else {
+                    newNestedData[prefixedFieldId] = {
+                      fieldDef: nestedField,
+                      value: '',
+                      nestedData: {},
+                      _arrayIndex: arrayIndex,
+                      _arrayValue: selectedValue,
+                      _originalFieldId: nestedField.id
+                    }
+                    console.log(`[handleFieldChange] Initialized new nested field for array item ${arrayIndex}: ${prefixedFieldId}`)
+                  }
+                })
               }
-              console.log(`[handleFieldChange] Initialized nested field: ${nestedField.id}`)
             })
             
             current[fieldId].nestedData = newNestedData
-            console.log('[handleFieldChange] Initialized nested data with keys:', Object.keys(newNestedData))
-          } else {
-            console.log('[handleFieldChange] Selected option has no nested fields, clearing nested data')
-            current[fieldId].nestedData = {}
+            current[fieldId]._isArray = true
+            console.log('[handleFieldChange] Initialized array nested data with keys:', Object.keys(newNestedData))
+          } 
+          // Handle single select/radio (single value)
+          else {
+            const selectedOption = current[fieldId].fieldDef.options?.find(
+              opt => opt.value === newValue || opt.label === newValue
+            )
+            
+            if (selectedOption && selectedOption.nestedFields && selectedOption.nestedFields.length > 0) {
+              console.log('[handleFieldChange] Selected option has nested fields:', selectedOption.nestedFields.map(f => f.id))
+              
+              // Initialize nested structure for the newly selected option
+              const newNestedData = {}
+              selectedOption.nestedFields.forEach(nestedField => {
+                newNestedData[nestedField.id] = {
+                  fieldDef: nestedField,
+                  value: '',
+                  nestedData: {}
+                }
+                console.log(`[handleFieldChange] Initialized nested field: ${nestedField.id}`)
+              })
+              
+              current[fieldId].nestedData = newNestedData
+              console.log('[handleFieldChange] Initialized nested data with keys:', Object.keys(newNestedData))
+            } else {
+              console.log('[handleFieldChange] Selected option has no nested fields, clearing nested data')
+              current[fieldId].nestedData = {}
+            }
           }
         }
       } else {
