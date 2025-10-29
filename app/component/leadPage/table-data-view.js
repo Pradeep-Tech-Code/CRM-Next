@@ -407,36 +407,19 @@ export default function TableDataView({ table, onBack }) {
         if (hasNestedStructure && column && hasNestedData(column)) {
           console.log(`Column ${column.column_name} has nested data capability`)
           
-          // Check if there's any actual nested data (not all empty)
-          let hasAnyNestedData = false
-          if (isMulti) {
-            hasAnyNestedData = parsed.some(item => item.nestedValues && Object.keys(item.nestedValues).length > 0)
-          } else {
-            hasAnyNestedData = parsed.nestedValues && Object.keys(parsed.nestedValues).length > 0
-          }
-          
-          // Only show modal button if there's actual nested data
-          if (hasAnyNestedData) {
-            console.log(`Showing modal for ${column.column_name} (has nested data)`)
-            return (
-              <button
-                onClick={() => openNestedModal(value, column, record?.record_id)}
-                className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer px-2 py-1 rounded border border-blue-300 text-sm font-medium"
-                title="Click to view/edit nested data"
-              >
-                {displayValue}
-                <span className="ml-1 text-xs">📋</span>
-              </button>
-            )
-          } else {
-            console.log(`Empty nestedValues for ${column.column_name}, showing normal text`)
-            // If nestedValues is empty, render normally without modal
-            return (
-              <span className="truncate max-w-[200px]">
-                {displayValue}
-              </span>
-            )
-          }
+          // Show modal button if the nestedValues key exists (even if empty)
+          // This is because the presence of nestedValues indicates it's a structured field
+          console.log(`Showing modal for ${column.column_name} (has nestedValues structure)`)
+          return (
+            <button
+              onClick={() => openNestedModal(value, column, record?.record_id)}
+              className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer px-2 py-1 rounded border border-blue-300 text-sm font-medium"
+              title="Click to view/edit nested data"
+            >
+              {displayValue}
+              <span className="ml-1 text-xs">📋</span>
+            </button>
+          )
         } else {
           console.log(`Not showing modal for ${column?.column_name}:`, {
             hasNestedStructure,
@@ -447,19 +430,13 @@ export default function TableDataView({ table, onBack }) {
           // If it's a simple JSON structure, render the value normally
           // This includes:
           // - {"value":"sim"} - no nestedValues property
-          // - {"value":"Option 1","nestedValues":{}} - empty nestedValues
+          // - {"value":"Sel2","nestedValues":{}} - has nestedValues but column has no nested capability
           if (!isMulti && parsed.value !== undefined) {
-            // Check if nestedValues is empty or doesn't exist
-            const hasEmptyOrNoNestedValues = !parsed.nestedValues || 
-              (typeof parsed.nestedValues === 'object' && Object.keys(parsed.nestedValues).length === 0)
-            
-            if (hasEmptyOrNoNestedValues) {
-              return (
-                <span className="truncate max-w-[200px]">
-                  {Array.isArray(parsed.value) ? parsed.value.join(' → ') : parsed.value}
-                </span>
-              )
-            }
+            return (
+              <span className="truncate max-w-[200px]">
+                {Array.isArray(parsed.value) ? parsed.value.join(' → ') : parsed.value}
+              </span>
+            )
           }
         }
       } catch (error) {
@@ -713,24 +690,108 @@ export default function TableDataView({ table, onBack }) {
 
   // Function to handle primary value change
   const handlePrimaryValueChange = (newValue) => {
+    console.log('[handlePrimaryValueChange] New value:', newValue)
     setEditablePrimaryValue(newValue)
-    // Clear all nested data when primary selection changes
-    setEditableFormData({})
     
-    // If there's a new value, initialize nested fields for it
+    // Initialize nested fields based on the new selection(s)
     if (newValue && nestedData.options) {
-      const selectedOption = nestedData.options.find(opt => opt.value === newValue || opt.label === newValue)
-      if (selectedOption && selectedOption.nestedFields) {
-        const newFormData = {}
-        selectedOption.nestedFields.forEach(field => {
-          newFormData[field.id] = {
-            fieldDef: field,
-            value: '',
-            nestedData: {}
-          }
+      // Handle array values (checkbox/multi-select)
+      if (Array.isArray(newValue)) {
+        console.log('[handlePrimaryValueChange] Handling array value (checkboxes)')
+        
+        setEditableFormData(prevFormData => {
+          const newFormData = {}
+          
+          // Build a map of existing data by selection value (not by index)
+          const existingDataByValue = {}
+          Object.entries(prevFormData).forEach(([fieldId, fieldInfo]) => {
+            const selectionValue = fieldInfo._selectionValue
+            if (selectionValue) {
+              if (!existingDataByValue[selectionValue]) {
+                existingDataByValue[selectionValue] = {}
+              }
+              const originalFieldId = fieldInfo._originalFieldId || fieldId.split('_').slice(1).join('_')
+              existingDataByValue[selectionValue][originalFieldId] = fieldInfo
+            }
+          })
+          
+          console.log('[handlePrimaryValueChange] Existing data by value:', Object.keys(existingDataByValue))
+          
+          // Rebuild form data with new indices, preserving existing values
+          newValue.forEach((selectedValue, index) => {
+            const selectedOption = nestedData.options.find(
+              opt => opt.value === selectedValue || opt.label === selectedValue
+            )
+            
+            if (selectedOption && selectedOption.nestedFields && selectedOption.nestedFields.length > 0) {
+              console.log(`[handlePrimaryValueChange] Processing selection ${index}: ${selectedValue}`)
+              
+              // Check if we have existing data for this value
+              const existingForThisValue = existingDataByValue[selectedValue]
+              
+              selectedOption.nestedFields.forEach(field => {
+                const prefixedFieldId = `${index}_${field.id}`
+                
+                // Try to preserve existing data for this field
+                if (existingForThisValue && existingForThisValue[field.id]) {
+                  console.log(`[handlePrimaryValueChange] Preserving data for ${selectedValue}.${field.id}`)
+                  newFormData[prefixedFieldId] = {
+                    ...existingForThisValue[field.id],
+                    _selectionIndex: index, // Update index
+                    _selectionValue: selectedValue
+                  }
+                } else {
+                  // Initialize new empty field
+                  console.log(`[handlePrimaryValueChange] Initializing new field for ${selectedValue}.${field.id}`)
+                  newFormData[prefixedFieldId] = {
+                    fieldDef: field,
+                    value: '',
+                    nestedData: {},
+                    _originalFieldId: field.id,
+                    _selectionIndex: index,
+                    _selectionValue: selectedValue
+                  }
+                }
+              })
+            } else if (selectedOption) {
+              // No nested fields - create empty marker
+              newFormData[`${index}_empty`] = {
+                _selectionIndex: index,
+                _selectionValue: selectedValue,
+                _isEmpty: true
+              }
+            }
+          })
+          
+          console.log('[handlePrimaryValueChange] Final form data with keys:', Object.keys(newFormData))
+          return newFormData
         })
-        setEditableFormData(newFormData)
+      } 
+      // Handle single value (select/radio)
+      else {
+        console.log('[handlePrimaryValueChange] Handling single value')
+        const selectedOption = nestedData.options.find(
+          opt => opt.value === newValue || opt.label === newValue
+        )
+        
+        if (selectedOption && selectedOption.nestedFields) {
+          const newFormData = {}
+          selectedOption.nestedFields.forEach(field => {
+            newFormData[field.id] = {
+              fieldDef: field,
+              value: '',
+              nestedData: {}
+            }
+          })
+          console.log('[handlePrimaryValueChange] Set form data with keys:', Object.keys(newFormData))
+          setEditableFormData(newFormData)
+        } else {
+          setEditableFormData({})
+        }
       }
+    } else {
+      // No value selected, clear form data
+      setEditableFormData({})
     }
   }
 
@@ -1503,8 +1564,40 @@ export default function TableDataView({ table, onBack }) {
                       )
                     ) : (
                       nestedData.isMulti ? (
-                        <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md border">
-                          Multi-selection editing is view-only. Current selections: {Array.isArray(editablePrimaryValue) ? editablePrimaryValue.join(' → ') : editablePrimaryValue}
+                        <div className="space-y-2">
+                          {nestedData.options?.map((option, idx) => {
+                            const isChecked = Array.isArray(editablePrimaryValue) 
+                              ? editablePrimaryValue.includes(option.value)
+                              : editablePrimaryValue === option.value
+                            return (
+                              <div
+                                key={idx}
+                                onClick={() => {
+                                  let newValue
+                                  if (Array.isArray(editablePrimaryValue)) {
+                                    newValue = isChecked
+                                      ? editablePrimaryValue.filter(v => v !== option.value)
+                                      : [...editablePrimaryValue, option.value]
+                                  } else {
+                                    newValue = [option.value]
+                                  }
+                                  handlePrimaryValueChange(newValue)
+                                }}
+                                className="flex items-center gap-3 p-3 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors"
+                              >
+                                <div className={`h-5 w-5 rounded border-2 flex items-center justify-center ${
+                                  isChecked ? 'bg-primary border-primary' : 'border-muted-foreground'
+                                }`}>
+                                  {isChecked && (
+                                    <svg className="w-3.5 h-3.5 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  )}
+                                </div>
+                                <span className="text-sm font-medium">{option.label}</span>
+                              </div>
+                            )
+                          })}
                         </div>
                       ) : (
                         <select
