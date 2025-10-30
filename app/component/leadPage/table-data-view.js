@@ -1391,7 +1391,7 @@ export default function TableDataView({ table, onBack }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -1526,12 +1526,17 @@ export default function TableDataView({ table, onBack }) {
             </div>
           </div>
           
-          <DataTable 
-            columns={createDynamicColumns()} 
-            data={filteredRecords} 
-            searchKey=""
-            searchPlaceholder=""
-          />
+          {/* Table with negative margins to counteract CardContent padding for horizontal scroll */}
+          <div className="-mx-6 px-6 overflow-x-auto">
+            <div style={{ minWidth: 'max-content' }}>
+              <DataTable 
+                columns={createDynamicColumns()} 
+                data={filteredRecords} 
+                searchKey=""
+                searchPlaceholder=""
+              />
+            </div>
+          </div>
         </CardContent>
       </Card>
 

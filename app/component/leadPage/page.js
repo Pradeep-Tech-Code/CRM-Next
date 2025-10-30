@@ -36,7 +36,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 
 // API Configuration
 const API_BASE_URL = 'http://10.10.15.194:3001'
-const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYxNTQ1NTU4LCJleHAiOjE3NjE2MzE5NTh9.KG9CGv2EvC-DmEiGnS9ob6Ab1hQSStI6tT6dklvbhvM'
+const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYxODA3MTc0LCJleHAiOjE3NjE4OTM1NzR9.veM_dzvXFYL1N_g-XErj0T9PiIjP8sUafknPKogkuH0'
 
 export default function LeadsPage() {
   const [tables, setTables] = useState([])
@@ -233,11 +233,11 @@ export default function LeadsPage() {
     
     try {
       const response = await axios.get(`${API_BASE_URL}/api/datatables`, {
-        headers: {
-          'Authorization': `Bearer ${AUTH_TOKEN}`,
-          'Content-Type': 'application/json',
-        }
-      })
+          headers: {
+            'Authorization': `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json',
+          }
+        })
 
       const tablesData = response.data
       console.log('tablesData', tablesData)
@@ -614,7 +614,7 @@ export default function LeadsPage() {
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
-                        </div>
+                </div>
                       </CardHeader>
                       <CardContent className="pt-0">
                         <div className="space-y-3">
@@ -623,19 +623,19 @@ export default function LeadsPage() {
                             <span className="text-xs text-muted-foreground">
                               {formatDate(table.created_at)}
                             </span>
-                          </div>
-                          
+                </div>
+                
                           <div className="flex items-center gap-4 text-sm text-muted-foreground">
                             <div className="flex items-center gap-1">
                               <User className="h-3 w-3" />
                               <span>ID: {table.table_id.slice(0, 8)}...</span>
-                            </div>
                 </div>
-                          
+              </div>
+              
                           <div className="flex gap-2">
-                            <Button 
+                <Button 
                               size="sm" 
-                              variant="outline" 
+                  variant="outline" 
                               className="flex-1"
                               onClick={() => {
                                 setSelectedTable(table)
@@ -644,13 +644,13 @@ export default function LeadsPage() {
                             >
                               <Eye className="h-3 w-3 mr-1" />
                               View
-                            </Button>
+                </Button>
                             <Button size="sm" variant="outline" className="flex-1">
                               <Edit className="h-3 w-3 mr-1" />
                               Edit
-                            </Button>
-                      </div>
-                    </div>
+                </Button>
+              </div>
+            </div>
                       </CardContent>
                     </Card>
                   ))}
