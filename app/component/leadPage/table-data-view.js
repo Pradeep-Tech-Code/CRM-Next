@@ -1015,7 +1015,7 @@ export default function TableDataView({ table, onBack }) {
                       : 'bg-muted/50 cursor-not-allowed'
                   }`}
                 >
-                  <option value="">Select {fieldDef.label}</option>
+                  {!value && <option value="">Select {fieldDef.label}</option>}
                   {fieldDef.options?.map((option, idx) => (
                     <option key={idx} value={option.value}>
                       {option.label}
@@ -1246,18 +1246,7 @@ export default function TableDataView({ table, onBack }) {
 
     // Add metadata columns
     const metadataColumns = [
-      {
-        accessorKey: "record_id",
-        header: "Record ID",
-        cell: ({ row }) => {
-          const recordId = row.getValue("record_id")
-          return (
-            <div className="font-mono text-xs bg-muted/50 px-2 py-1 rounded-md border">
-              {String(recordId).slice(0, 8)}...
-            </div>
-          )
-        },
-      },
+      // Record ID column removed - not shown to users
       {
         accessorKey: "created_at",
         header: "Created At",
@@ -1534,6 +1523,7 @@ export default function TableDataView({ table, onBack }) {
                 data={filteredRecords} 
                 searchKey=""
                 searchPlaceholder=""
+                showColumnsDropdown={false}
               />
             </div>
           </div>
@@ -1655,7 +1645,7 @@ export default function TableDataView({ table, onBack }) {
                           onChange={(e) => handlePrimaryValueChange(e.target.value)}
                           className="w-full px-4 py-2 border rounded-md text-sm bg-background border-input hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer font-medium"
                         >
-                          <option value="">Select primary value</option>
+                          {!editablePrimaryValue && <option value="">Select primary value</option>}
                           {nestedData.options?.map((option, idx) => (
                             <option key={idx} value={option.value}>
                               {option.label}
