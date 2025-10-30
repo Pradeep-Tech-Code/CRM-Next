@@ -27,7 +27,7 @@ import axios from "axios"
 
 // API Configuration
 const API_BASE_URL = 'http://10.10.15.194:3001'
-const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYxNjMyNTExLCJleHAiOjE3NjE3MTg5MTF9.tN9meQw-_-rAo1vD_t6PusExQrLXCO3r0BoBgj0pJ3o'
+const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYxODA3MTc0LCJleHAiOjE3NjE4OTM1NzR9.veM_dzvXFYL1N_g-XErj0T9PiIjP8sUafknPKogkuH0'
 
 export default function TableDataView({ table, onBack }) {
   const [columns, setColumns] = useState([])
@@ -138,17 +138,28 @@ export default function TableDataView({ table, onBack }) {
     return record.field_values[columnId] || null
   }
 
-  // Helper function to check if column has nested data
+  // Helper function to check if column has nested data or is a modal-editable type
   const hasNestedData = (column) => {
+    // Select, radio, and checkbox should always show modal (even without nested fields)
+    const modalEditableTypes = ['select', 'radio', 'checkbox']
+    const parentDatatype = column.parent_datatype
+    
+    if (parentDatatype && !modalEditableTypes.includes(parentDatatype)) {
+      console.log(`Column ${column.column_name}: parent_datatype "${parentDatatype}" is not modal-editable (use Actions Edit instead)`)
+      return false
+    }
+    
     if (!column.optional_values || column.optional_values.length === 0) {
       console.log(`Column ${column.column_name}: No optional_values`)
       return false
     }
+    
+    // For select, radio, checkbox: return true if it has options (even if no nested fields)
     try {
       const options = JSON.parse(column.optional_values[0])
-      const hasNested = options.some(option => option.nestedFields && option.nestedFields.length > 0)
-      console.log(`Column ${column.column_name}: hasNestedData = ${hasNested}`)
-      return hasNested
+      const hasOptions = Array.isArray(options) && options.length > 0
+      console.log(`Column ${column.column_name}: parent_datatype="${parentDatatype}", hasOptions=${hasOptions}`)
+      return hasOptions
     } catch (error) {
       console.log(`Column ${column.column_name}: Error parsing optional_values:`, error)
       return false
@@ -377,6 +388,25 @@ export default function TableDataView({ table, onBack }) {
       return <span className="text-muted-foreground italic">-</span>
     }
 
+    // First, handle simple JSON wrapped values (like {"value": "something"})
+    // This applies to all data types, not just nested data
+    let parsedValue = null
+    if (typeof value === 'string' && value.trim().startsWith('{')) {
+      try {
+        parsedValue = JSON.parse(value)
+        
+        // Extract simple value wrapper for text, textarea, number, email fields
+        if (parsedValue.value !== undefined && !parsedValue.nestedValues && !parsedValue.countryCode && !parsedValue.country && !parsedValue.state && !parsedValue.city) {
+          value = parsedValue.value
+          parsedValue = null // Clear parsed value since we extracted the simple value
+        }
+      } catch (error) {
+        // Not JSON, continue with original value
+        console.log(`Not JSON: ${value}`)
+        parsedValue = null
+      }
+    }
+
     // Check if this is nested data that should open a modal
     // Handle both single object {value:..., nestedValues:...} and array [{value:..., nestedValues:...}, ...]
     if (dataType === 'text' && typeof value === 'string' && (value.trim().startsWith('{') || value.trim().startsWith('['))) {
@@ -454,7 +484,14 @@ export default function TableDataView({ table, onBack }) {
         )
       case 'phone':
         try {
-          const phoneData = JSON.parse(value)
+          const phoneData = parsedValue || JSON.parse(value)
+          if (phoneData.countryCode && phoneData.number) {
+            return (
+              <div className="text-sm">
+                <div className="font-medium">{phoneData.countryCode} {phoneData.number}</div>
+              </div>
+            )
+          }
           return (
             <div className="text-sm">
               <div className="font-medium">{phoneData.number}</div>
@@ -486,16 +523,24 @@ export default function TableDataView({ table, onBack }) {
         } catch {
           return <span className="truncate max-w-[200px]">{value}</span>
         }
+      case 'textarea':
+        return <span className="truncate max-w-[200px]">{value}</span>
+      case 'text':
+        return <span className="truncate max-w-[200px]">{value}</span>
+      case 'number':
+        return <span className="truncate max-w-[200px]">{value}</span>
       case 'select':
         return <span className="truncate max-w-[200px]">{value}</span>
       case 'location':
         try {
-          const locationData = JSON.parse(value)
+          const locationData = parsedValue || JSON.parse(value)
           return (
             <div className="text-sm">
-              <div className="font-medium">{locationData.address || locationData.name}</div>
+              {locationData.address || locationData.name ? (
+                <div className="font-medium">{locationData.address || locationData.name}</div>
+              ) : null}
               <div className="text-xs text-muted-foreground">
-                {locationData.city}, {locationData.country}
+                {[locationData.city, locationData.state, locationData.country].filter(Boolean).join(', ')}
               </div>
             </div>
           )
