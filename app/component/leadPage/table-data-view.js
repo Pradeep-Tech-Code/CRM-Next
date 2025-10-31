@@ -27,7 +27,7 @@ import axios from "axios"
 
 // API Configuration
 const API_BASE_URL = 'http://10.10.15.194:3001'
-const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYxODA3MTc0LCJleHAiOjE3NjE4OTM1NzR9.veM_dzvXFYL1N_g-XErj0T9PiIjP8sUafknPKogkuH0'
+const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYzJhOTg1Y2UtZDM4NS00MzQ5LThmMGMtZDQ2ZTYzMDI3Y2U0Iiwib3JnYW5pemF0aW9uX2lkIjoiYzhjNzJjMjEtN2I1Yy00MzVhLTkxMmEtODAzMTA1ZTdlY2M5IiwiaWF0IjoxNzYxODg3NzkyLCJleHAiOjE3NjE5NzQxOTJ9.sbAn6FFDcGVZQLLvSDLrr8Advfhv6mcmw6dqq4D0YCQ'
 
 export default function TableDataView({ table, onBack }) {
   const [columns, setColumns] = useState([])
@@ -1817,7 +1817,7 @@ export default function TableDataView({ table, onBack }) {
 
       {/* Nested Data Modal */}
       <Dialog open={isNestedModalOpen} onOpenChange={setIsNestedModalOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] p-0 gap-0 flex flex-col">
+        <DialogContent className="w-[80vw] sm:w-[75vw] max-w-[1000px] sm:max-w-none max-h-[95vh] p-0 gap-0 flex flex-col">
           <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
             <DialogTitle>Nested Data - {nestedData?.columnName}</DialogTitle>
             <DialogDescription>
