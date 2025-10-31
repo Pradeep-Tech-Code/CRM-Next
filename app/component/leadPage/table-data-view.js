@@ -381,174 +381,235 @@ export default function TableDataView({ table, onBack }) {
   }
 
   // Helper function to format field value based on data type
-  const formatFieldValue = (value, dataType, column = null, record = null) => {
-
-    console.log('formatFieldValue ::', value, column)
-    if (value === null || value === undefined || value === "") {
+  const formatFieldValue = (rawValue, dataType, column = null, record = null) => {
+    if (rawValue === null || rawValue === undefined || rawValue === "") {
       return <span className="text-muted-foreground italic">-</span>
     }
 
-    // First, handle simple JSON wrapped values (like {"value": "something"})
-    // This applies to all data types, not just nested data
-    let parsedValue = null
-    if (typeof value === 'string' && value.trim().startsWith('{')) {
-      try {
-        parsedValue = JSON.parse(value)
-        
-        // Extract simple value wrapper for text, textarea, number, email fields
-        if (parsedValue.value !== undefined && !parsedValue.nestedValues && !parsedValue.countryCode && !parsedValue.country && !parsedValue.state && !parsedValue.city) {
-          value = parsedValue.value
-          parsedValue = null // Clear parsed value since we extracted the simple value
-        }
-      } catch (error) {
-        // Not JSON, continue with original value
-        console.log(`Not JSON: ${value}`)
-        parsedValue = null
-      }
-    }
+    const effectiveType = column?.parent_datatype || dataType || 'text'
+    const rawString = typeof rawValue === 'string' ? rawValue : String(rawValue)
+    const trimmed = rawString.trim()
+    const looksLikeJson = trimmed.startsWith('{') || trimmed.startsWith('[')
 
-    // Check if this is nested data that should open a modal
-    // Handle both single object {value:..., nestedValues:...} and array [{value:..., nestedValues:...}, ...]
-    if (dataType === 'text' && typeof value === 'string' && (value.trim().startsWith('{') || value.trim().startsWith('['))) {
-      console.log(`Processing JSON value for column ${column?.column_name}:`, value)
-      try {
-        const parsed = JSON.parse(value)
-        console.log(`Parsed JSON:`, parsed)
-        
-        // Check if this is an array (multi-select)
-        const isMulti = Array.isArray(parsed)
-        
-        // For multi-select: check if any item has nested data
-        // For single: check if it has nested data structure
-        let hasNestedStructure = false
-        let displayValue = null
-        
-        if (isMulti) {
-          // Multi-select case
-          hasNestedStructure = parsed.some(item => item.value !== undefined && item.nestedValues !== undefined)
-          displayValue = parsed.map(item => item.value).join(' → ')
-        } else {
-          // Single select case
-          hasNestedStructure = parsed.value !== undefined && parsed.nestedValues !== undefined
-          displayValue = Array.isArray(parsed.value) ? parsed.value.join(' → ') : parsed.value
-        }
-        
-        // Only show modal if this looks like nested data AND column has nested capability
-        if (hasNestedStructure && column && hasNestedData(column)) {
-          console.log(`Column ${column.column_name} has nested data capability`)
-          
-          // Show modal button if the nestedValues key exists (even if empty)
-          // This is because the presence of nestedValues indicates it's a structured field
-          console.log(`Showing modal for ${column.column_name} (has nestedValues structure)`)
-          return (
-            <button
-              onClick={() => openNestedModal(value, column, record?.record_id)}
-              className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer px-2 py-1 rounded border border-blue-300 text-sm font-medium"
-              title="Click to view/edit nested data"
-            >
-              {displayValue}
-              <span className="ml-1 text-xs">📋</span>
-            </button>
-          )
-        } else {
-          console.log(`Not showing modal for ${column?.column_name}:`, {
-            hasNestedStructure,
-            hasColumn: !!column,
-            hasNestedCapability: column ? hasNestedData(column) : false
-          })
-          
-          // If it's a simple JSON structure, render the value normally
-          // This includes:
-          // - {"value":"sim"} - no nestedValues property
-          // - {"value":"Sel2","nestedValues":{}} - has nestedValues but column has no nested capability
-          if (!isMulti && parsed.value !== undefined) {
-            return (
-              <span className="truncate max-w-[200px]">
-                {Array.isArray(parsed.value) ? parsed.value.join(' → ') : parsed.value}
-              </span>
-            )
+    const formatDateOnly = (input) => {
+      if (input instanceof Date && !Number.isNaN(input.getTime())) {
+        return input.toLocaleDateString()
+      }
+
+      if (input === null || input === undefined) return null
+
+      const str = String(input).trim()
+      if (!str) return null
+
+      const direct = new Date(str)
+      if (!Number.isNaN(direct.getTime())) {
+        return direct.toLocaleDateString()
+      }
+
+      const match = str.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s](\d{2})(?::(\d{2})(?::(\d{2}))?)?)?$/)
+      if (match) {
+        const [ , datePart ] = match
+        const [yearStr, monthStr, dayStr] = datePart.split('-')
+        const year = Number(yearStr)
+        const month = Number(monthStr)
+        const day = Number(dayStr)
+
+        if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+          const dateObj = new Date(year, month - 1, day)
+          if (!Number.isNaN(dateObj.getTime())) {
+            return dateObj.toLocaleDateString()
           }
         }
+
+        return datePart
+      }
+
+      return null
+    }
+
+    let parsedJson = null
+    if (looksLikeJson) {
+      try {
+        parsedJson = JSON.parse(trimmed)
       } catch (error) {
-        console.log(`Error parsing JSON for ${column?.column_name}:`, error)
-        // If parsing fails, fall through to default handling
+        console.warn(`Failed to parse JSON value for ${column?.column_name}:`, error)
+        parsedJson = null
       }
     }
 
-    switch (dataType) {
+    const isArrayStructure = Array.isArray(parsedJson)
+    const hasNestedStructure = parsedJson && (
+      isArrayStructure
+        ? parsedJson.some(item => item && typeof item === 'object' && item.nestedValues !== undefined)
+        : typeof parsedJson === 'object' && parsedJson !== null && parsedJson.nestedValues !== undefined
+    )
+
+    if (hasNestedStructure && column && hasNestedData(column)) {
+      let displayLabel = ''
+
+      if (isArrayStructure) {
+        displayLabel = parsedJson
+          .map(item => {
+            if (!item || typeof item !== 'object') return ''
+            if (Array.isArray(item.value)) return item.value.join(' → ')
+            if (item.value !== undefined && item.value !== null) return String(item.value)
+            if (item.label) return item.label
+            return ''
+          })
+          .filter(Boolean)
+          .join(' → ')
+      } else {
+        if (Array.isArray(parsedJson.value)) {
+          displayLabel = parsedJson.value.join(' → ')
+        } else if (parsedJson.value !== undefined && parsedJson.value !== null) {
+          displayLabel = String(parsedJson.value)
+        } else if (parsedJson.label) {
+          displayLabel = parsedJson.label
+        }
+      }
+
+      if (!displayLabel) {
+        displayLabel = 'View details'
+      }
+
+      return (
+        <button
+          onClick={() => openNestedModal(rawString, column, record?.record_id)}
+          className="bg-blue-100 text-blue-800 hover:bg-blue-200 cursor-pointer px-2 py-1 rounded border border-blue-300 text-sm font-medium"
+          title="Click to view/edit nested data"
+        >
+          {displayLabel}
+          <span className="ml-1 text-xs">📋</span>
+        </button>
+      )
+    }
+
+    if (!isArrayStructure && parsedJson && parsedJson.value !== undefined) {
+      const nestedValuesEmpty = !parsedJson.nestedValues || (typeof parsedJson.nestedValues === 'object' && Object.keys(parsedJson.nestedValues).length === 0)
+      const hasStructuredKeys = parsedJson.countryCode || parsedJson.country || parsedJson.state || parsedJson.city || parsedJson.name || parsedJson.address || parsedJson.number
+
+      if (nestedValuesEmpty && !hasStructuredKeys) {
+        if (effectiveType === 'datetime' || effectiveType === 'date') {
+          const formattedDate = formatDateOnly(parsedJson.value)
+          if (formattedDate) {
+            return <span className="truncate max-w-[200px]">{formattedDate}</span>
+          }
+        }
+
+        const displayValue = Array.isArray(parsedJson.value) ? parsedJson.value.join(' → ') : String(parsedJson.value)
+        return <span className="truncate max-w-[200px]">{displayValue}</span>
+      }
+    }
+
+    const renderJsonAsText = (jsonValue) => {
+      if (typeof jsonValue === 'string') {
+        return jsonValue
+      }
+      try {
+        return JSON.stringify(jsonValue)
+      } catch {
+        return rawString
+      }
+    }
+
+    switch (effectiveType) {
       case 'email':
         return (
-          <a href={`mailto:${value}`} className="text-blue-600 hover:underline">
-            {value}
+          <a href={`mailto:${rawValue}`} className="text-blue-600 hover:underline">
+            {rawValue}
           </a>
         )
-      case 'phone':
-        try {
-          const phoneData = parsedValue || JSON.parse(value)
-          if (phoneData.countryCode && phoneData.number) {
+      case 'phone': {
+        let phoneData = (!isArrayStructure && parsedJson && typeof parsedJson === 'object') ? parsedJson : null
+        if (!phoneData) {
+          try {
+            phoneData = JSON.parse(rawString)
+          } catch {
+            phoneData = null
+          }
+        }
+
+        if (phoneData && typeof phoneData === 'object') {
+          const countryCode = phoneData.countryCode || phoneData.code || ''
+          const number = phoneData.number || phoneData.value || ''
+          if (countryCode || number) {
             return (
               <div className="text-sm">
-                <div className="font-medium">{phoneData.countryCode} {phoneData.number}</div>
+                <div className="font-medium">{`${countryCode ? countryCode + ' ' : ''}${number}`.trim()}</div>
+                {phoneData.country && (
+                  <div className="text-xs text-muted-foreground">{phoneData.country}</div>
+                )}
               </div>
             )
           }
-          return (
-            <div className="text-sm">
-              <div className="font-medium">{phoneData.number}</div>
-              <div className="text-xs text-muted-foreground">{phoneData.country}</div>
-            </div>
-          )
-        } catch {
-          return (
-            <a href={`tel:${value}`} className="text-blue-600 hover:underline">
-              {value}
-            </a>
-          )
         }
+
+        return (
+          <a href={`tel:${rawValue}`} className="text-blue-600 hover:underline">
+            {rawValue}
+          </a>
+        )
+      }
+      case 'location': {
+        let locationData = (!isArrayStructure && parsedJson && typeof parsedJson === 'object') ? parsedJson : null
+        if (!locationData) {
+          try {
+            locationData = JSON.parse(rawString)
+          } catch {
+            locationData = null
+          }
+        }
+
+        if (locationData && typeof locationData === 'object') {
+          const title = locationData.address || locationData.name
+          const subtitle = [locationData.city, locationData.state, locationData.country].filter(Boolean).join(', ')
+
+          if (title || subtitle) {
+            return (
+              <div className="text-sm">
+                {title && <div className="font-medium">{title}</div>}
+                {subtitle && <div className="text-xs text-muted-foreground">{subtitle}</div>}
+              </div>
+            )
+          }
+        }
+
+        return <span className="truncate max-w-[200px]">{renderJsonAsText(locationData || rawValue)}</span>
+      }
       case 'boolean':
         return (
-          <Badge variant={value === 'true' || value === true ? 'default' : 'secondary'}>
-            {value === 'true' || value === true ? 'Yes' : 'No'}
+          <Badge variant={rawValue === 'true' || rawValue === true ? 'default' : 'secondary'}>
+            {rawValue === 'true' || rawValue === true ? 'Yes' : 'No'}
           </Badge>
         )
       case 'date':
-        try {
-          return new Date(value).toLocaleDateString()
-        } catch {
-          return <span className="truncate max-w-[200px]">{value}</span>
+        {
+          const formatted = formatDateOnly(rawValue)
+          if (formatted) {
+            return <span>{formatted}</span>
+          }
+          return <span className="truncate max-w-[200px]">{String(rawValue)}</span>
         }
       case 'datetime':
-        try {
-          return new Date(value).toLocaleString()
-        } catch {
-          return <span className="truncate max-w-[200px]">{value}</span>
+        {
+          const formatted = formatDateOnly(rawValue)
+          if (formatted) {
+            return <span>{formatted}</span>
+          }
+          return <span className="truncate max-w-[200px]">{String(rawValue)}</span>
         }
-      case 'textarea':
-        return <span className="truncate max-w-[200px]">{value}</span>
-      case 'text':
-        return <span className="truncate max-w-[200px]">{value}</span>
       case 'number':
-        return <span className="truncate max-w-[200px]">{value}</span>
+      case 'textarea':
+      case 'text':
       case 'select':
-        return <span className="truncate max-w-[200px]">{value}</span>
-      case 'location':
-        try {
-          const locationData = parsedValue || JSON.parse(value)
-          return (
-            <div className="text-sm">
-              {locationData.address || locationData.name ? (
-                <div className="font-medium">{locationData.address || locationData.name}</div>
-              ) : null}
-              <div className="text-xs text-muted-foreground">
-                {[locationData.city, locationData.state, locationData.country].filter(Boolean).join(', ')}
-              </div>
-            </div>
-          )
-        } catch {
-          return <span className="truncate max-w-[200px]">{value}</span>
-        }
+      case 'radio':
+      case 'checkbox':
+        return <span className="truncate max-w-[200px]">{String(rawValue)}</span>
       default:
-        return <span className="truncate max-w-[200px]">{value}</span>
+        if (parsedJson) {
+          return <span className="truncate max-w-[200px]">{renderJsonAsText(parsedJson)}</span>
+        }
+        return <span className="truncate max-w-[200px]">{String(rawValue)}</span>
     }
   }
 
@@ -1240,7 +1301,8 @@ export default function TableDataView({ table, onBack }) {
         const fieldValue = getFieldValue(record, column.column_id)
         
         // Format field value using helper function
-        return formatFieldValue(fieldValue, column.data_type, column, record)
+        const displayDataType = column.parent_datatype || column.data_type
+        return formatFieldValue(fieldValue, displayDataType, column, record)
       },
     }))
 
